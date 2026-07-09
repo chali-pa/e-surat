@@ -1,0 +1,35 @@
+/* Custom profile styles moved from inline Blade template */
+.profile-card { border-radius: 28px; overflow: hidden; box-shadow: 0 8px 24px rgba(15,23,42,0.06); }
+.profile-header { background: linear-gradient(90deg,#4B164C 0%,#7D2E8E 50%,#DD88CF 100%); padding: 2rem; color: #fff; }
+.avatar { height: 96px; width: 96px; border-radius: 18px; background: rgba(255,255,255,0.12); display:flex; align-items:center; justify-content:center; font-size:32px; color:#fff; font-weight:700; }
+.profile-actions .btn { transition: transform .12s ease, box-shadow .12s ease; }
+.profile-actions .btn:hover { transform: translateY(-2px); }
+
+/* small tweaks for info cards */
+.info-card { border-radius: 20px; background: #fff; padding: 1.25rem; border: 1px solid #eef2f6; box-shadow: 0 4px 12px rgba(2,6,23,0.04); }
+
+/* When preview modal opens we collapse sidebar (kept in JS by toggling .preview-open) */
+body.preview-open #sidebar { width: 72px !important; }
+body.preview-open .main-content { margin-left: 72px !important; }
+
+/* Responsive adjustments */
+@media (max-width: 1024px) {
+    .avatar { height: 80px; width: 80px; font-size:28px; }
+    .profile-header { padding: 1.5rem; }
+}
+
+@media (max-width: 768px) {
+    .profile-header { text-align: center; padding: 1rem; }
+    .profile-actions { justify-content: center; }
+    .avatar { height: 72px; width: 72px; font-size:24px; }
+    .profile-card { border-radius: 18px; }
+    .info-card { padding: 1rem; }
+    .main-content { padding-left: 1rem; padding-right: 1rem; }
+    .profile-header h1 { font-size: 1.25rem; }
+}
+
+/* Utility: keep layout consistent on very small screens */
+@media (max-width: 420px) {
+    .avatar { height: 64px; width: 64px; font-size:20px; }
+    .profile-header p, .profile-header h1 { margin: 0.25rem 0; }
+}

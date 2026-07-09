@@ -35,6 +35,9 @@
             <a href="{{ route('surat.index') }}" class="flex items-center p-3 rounded-xl hover:bg-gray-100 transition">
                 <i class="bi bi-envelope-fill text-lg"></i><span class="ml-4 menu-text">Kelola Surat</span>
             </a>
+            <a href="{{ route('profile.edit') }}" class="flex items-center p-3 rounded-xl hover:bg-gray-100 transition">
+                <i class="bi bi-person-fill text-lg"></i><span class="ml-4 menu-text">Profil</span>
+            </a>
         </nav>
     </aside>
 

@@ -21,6 +21,7 @@ Route::middleware('auth')->group(function () {
 Route::get('/surat', [SuratController::class, 'index'])->name('surat.index');
 Route::get('/surat/create', [SuratController::class, 'create'])->name('surat.create');
 Route::post('/surat', [SuratController::class, 'store'])->name('surat.store');
+Route::get('/surat/{id}/preview', [SuratController::class, 'preview'])->name('surat.preview');
 Route::get('/surat/{id}/edit', [SuratController::class, 'edit'])->name('surat.edit');
 Route::put('/surat/{id}', [SuratController::class, 'update'])->name('surat.update');
 Route::delete('/surat/{id}', [SuratController::class, 'destroy'])->name('surat.destroy');

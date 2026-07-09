@@ -41,6 +41,20 @@
 
         /* Pagination & Search Responsive */
         .dataTables_wrapper .dataTables_filter input { border: 1px solid #DD88CF; border-radius: 8px; padding: 4px 10px; }
+
+        .preview-overlay {
+            position: fixed; inset: 0; z-index: 200; display: none; align-items: center; justify-content: center;
+            padding: 20px; background: rgba(17, 24, 39, 0.72);
+        }
+        .preview-overlay.show { display: flex; }
+        .preview-shell {
+            width: min(1100px, 100%); height: min(85vh, 900px); background: white; border-radius: 20px;
+            overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,0.22); display: flex; flex-direction: column;
+        }
+        .preview-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid #e5e7eb; }
+        .preview-frame { flex: 1; background: #f3f4f6; }
+        .preview-frame iframe { width: 100%; height: 100%; border: 0; background: white; }
+
         @media (max-width: 640px) { .dataTables_wrapper .dataTables_length, .dataTables_wrapper .dataTables_filter { text-align: center; margin-bottom: 10px; } }
     </style>
 </head>
@@ -58,6 +72,9 @@
             </a>
             <a href="{{ route('surat.index') }}" class="flex items-center p-3 rounded-xl bg-purple-50 text-[#4B164C]">
                 <i class="bi bi-envelope-fill text-lg"></i><span class="ml-4 menu-text">Kelola Surat</span>
+            </a>
+            <a href="{{ route('profile.edit') }}" class="flex items-center p-3 rounded-xl hover:bg-gray-100 transition">
+                <i class="bi bi-person-fill text-lg"></i><span class="ml-4 menu-text">Profil</span>
             </a>
         </nav>
     </aside>
@@ -94,10 +111,10 @@
                         <td class="text-gray-700">{{ $surat->nama_surat }}</td>
                         <td>
                             <div class="action-wrapper">
-                                <a href="#" class="action-btn" title="Lihat"><i class="bi bi-eye"></i></a>
-                                <a href="#" class="action-btn" title="Cetak"><i class="bi bi-printer"></i></a>
-                                <a href="#" class="action-btn" title="Edit"><i class="bi bi-pencil-square"></i></a>
-                                <a href="#" class="action-btn" title="Hapus"><i class="bi bi-trash"></i></a>
+                                <button type="button" class="action-btn view-btn" data-file-url="{{ route('surat.preview', $surat->id) }}" data-file-name="{{ $surat->nama_file }}" title="Lihat"><i class="bi bi-eye"></i></button>
+                                <button type="button" class="action-btn print-btn" data-file-url="{{ route('surat.preview', $surat->id) }}" data-file-name="{{ $surat->nama_file }}" title="Cetak"><i class="bi bi-printer"></i></button>
+                                <a href="{{ route('surat.edit', $surat->id) }}" class="action-btn" title="Edit"><i class="bi bi-pencil-square"></i></a>
+                                <button type="button" class="action-btn delete-btn" title="Hapus"><i class="bi bi-trash"></i></button>
                             </div>
                         </td>
                     </tr>
@@ -107,8 +124,70 @@
         </div>
     </main>
 
+    <div id="previewOverlay" class="preview-overlay" role="dialog" aria-modal="true">
+        <div class="preview-shell">
+            <div class="preview-header">
+                <div>
+                    <h3 id="previewTitle" class="text-lg font-semibold text-gray-800">Preview Surat</h3>
+                    <p id="previewSubtitle" class="text-sm text-gray-500">Dokumen akan ditampilkan di sini.</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button id="printPreviewBtn" type="button" class="px-3 py-2 rounded-lg border border-[#DD88CF] text-[#4B164C] hover:bg-[#4B164C] hover:text-white transition">Cetak</button>
+                    <button id="closePreviewBtn" type="button" class="px-3 py-2 rounded-lg bg-[#4B164C] text-white hover:bg-[#DD88CF] transition">Tutup</button>
+                </div>
+            </div>
+            <div class="preview-frame">
+                <iframe id="previewFrame" title="Preview surat"></iframe>
+            </div>
+        </div>
+    </div>
+
     <script>
+        let sidebarWasCollapsedBeforePreview = false;
+
         document.getElementById('toggleBtn').addEventListener('click', () => document.body.classList.toggle('sidebar-collapsed'));
+
+        function setSidebarCollapsed(collapsed) {
+            document.body.classList.toggle('sidebar-collapsed', collapsed);
+        }
+
+        function openPreview(fileUrl, fileName) {
+            const ext = (fileName || '').split('.').pop()?.toLowerCase() || '';
+            const supportedPreview = ['pdf', 'jpg', 'jpeg', 'png', 'txt', 'html', 'md'];
+            const previewFrame = document.getElementById('previewFrame');
+            const previewTitle = document.getElementById('previewTitle');
+            const previewSubtitle = document.getElementById('previewSubtitle');
+
+            previewTitle.textContent = fileName || 'Preview Surat';
+            previewSubtitle.textContent = supportedPreview.includes(ext)
+                ? 'Dokumen sedang ditampilkan untuk dilihat langsung.'
+                : 'File ini akan dibuka di tab baru untuk dilihat.';
+
+            previewFrame.src = fileUrl;
+            document.getElementById('previewOverlay').classList.add('show');
+            sidebarWasCollapsedBeforePreview = document.body.classList.contains('sidebar-collapsed');
+            setSidebarCollapsed(true);
+        }
+
+        function closePreview() {
+            document.getElementById('previewOverlay').classList.remove('show');
+            document.getElementById('previewFrame').src = 'about:blank';
+            setSidebarCollapsed(sidebarWasCollapsedBeforePreview);
+        }
+
+        document.getElementById('closePreviewBtn').addEventListener('click', closePreview);
+        document.getElementById('previewOverlay').addEventListener('click', function (event) {
+            if (event.target.id === 'previewOverlay') {
+                closePreview();
+            }
+        });
+
+        document.getElementById('printPreviewBtn').addEventListener('click', function () {
+            const previewUrl = document.getElementById('previewFrame').src;
+            if (previewUrl && previewUrl !== 'about:blank') {
+                window.open(previewUrl, '_blank');
+            }
+        });
 
         $(document).ready(function() {
             $('#tabelSurat').DataTable({
@@ -123,6 +202,16 @@
                         "next": "<i class='bi bi-chevron-right'></i>"
                     }
                 }
+            });
+
+            $(document).on('click', '.view-btn', function () {
+                openPreview($(this).data('file-url'), $(this).data('file-name'));
+            });
+
+            $(document).on('click', '.print-btn', function () {
+                const fileUrl = $(this).data('file-url');
+                const fileName = $(this).data('file-name');
+                openPreview(fileUrl, fileName);
             });
         });
     </script>

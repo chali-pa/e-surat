@@ -1,64 +1,25 @@
-<section>
-    <header>
-        <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100">
-            {{ __('Profile Information') }}
-        </h2>
-
-        <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
-            {{ __("Update your account's profile information and email address.") }}
-        </p>
+<section class="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
+    <header class="mb-6">
+        <h2 class="text-xl font-bold text-gray-800 mb-2">Informasi Pribadi</h2>
+        <p class="text-sm text-gray-500">Perbarui informasi profil dan alamat email akun Anda.</p>
     </header>
-
-    <form id="send-verification" method="post" action="{{ route('verification.send') }}">
-        @csrf
-    </form>
-
-    <form method="post" action="{{ route('profile.update') }}" class="mt-6 space-y-6">
-        @csrf
-        @method('patch')
-
+    
+    <form method="post" action="{{ route('profile.update') }}" class="space-y-5">
+        @csrf @method('patch')
+        
         <div>
-            <x-input-label for="name" :value="__('Name')" />
-            <x-text-input id="name" name="name" type="text" class="mt-1 block w-full" :value="old('name', $user->name)" required autofocus autocomplete="name" />
-            <x-input-error class="mt-2" :messages="$errors->get('name')" />
+            <label class="block text-sm font-medium text-gray-700 mb-1">Nama</label>
+            <input type="text" name="name" class="w-full p-3 bg-white text-gray-900 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#DD88CF] focus:border-[#DD88CF] outline-none transition-all shadow-sm" value="{{ old('name', $user->name) }}">
         </div>
-
         <div>
-            <x-input-label for="email" :value="__('Email')" />
-            <x-text-input id="email" name="email" type="email" class="mt-1 block w-full" :value="old('email', $user->email)" required autocomplete="username" />
-            <x-input-error class="mt-2" :messages="$errors->get('email')" />
-
-            @if ($user instanceof \Illuminate\Contracts\Auth\MustVerifyEmail && ! $user->hasVerifiedEmail())
-                <div>
-                    <p class="text-sm mt-2 text-gray-800 dark:text-gray-200">
-                        {{ __('Your email address is unverified.') }}
-
-                        <button form="send-verification" class="underline text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-offset-gray-800">
-                            {{ __('Click here to re-send the verification email.') }}
-                        </button>
-                    </p>
-
-                    @if (session('status') === 'verification-link-sent')
-                        <p class="mt-2 font-medium text-sm text-green-600 dark:text-green-400">
-                            {{ __('A new verification link has been sent to your email address.') }}
-                        </p>
-                    @endif
-                </div>
-            @endif
+            <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <input type="email" name="email" class="w-full p-3 bg-white text-gray-900 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#DD88CF] focus:border-[#DD88CF] outline-none transition-all shadow-sm" value="{{ old('email', $user->email) }}">
         </div>
-
-        <div class="flex items-center gap-4">
-            <x-primary-button>{{ __('Save') }}</x-primary-button>
-
-            @if (session('status') === 'profile-updated')
-                <p
-                    x-data="{ show: true }"
-                    x-show="show"
-                    x-transition
-                    x-init="setTimeout(() => show = false, 2000)"
-                    class="text-sm text-gray-600 dark:text-gray-400"
-                >{{ __('Saved.') }}</p>
-            @endif
+        
+        <div class="pt-2">
+            <button type="submit" class="px-6 py-3 bg-gradient-to-r from-[#4B164C] to-[#DD88CF] text-white font-semibold rounded-xl hover:opacity-90 transition shadow-md w-full sm:w-auto">
+                Simpan Perubahan
+            </button>
         </div>
     </form>
 </section>

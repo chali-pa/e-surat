@@ -22,12 +22,12 @@ class SuratController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'nomor_surat'  => 'required|string|max:255',
+            'nomor_surat'   => 'required|string|max:255',
             'tanggal_masuk' => 'required|date',
             'tanggal_buat'  => 'required|date',
             'nama_pengirim' => 'required|string|max:255',
             'nama_surat'    => 'required|string|max:255',
-            'file_surat'    => 'required|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:102400', // Maksimal 100MB
+            'file_surat'    => 'required|file|mimes:pdf,jpg,jpeg,png,doc,docx,xls,xlsx,odt,txt,rtf,html,zip,epub|max:102400',
         ]);
 
         $file = $request->file('file_surat');
@@ -63,7 +63,7 @@ class SuratController extends Controller
             'tanggal_buat'  => 'required|date',
             'nama_pengirim' => 'required|string|max:255',
             'nama_surat'    => 'required|string|max:255',
-            'file_surat'    => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:102400', // Opsional saat edit
+            'file_surat'    => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx,xlsx|max:102400', 
         ]);
 
         $data = [
@@ -99,5 +99,19 @@ class SuratController extends Controller
         \Storage::disk('public')->delete($surat->file_path);
         $surat->delete();
         return redirect()->back()->with('success', 'Surat berhasil dihapus');
+    }
+
+    public function preview($id)
+    {
+        $surat = Surat::findOrFail($id);
+        $path = \Storage::disk('public')->path($surat->file_path);
+
+        if (!file_exists($path)) {
+            abort(404, 'File surat tidak ditemukan.');
+        }
+
+        return response()->file($path, [
+            'Content-Disposition' => 'inline; filename="' . $surat->nama_file . '"'
+        ]);
     }
 }

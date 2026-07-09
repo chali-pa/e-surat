@@ -12,6 +12,16 @@ test('profile page is displayed', function () {
     $response->assertOk();
 });
 
+test('profile page renders inside the app layout', function () {
+    $user = User::factory()->create();
+
+    $response = $this
+        ->actingAs($user)
+        ->get('/profile');
+
+    $response->assertSee('<main', false);
+});
+
 test('profile information can be updated', function () {
     $user = User::factory()->create();
 

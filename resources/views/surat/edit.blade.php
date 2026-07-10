@@ -36,6 +36,9 @@
             <a href="{{ route('profile.edit') }}" class="flex items-center p-3 rounded-xl hover:bg-gray-100 transition">
                 <i class="bi bi-person-fill text-lg"></i><span class="ml-4 menu-text">Profil</span>
             </a>
+            <button type="button" onclick="openLogoutModal()" class="w-full flex items-center p-3 rounded-xl hover:bg-red-50 hover:text-red-600 text-gray-600 transition mt-4 border-t border-gray-100 pt-4">
+                <i class="bi bi-box-arrow-right text-lg"></i><span class="ml-4 menu-text">Keluar</span>
+            </button>
         </nav>
     </aside>
 
@@ -111,5 +114,7 @@
             document.body.classList.toggle('sidebar-collapsed');
         });
     </script>
+
+    @include('partials.logout-modal')
 </body>
 </html>

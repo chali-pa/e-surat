@@ -67,7 +67,6 @@
 </head>
 <body>
 
-    <!-- Sidebar -->
     <aside id="sidebar" class="shadow-sm">
         <div class="h-[76px] flex items-center px-4">
             <button id="toggleBtn" class="p-2 rounded-xl hover:bg-gray-100"><i class="bi bi-list text-2xl"></i></button>
@@ -83,16 +82,16 @@
             <a href="{{ route('profile.edit') }}" class="flex items-center p-3 rounded-xl hover:bg-gray-100 transition">
                 <i class="bi bi-person-fill text-lg"></i><span class="ml-4 menu-text">Profil</span>
             </a>
+            <button type="button" onclick="openLogoutModal()" class="w-full flex items-center p-3 rounded-xl hover:bg-red-50 hover:text-red-600 text-gray-600 transition mt-4 border-t border-gray-100 pt-4">
+                <i class="bi bi-box-arrow-right text-lg"></i><span class="ml-4 menu-text">Keluar</span>
+            </button>
         </nav>
     </aside>
 
-    <!-- Main Content -->
     <main class="main-content min-h-screen p-4 md:p-8">
         <div class="max-w-6xl mx-auto">
-            <!-- Manajemen Surat -->
             <section class="space-y-6">
                 <div class="grid gap-4 md:grid-cols-4">
-                    <!-- Card: Total Surat Masuk -->
                     <button type="button" data-filter="all" class="card-filter rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-slate-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#DD88CF]">
                         <div class="flex items-center gap-2 text-slate-700">
                             <i class="bi bi-envelope-paper-fill text-xl text-slate-500"></i>
@@ -101,7 +100,6 @@
                         <p id="count-all" class="mt-4 text-3xl font-semibold text-slate-900">0</p>
                     </button>
 
-                    <!-- Card: Belum Direspon -->
                     <button type="button" data-filter="pending" class="card-filter rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-slate-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#DD88CF]">
                         <div class="flex items-center gap-2 text-slate-700">
                             <i class="bi bi-exclamation-circle-fill text-xl text-orange-500"></i>
@@ -110,7 +108,6 @@
                         <p id="count-pending" class="mt-4 text-3xl font-semibold text-slate-900">0</p>
                     </button>
 
-                    <!-- Card: Dalam Proses -->
                     <button type="button" data-filter="processing" class="card-filter rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-slate-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#DD88CF]">
                         <div class="flex items-center gap-2 text-slate-700">
                             <i class="bi bi-gear-fill text-xl text-slate-500"></i>
@@ -119,7 +116,6 @@
                         <p id="count-processing" class="mt-4 text-3xl font-semibold text-slate-900">0</p>
                     </button>
 
-                    <!-- Card: Selesai -->
                     <button type="button" data-filter="done" class="card-filter rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-slate-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#DD88CF]">
                         <div class="flex items-center gap-2 text-slate-700">
                             <i class="bi bi-check-circle-fill text-xl text-emerald-500"></i>
@@ -161,8 +157,7 @@
                                     </tr>
                                 </thead>
                                 <tbody id="tableBody" class="divide-y divide-slate-100 bg-white text-slate-700">
-                                    <!-- Data surat akan diisi secara dinamis melalui JavaScript -->
-                                </tbody>
+                                    </tbody>
                             </table>
                         </div>
                     </div>
@@ -171,7 +166,6 @@
         </div>
     </main>
 
-    <!-- Modal: Tambah / Edit Surat -->
     <div id="modalOverlay" class="fixed inset-0 z-40 hidden items-center justify-center bg-black/40">
         <div class="w-full max-w-2xl rounded-xl bg-white p-6 shadow-lg">
             <h3 id="modalTitle" class="text-lg font-semibold text-[#4B164C]">Tambah Surat</h3>
@@ -422,6 +416,7 @@
             renderTable();
         });
     </script>
+
+    @include('profile.partials.logout-modal')
 </body>
 </html>
-

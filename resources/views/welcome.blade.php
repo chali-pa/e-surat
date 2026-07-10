@@ -303,7 +303,7 @@
 <header>
   <div class="wrap header-inner">
     <div class="logo">
-      <div class="logo-mark">S</div>
+      <div class="logo-mark">E</div>
       <div class="logo-word">{{ config('app.name', 'E-Surat') }}</div>
     </div>
     <nav>
@@ -356,17 +356,6 @@
   </div>
 </section>
 
-<div class="strip">
-  <div class="wrap">
-    <div class="strip-track">
-      <span>Total surat masuk: <b>285</b></span>
-      <span>Belum direspon: <b>1</b></span>
-      <span>Dalam proses: <b>1</b></span>
-      <span>Selesai: <b>283</b></span>
-    </div>
-  </div>
-</div>
-
 <section class="features" id="fitur">
   <div class="wrap">
     <div class="section-head">
@@ -387,11 +376,6 @@
       </div>
       <div class="row">
         <div class="row-no">03</div>
-        <div class="row-title">Tahu persis sampai mana prosesnya</div>
-        <div class="row-desc">Setiap surat punya status yang jelas — belum direspon, sedang diproses, atau sudah selesai — jadi semua orang tahu apa yang harus ditunggu.</div>
-      </div>
-      <div class="row">
-        <div class="row-no">04</div>
         <div class="row-title">Temukan surat apa pun dalam hitungan detik</div>
         <div class="row-desc">Cukup ketik nomor, nama pengirim, atau perihal surat untuk langsung menemukannya, lalu lihat, cetak, atau bagikan sesuai kebutuhan.</div>
       </div>
@@ -415,6 +399,21 @@
     <div>© {{ date('Y') }} · Sistem Manajemen Surat</div>
   </div>
 </footer>
+
+@include('profile.partials.toast')
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        @if (session('success'))
+            showToast(@json(session('success')), 'success');
+        @endif
+
+        const storedToast = sessionStorage.getItem('logoutToast');
+        if (storedToast) {
+            showToast(storedToast, 'success');
+            sessionStorage.removeItem('logoutToast');
+        }
+    });
+</script>
 
 </body>
 </html>

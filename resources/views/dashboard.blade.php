@@ -63,9 +63,36 @@
         .table-action-delete {
             color: #ef4444;
         }
+
+        /* ===== Responsive: Mobile Sidebar ===== */
+        #sidebarOverlay { display: none; }
+        @media (max-width: 767px) {
+            #sidebar, body.sidebar-collapsed #sidebar {
+                width: 260px !important;
+                transform: translateX(-100%);
+                transition: transform 0.3s ease;
+            }
+            body.sidebar-mobile-open #sidebar { transform: translateX(0); }
+            body.sidebar-collapsed .menu-text { opacity: 1 !important; display: inline !important; }
+            .main-content { margin-left: 0 !important; }
+            body.sidebar-mobile-open #sidebarOverlay {
+                display: block;
+                position: fixed; inset: 0;
+                background: rgba(0,0,0,0.5);
+                z-index: 90;
+            }
+        }
     </style>
 </head>
 <body>
+
+    <!-- Mobile Topbar -->
+    <header class="md:hidden sticky top-0 z-[80] bg-white border-b border-gray-100 flex items-center justify-between px-4 py-3">
+        <button type="button" onclick="openMobileSidebar()" class="p-2 rounded-xl hover:bg-gray-100"><i class="bi bi-list text-2xl"></i></button>
+        <span class="font-bold text-[#4B164C] text-lg">E-Surat</span>
+        <span class="w-9"></span>
+    </header>
+    <div id="sidebarOverlay" onclick="closeMobileSidebar()"></div>
 
     <aside id="sidebar" class="shadow-sm">
         <div class="h-[76px] flex items-center px-4">
@@ -91,7 +118,9 @@
     <main class="main-content min-h-screen p-4 md:p-8">
         <div class="max-w-6xl mx-auto">
             <section class="space-y-6">
-                <div class="grid gap-4 md:grid-cols-4">
+                
+                <!-- Card Container (Sudah Diubah Menjadi Responsif) -->
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                     <button type="button" data-filter="all" class="card-filter rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-slate-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#DD88CF]">
                         <div class="flex items-center gap-2 text-slate-700">
                             <i class="bi bi-envelope-paper-fill text-xl text-slate-500"></i>
@@ -202,6 +231,9 @@
         document.getElementById('toggleBtn').addEventListener('click', () => {
             document.body.classList.toggle('sidebar-collapsed');
         });
+        function openMobileSidebar() { document.body.classList.add('sidebar-mobile-open'); }
+        function closeMobileSidebar() { document.body.classList.remove('sidebar-mobile-open'); }
+        document.querySelectorAll('#sidebar nav a').forEach(link => link.addEventListener('click', closeMobileSidebar));
 
         /***** Manajemen Surat: Front-end Logic (vanilla JS) *****/
         document.addEventListener('DOMContentLoaded', () => {

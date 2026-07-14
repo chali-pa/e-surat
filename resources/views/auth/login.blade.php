@@ -27,6 +27,8 @@
             padding: 60px 56px;
             position: relative;
             z-index: 2;
+            overflow-y: auto;
+            max-height: 100vh;
         }
         .logo {
             display: flex;

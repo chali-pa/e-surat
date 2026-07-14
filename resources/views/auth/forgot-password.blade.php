@@ -10,7 +10,7 @@
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Inter', sans-serif; height: 100vh; display: flex; overflow: hidden; background: #0d0015; }
-        .form-panel { width: 45%; background: #ffffff; display: flex; flex-direction: column; justify-content: center; padding: 60px 56px; position: relative; z-index: 2; }
+        .form-panel { width: 45%; background: #ffffff; display: flex; flex-direction: column; justify-content: center; padding: 60px 56px; position: relative; z-index: 2; overflow-y: auto; max-height: 100vh; }
         .logo { display: flex; align-items: center; gap: 10px; margin-bottom: 36px; }
         .logo-icon { width: 38px; height: 38px; background: linear-gradient(135deg, #4B164C, #DD88CF); border-radius: 10px; display: flex; align-items: center; justify-content: center; color: white; font-size: 18px; font-weight: 800; flex-shrink: 0; }
         .logo-text { font-size: 1.35rem; font-weight: 800; color: #1a1a2e; letter-spacing: -0.5px; }

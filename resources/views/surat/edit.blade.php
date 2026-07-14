@@ -16,9 +16,36 @@
         body.sidebar-collapsed .menu-text { opacity: 0; display: none; }
         .main-content { margin-left: 260px; transition: margin-left 0.3s; }
         body.sidebar-collapsed .main-content { margin-left: 72px; }
+
+        /* ===== Responsive: Mobile Sidebar ===== */
+        #sidebarOverlay { display: none; }
+        @media (max-width: 767px) {
+            #sidebar, body.sidebar-collapsed #sidebar {
+                width: 260px !important;
+                transform: translateX(-100%);
+                transition: transform 0.3s ease;
+            }
+            body.sidebar-mobile-open #sidebar { transform: translateX(0); }
+            body.sidebar-collapsed .menu-text { opacity: 1 !important; display: inline !important; }
+            .main-content { margin-left: 0 !important; }
+            body.sidebar-mobile-open #sidebarOverlay {
+                display: block;
+                position: fixed; inset: 0;
+                background: rgba(0,0,0,0.5);
+                z-index: 90;
+            }
+        }
     </style>
 </head>
 <body>
+
+    <!-- Mobile Topbar -->
+    <header class="md:hidden sticky top-0 z-[80] bg-white border-b border-gray-100 flex items-center justify-between px-4 py-3">
+        <button type="button" onclick="openMobileSidebar()" class="p-2 rounded-xl hover:bg-gray-100"><i class="bi bi-list text-2xl"></i></button>
+        <span class="font-bold text-[#4B164C] text-lg">E-Surat</span>
+        <span class="w-9"></span>
+    </header>
+    <div id="sidebarOverlay" onclick="closeMobileSidebar()"></div>
 
     <!-- Sidebar Utama -->
     <aside id="sidebar" class="shadow-sm">
@@ -45,14 +72,14 @@
     <!-- Main Content -->
     <main class="main-content min-h-screen p-4 md:p-8">
         <!-- Header dengan Gradient -->
-        <header class="bg-gradient-to-r from-[#4B164C] to-[#DD88CF] shadow-md p-5 flex justify-between items-center rounded-2xl mb-8 max-w-3xl mx-auto">
+        <header class="bg-gradient-to-r from-[#4B164C] to-[#DD88CF] shadow-md p-5 flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center rounded-2xl mb-8 max-w-3xl mx-auto">
             <h2 class="text-xl font-bold text-white">Edit Surat</h2>
             <a href="{{ route('surat.index') }}" class="text-white hover:text-gray-200 transition flex items-center gap-2 font-medium">
                 <i class="bi bi-arrow-left"></i> Kembali
             </a>
         </header>
 
-        <div class="max-w-3xl mx-auto bg-white border border-gray-100 rounded-2xl shadow-sm p-8">
+        <div class="max-w-3xl mx-auto bg-white border border-gray-100 rounded-2xl shadow-sm p-5 sm:p-8">
             @if ($errors->any())
                 <div class="bg-red-50 text-red-600 p-4 rounded-xl mb-6 border border-red-100">
                     <ul class="list-disc pl-5">
@@ -113,8 +140,11 @@
         document.getElementById('toggleBtn').addEventListener('click', () => {
             document.body.classList.toggle('sidebar-collapsed');
         });
+        function openMobileSidebar() { document.body.classList.add('sidebar-mobile-open'); }
+        function closeMobileSidebar() { document.body.classList.remove('sidebar-mobile-open'); }
+        document.querySelectorAll('#sidebar nav a').forEach(link => link.addEventListener('click', closeMobileSidebar));
     </script>
 
-    @include('partials.logout-modal')
+    @include('profile.partials.logout-modal')
 </body>
 </html>

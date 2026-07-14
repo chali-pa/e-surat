@@ -19,17 +19,20 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
     // Keluar dari akun dengan konfirmasi password
-Route::post('/logout-password', [AuthController::class, 'logoutWithPassword'])
-    ->name('logout.password')
-    ->middleware('auth');});
+    Route::post('/logout-password', [AuthController::class, 'logoutWithPassword'])
+        ->name('logout.password');
 
-Route::get('/surat', [SuratController::class, 'index'])->name('surat.index');
-Route::get('/surat/create', [SuratController::class, 'create'])->name('surat.create');
-Route::post('/surat', [SuratController::class, 'store'])->name('surat.store');
-Route::get('/surat/{id}/preview', [SuratController::class, 'preview'])->name('surat.preview');
-Route::get('/surat/{id}/edit', [SuratController::class, 'edit'])->name('surat.edit');
-Route::put('/surat/{id}', [SuratController::class, 'update'])->name('surat.update');
-Route::delete('/surat/{id}', [SuratController::class, 'destroy'])->name('surat.destroy');
+    // Semua route surat sekarang wajib login, sama seperti dashboard
+    Route::get('/surat', [SuratController::class, 'index'])->name('surat.index');
+    Route::get('/surat/create', [SuratController::class, 'create'])->name('surat.create');
+    Route::post('/surat', [SuratController::class, 'store'])->name('surat.store');
+    Route::get('/surat/{id}/preview', [SuratController::class, 'preview'])->name('surat.preview');
+    Route::get('/surat/{id}/edit', [SuratController::class, 'edit'])->name('surat.edit');
+    Route::put('/surat/{id}', [SuratController::class, 'update'])->name('surat.update');
+    Route::delete('/surat/{id}', [SuratController::class, 'destroy'])->name('surat.destroy');
 
+    Route::get('/surat/{surat}/preview-pdf', [SuratController::class, 'previewPdf'])
+        ->name('surat.preview.pdf');
+});
 
 require __DIR__.'/auth.php';

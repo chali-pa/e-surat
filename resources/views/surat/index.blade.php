@@ -387,6 +387,91 @@
             .pv-dialog { max-width: 100vw; }
         }
 
+        /* ===== Tablet: rapatkan tabel tapi tetap dalam format tabel ===== */
+        @media (min-width: 769px) and (max-width: 1024px) {
+            .transactions-table { min-width: 640px; }
+            .transactions-table thead th { padding: 13px 12px !important; font-size: .8rem !important; }
+            .transactions-table tbody td { padding: 13px 12px !important; font-size: .88rem !important; }
+        }
+
+        /* =====================================================================
+           Tabel -> tampilan kartu di layar sempit (HP & tablet portrait)
+           Menghindari scroll horizontal yang bikin susah dibaca di layar kecil.
+           ===================================================================== */
+        @media (max-width: 768px) {
+            .table-toolbar { flex-direction: column; align-items: stretch; }
+            .toolbar-search { max-width: 100%; }
+            .toolbar-select { justify-content: space-between; }
+            .table-scroll-wrap { overflow: visible; border-radius: 0; }
+
+            .transactions-table { min-width: 0; width: 100% !important; border-spacing: 0 12px !important; }
+            .transactions-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+            .transactions-table, .transactions-table tbody, .transactions-table tr { display: block; width: 100%; }
+
+            .transactions-table tbody tr {
+                background: #fff;
+                border: 1px solid #e5e7eb;
+                border-radius: 16px;
+                padding: 4px 16px;
+                box-shadow: 0 4px 16px rgba(15,23,42,.05);
+                position: relative;
+            }
+            .transactions-table tbody tr:hover { background: #fff; }
+
+            .transactions-table tbody td {
+                display: flex !important;
+                align-items: flex-start;
+                justify-content: space-between;
+                gap: 16px;
+                width: 100%;
+                padding: 11px 0 !important;
+                border-bottom: 1px dashed #eef1f5;
+                text-align: right !important;
+                font-size: .88rem !important;
+                color: #334155 !important;
+            }
+            .transactions-table tbody td:last-child { border-bottom: none; }
+
+            .transactions-table tbody td::before {
+                content: attr(data-label);
+                flex-shrink: 0;
+                text-align: left;
+                font-size: .68rem;
+                font-weight: 600;
+                color: #94a3b8;
+                text-transform: uppercase;
+                letter-spacing: .04em;
+                padding-top: 2px;
+            }
+
+            /* Kolom "No" ditampilkan sebagai badge kecil di pojok kartu, bukan baris */
+            .transactions-table tbody td:first-child {
+                position: absolute;
+                top: 12px; right: 14px;
+                width: auto; padding: 0 !important;
+                border-bottom: none;
+                background: #eef2ff;
+                color: #4B164C !important;
+                font-size: .72rem !important;
+                font-weight: 700;
+                border-radius: 999px;
+                min-width: 26px; height: 26px;
+                display: flex !important;
+                align-items: center; justify-content: center;
+            }
+            .transactions-table tbody td:first-child::before { display: none; }
+            .transactions-table tbody td:nth-child(2) { padding-right: 46px !important; }
+
+            /* Kolom Aksi jadi baris tombol rapi di bagian bawah kartu */
+            .transactions-table tbody td:last-child {
+                display: block !important;
+                text-align: center !important;
+                padding-top: 12px !important;
+            }
+            .transactions-table tbody td:last-child::before { display: none; }
+            .transactions-table tbody td:last-child .action-wrapper { width: 100%; justify-content: center; flex-wrap: wrap; }
+        }
+
         /* ===== Responsive: Mobile Sidebar ===== */
         #sidebarOverlay { display: none; }
         @media (max-width: 767px) {
@@ -520,13 +605,13 @@
                 <tbody>
                     @foreach($surats as $surat)
                     <tr>
-                        <td class="font-medium">{{ $loop->iteration }}</td>
-                        <td class="font-semibold text-[#4B164C]">{{ $surat->nomor_surat }}</td>
-                        <td class="text-gray-500">{{ \Carbon\Carbon::parse($surat->tanggal_buat)->format('d/m/Y') }}</td>
-                        <td class="text-gray-500">{{ $surat->tanggal_masuk ? \Carbon\Carbon::parse($surat->tanggal_masuk)->format('d/m/Y') : '-' }}</td>
-                        <td class="text-gray-700">{{ $surat->nama_pengirim }}</td>
-                        <td class="text-gray-700">{{ $surat->nama_surat }}</td>
-                        <td>
+                        <td class="font-medium" data-label="No">{{ $loop->iteration }}</td>
+                        <td class="font-semibold text-[#4B164C]" data-label="Nomor Surat">{{ $surat->nomor_surat }}</td>
+                        <td class="text-gray-500" data-label="Tgl Buat">{{ \Carbon\Carbon::parse($surat->tanggal_buat)->format('d/m/Y') }}</td>
+                        <td class="text-gray-500" data-label="Tgl Masuk">{{ $surat->tanggal_masuk ? \Carbon\Carbon::parse($surat->tanggal_masuk)->format('d/m/Y') : '-' }}</td>
+                        <td class="text-gray-700" data-label="Pengirim">{{ $surat->nama_pengirim }}</td>
+                        <td class="text-gray-700" data-label="Nama Surat">{{ $surat->nama_surat }}</td>
+                        <td data-label="Aksi">
                             <div class="action-wrapper">
                                 <!-- Lihat -->
                                 <a href="#" class="action-btn view-btn" title="Lihat"

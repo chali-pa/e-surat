@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
@@ -8,226 +8,440 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Poppins', sans-serif; background-color: #F9FAFB; }
+        body { font-family: 'Poppins', sans-serif; background-color: #F4F6F9; }
 
-        /* Sidebar Styling */
-        #sidebar { transition: width 0.3s; width: 260px; position: fixed; height: 100vh; z-index: 100; background-color: #ffffff; border-right: 1px solid #e5e7eb; }
+        /* ── Sidebar ── */
+        #sidebar {
+            transition: width 0.3s;
+            width: 260px;
+            position: fixed;
+            height: 100vh;
+            z-index: 100;
+            background: #fff;
+            border-right: 1px solid #eaecf0;
+            box-shadow: 1px 0 12px rgba(0,0,0,0.03);
+        }
         body.sidebar-collapsed #sidebar { width: 72px !important; }
         body.sidebar-collapsed .menu-text { opacity: 0; display: none; }
         .main-content { margin-left: 260px; transition: margin-left 0.3s; }
         body.sidebar-collapsed .main-content { margin-left: 72px; }
 
-        .card-shadow { box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-        /* Gradient active style between primary and accent */
-        .card-filter.active-gradient {
-            background: linear-gradient(90deg, #4B164C 0%, #DD88CF 100%);
-            color: #ffffff;
-            border-color: transparent;
-        }
-        .card-filter.active-gradient .text-slate-900,
-        .card-filter.active-gradient .text-slate-700,
-        .card-filter.active-gradient .text-slate-500 {
-            color: #ffffff !important;
-        }
-        .btn-gradient-active {
-            background: linear-gradient(90deg, #4B164C 0%, #DD88CF 100%) !important;
-            color: #ffffff !important;
-            border-color: transparent !important;
-        }
-        /* Primary button: dominant #4B164C, hover to #DD88CF */
+        /* ── Card shadow ── */
+        .card-shadow { box-shadow: 0 1px 8px rgba(0,0,0,0.06); }
+
+        /* ── Primary button ── */
         .btn-primary {
-            background: #4B164C;
-            color: #ffffff;
-            transition: background 200ms ease, color 200ms ease;
-            border-color: transparent;
+            background: #4B164C; color: #fff;
+            transition: background 200ms ease;
         }
-        .btn-primary:hover {
-            background: #DD88CF;
-            color: #ffffff;
-        }
-        .table-action-btn {
-            display: inline-flex;
+        .btn-primary:hover { background: #3e123c; }
+
+        /* ── History row ── */
+        .hist-row {
+            display: flex;
             align-items: center;
-            justify-content: center;
-            height: 2.5rem;
-            width: 2.5rem;
-            border-radius: 0.75rem;
-            color: #475569;
-            background: transparent;
-            border: none;
-            transition: background 150ms ease, color 150ms ease;
+            gap: 1.1rem;
+            padding: 1.05rem 1.5rem;
+            transition: background 150ms ease;
+            cursor: pointer;
         }
-        .table-action-btn:hover {
-            background: #f8fafc;
-        }
-        .table-action-delete {
-            color: #ef4444;
+        .hist-row:hover { background: #faf7fb; }
+
+        /* avatar inisial */
+        .hist-avatar {
+            width: 42px; height: 42px; border-radius: 50%;
+            background: #f3eaf4;
+            color: #4B164C;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.85rem; font-weight: 600;
+            flex-shrink: 0;
         }
 
-        /* ===== Responsive: Mobile Sidebar ===== */
+        /* day group header (ala Chrome history) */
+        .day-group + .day-group { border-top: 8px solid #F4F6F9; }
+        .day-header {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 0.9rem 1.5rem;
+            background: #faf5fb;
+        }
+        .day-header .day-icon {
+            width: 28px; height: 28px; border-radius: 8px;
+            background: #f0dcf0;
+            color: #4B164C;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.75rem;
+            flex-shrink: 0;
+        }
+
+        /* icon kalender */
+        .hist-date-icon {
+            width: 34px; height: 34px; border-radius: 10px;
+            background: #f8f9fb;
+            color: #94a3b8;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.85rem;
+            flex-shrink: 0;
+        }
+
+        /* jam pill */
+        .hist-time {
+            display: inline-flex; align-items: center; gap: 0.35rem;
+            font-size: 12.5px; font-weight: 500; color: #94a3b8;
+            font-variant-numeric: tabular-nums;
+            /* width: 16px; (Dihapus untuk responsivitas) */
+        }
+
+        /* col widths */
+        .hist-col-main  { flex: 0 0 30%; min-width: 0; }
+        .hist-col-date  { flex: 0 0 16%; min-width: 0; }
+        .hist-col-sender{ flex: 0 0 20%; min-width: 0; }
+        .hist-col-no    { flex: 0 0 8%;  min-width: 0; }
+        .hist-col-act   { flex: 0 0 6%;  min-width: 0; text-align: right; }
+
+        /* edit btn */
+        .btn-edit {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 32px; height: 32px; border-radius: 10px;
+            background: #fafafa; border: 1px solid #e8eaed;
+            color: #94a3b8;
+            transition: background 150ms, color 150ms;
+            text-decoration: none;
+        }
+        .btn-edit:hover { background: #fff8eb; color: #b45309; border-color: #fde68a; }
+
+        /* Responsive */
         #sidebarOverlay { display: none; }
         @media (max-width: 767px) {
             #sidebar, body.sidebar-collapsed #sidebar {
-                width: 260px !important;
-                transform: translateX(-100%);
+                width: 260px !important; transform: translateX(-100%);
                 transition: transform 0.3s ease;
             }
             body.sidebar-mobile-open #sidebar { transform: translateX(0); }
             body.sidebar-collapsed .menu-text { opacity: 1 !important; display: inline !important; }
             .main-content { margin-left: 0 !important; }
             body.sidebar-mobile-open #sidebarOverlay {
-                display: block;
-                position: fixed; inset: 0;
-                background: rgba(0,0,0,0.5);
-                z-index: 90;
+                display: block; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 90;
             }
         }
+
+        /* ── Mobile card ── */
+        .mob-card {
+            background: #fff; border: 1px solid #eaecf0; border-radius: 16px;
+            overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+            transition: box-shadow 150ms;
+        }
+        .mob-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.08); }
     </style>
 </head>
 <body>
 
-    <!-- Mobile Topbar -->
-    <header class="md:hidden sticky top-0 z-[80] bg-white border-b border-gray-100 flex items-center justify-between px-4 py-3">
-        <button type="button" onclick="openMobileSidebar()" class="p-2 rounded-xl hover:bg-gray-100"><i class="bi bi-list text-2xl"></i></button>
+    <header class="md:hidden sticky top-0 z-[80] bg-white border-b border-gray-100 flex items-center justify-between px-4 py-3 shadow-sm">
+        <button type="button" onclick="openMobileSidebar()" class="p-2 rounded-xl text-slate-700 hover:bg-slate-100"><i class="bi bi-list text-2xl"></i></button>
         <span class="font-bold text-[#4B164C] text-lg">E-Surat</span>
         <span class="w-9"></span>
     </header>
     <div id="sidebarOverlay" onclick="closeMobileSidebar()"></div>
 
     <aside id="sidebar" class="shadow-sm">
-        <div class="h-[76px] flex items-center px-4">
-            <button id="toggleBtn" class="p-2 rounded-xl hover:bg-gray-100"><i class="bi bi-list text-2xl"></i></button>
-            <span class="ml-3 font-bold text-[#4B164C] text-lg menu-text">E-Surat</span>
+        <div class="h-[76px] flex items-center px-4 border-b border-gray-100">
+            <button id="toggleBtn" class="p-2 rounded-xl text-slate-700 hover:bg-slate-100 transition"><i class="bi bi-list text-2xl"></i></button>
+            <span class="ml-3 font-bold text-[#4B164C] text-xl menu-text">E-Surat</span>
         </div>
-        <nav class="flex-1 p-3 space-y-2">
-            <a href="{{ route('dashboard') }}" class="flex items-center p-3 rounded-xl bg-purple-50 text-[#4B164C]">
+        <nav class="flex-1 p-3 space-y-2 mt-2">
+            <a href="{{ route('dashboard') }}" class="flex items-center p-3 rounded-xl bg-purple-50 text-[#4B164C] font-medium">
                 <i class="bi bi-grid-1x2-fill text-lg"></i><span class="ml-4 menu-text">Dashboard</span>
             </a>
-            <a href="{{ route('surat.index') }}" class="flex items-center p-3 rounded-xl hover:bg-gray-100 transition">
+            <a href="{{ route('surat.index') }}" class="flex items-center p-3 rounded-xl text-slate-600 hover:bg-slate-100 transition">
                 <i class="bi bi-envelope-fill text-lg"></i><span class="ml-4 menu-text">Kelola Surat</span>
             </a>
-            <a href="{{ route('profile.edit') }}" class="flex items-center p-3 rounded-xl hover:bg-gray-100 transition">
+            <a href="{{ route('profile.edit') }}" class="flex items-center p-3 rounded-xl text-slate-600 hover:bg-slate-100 transition">
                 <i class="bi bi-person-fill text-lg"></i><span class="ml-4 menu-text">Profil</span>
             </a>
-            <button type="button" onclick="openLogoutModal()" class="w-full flex items-center p-3 rounded-xl hover:bg-red-50 hover:text-red-600 text-gray-600 transition mt-4 border-t border-gray-100 pt-4">
-                <i class="bi bi-box-arrow-right text-lg"></i><span class="ml-4 menu-text">Keluar</span>
-            </button>
+            <div class="mt-4 border-t border-gray-100 pt-4">
+                <button type="button" onclick="openLogoutModal()" class="w-full flex items-center p-3 rounded-xl text-slate-600 hover:bg-red-50 hover:text-red-600 transition">
+                    <i class="bi bi-box-arrow-right text-lg"></i><span class="ml-4 menu-text">Keluar</span>
+                </button>
+            </div>
         </nav>
     </aside>
 
     <main class="main-content min-h-screen p-4 md:p-8">
-        <div class="max-w-6xl mx-auto">
-            <section class="space-y-6">
-                
-                <!-- Card Container (Sudah Diubah Menjadi Responsif) -->
-                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    <button type="button" data-filter="all" class="card-filter rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-slate-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#DD88CF]">
-                        <div class="flex items-center gap-2 text-slate-700">
-                            <i class="bi bi-envelope-paper-fill text-xl text-slate-500"></i>
-                            <span class="text-sm font-medium">Total Surat Masuk</span>
-                        </div>
-                        <p id="count-all" class="mt-4 text-3xl font-semibold text-slate-900">0</p>
-                    </button>
+        <div class="max-w-7xl mx-auto space-y-8">
+            <section class="space-y-8">
 
-                    <button type="button" data-filter="pending" class="card-filter rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-slate-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#DD88CF]">
-                        <div class="flex items-center gap-2 text-slate-700">
-                            <i class="bi bi-exclamation-circle-fill text-xl text-orange-500"></i>
-                            <span class="text-sm font-medium">Surat Belum Direspon</span>
-                        </div>
-                        <p id="count-pending" class="mt-4 text-3xl font-semibold text-slate-900">0</p>
-                    </button>
-
-                    <button type="button" data-filter="processing" class="card-filter rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-slate-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#DD88CF]">
-                        <div class="flex items-center gap-2 text-slate-700">
-                            <i class="bi bi-gear-fill text-xl text-slate-500"></i>
-                            <span class="text-sm font-medium">Surat Dalam Proses</span>
-                        </div>
-                        <p id="count-processing" class="mt-4 text-3xl font-semibold text-slate-900">0</p>
-                    </button>
-
-                    <button type="button" data-filter="done" class="card-filter rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-slate-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#DD88CF]">
-                        <div class="flex items-center gap-2 text-slate-700">
-                            <i class="bi bi-check-circle-fill text-xl text-emerald-500"></i>
-                            <span class="text-sm font-medium">Surat Selesai</span>
-                        </div>
-                        <p id="count-done" class="mt-4 text-3xl font-semibold text-slate-900">0</p>
-                    </button>
-                </div>
-
-                <div class="flex flex-col gap-4 rounded-3xl bg-white p-6 shadow-sm border border-slate-200">
-                    <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                        <div>
-                            <h2 class="text-2xl font-semibold text-[#4B164C]">Riwayat Surat</h2>
-                            <p class="mt-1 text-sm text-slate-500">Kelola semua surat masuk dan lihat statusnya secara real-time.</p>
-                        </div>
-                        <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
-                            <div class="flex-1 min-w-[260px]">
-                                <label for="searchInput" class="sr-only">Cari No Surat atau Pengirim</label>
-                                <input id="searchInput" type="text" placeholder="Cari No Surat atau Pengirim..." class="w-full rounded-2xl border border-slate-200 bg-slate-100 px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-[#DD88CF] focus:ring-2 focus:ring-[#DD88CF]/20" />
+                <!-- Title + Single Total Card -->
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-gray-100 pb-4">
+                    <div>
+                        <h1 class="text-3xl font-bold text-[#4B164C]">Halaman Utama</h1>
+                        <p class="mt-1 text-slate-500">Selamat datang kembali! Berikut sekilas tentang total surat masuk.</p>
+                    </div>
+                    <div class="flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-4 w-full md:w-auto">
+                        <!-- Tombol Tambah Surat -->
+                        <a href="{{ route('surat.create') }}"
+                            class="btn-primary flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl font-semibold shadow-sm hover:shadow-md transition whitespace-nowrap">
+                            <i class="bi bi-plus-lg text-lg"></i> Tambah Surat
+                        </a>
+                        <!-- Single prominent card -->
+                        <div class="bg-white p-6 rounded-3xl card-shadow border border-gray-100 flex items-center gap-5 w-full sm:w-auto">
+                            <div class="p-4 rounded-2xl bg-[#DD88CF]/20 text-[#4B164C] flex-shrink-0">
+                                <i class="bi bi-envelope-paper-fill text-2xl"></i>
                             </div>
-                            <button id="addButton" type="button" class="inline-flex items-center justify-center rounded-xl btn-primary px-5 py-3 text-sm font-semibold shadow-sm focus:outline-none focus:ring-2 focus:ring-[#DD88CF]/50">
-                                + Tambah
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-                        <div class="overflow-x-auto">
-                            <table class="min-w-full divide-y divide-slate-200 text-sm">
-                                <thead class="bg-slate-100">
-                                    <tr class="text-left text-slate-700">
-                                        <th class="px-5 py-5 font-medium">No</th>
-                                        <th class="px-5 py-5 font-medium">No Surat</th>
-                                        <th class="px-5 py-5 font-medium">Tanggal Buat</th>
-                                        <th class="px-5 py-5 font-medium">Tanggal Masuk</th>
-                                        <th class="px-5 py-5 font-medium">Pengirim</th>
-                                        <th class="px-5 py-5 font-medium">Nama Surat</th>
-                                        <th class="px-5 py-5 font-medium text-right">Aksi</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="tableBody" class="divide-y divide-slate-100 bg-white text-slate-700">
-                                    </tbody>
-                            </table>
+                            <div>
+                                <span class="text-xs font-medium text-slate-500 uppercase tracking-wide">Total Surat Masuk</span>
+                                <p class="mt-1 text-4xl font-bold text-slate-900">{{ $surats->count() }}</p>
+                            </div>
                         </div>
                     </div>
                 </div>
+
+                <!-- ── Riwayat Surat (Histories Style) ── -->
+                <div class="bg-white rounded-3xl card-shadow border border-[#eaecf0] overflow-hidden">
+
+                    <!-- Header card -->
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-6 py-5 border-b border-[#f1f3f6]">
+                        <div>
+                            <h2 class="text-lg font-semibold text-slate-800 tracking-tight">Riwayat Surat</h2>
+                            <p class="text-[13px] font-light text-slate-400 mt-0.5">Semua surat masuk tercatat di sini</p>
+                        </div>
+                        <div class="relative w-full sm:w-64">
+                            <i class="bi bi-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-300 text-sm"></i>
+                            <input id="searchInput" type="text" placeholder="Cari nama atau pengirim…"
+                                class="w-full rounded-xl border border-[#eaecf0] bg-[#f8f9fb] pl-9 pr-4 py-2.5 text-[13px] font-light text-slate-700 outline-none transition placeholder:text-slate-300 focus:border-[#c084cf] focus:ring-2 focus:ring-[#DD88CF]/15" />
+                        </div>
+                    </div>
+
+                    @php
+                        $grouped = $surats->groupBy(function ($s) {
+                            return $s->created_at->format('Y-m-d');
+                        });
+                    @endphp
+
+                    <!-- ── Desktop: column header ── -->
+                    <div class="hidden md:flex items-center gap-[1.1rem] px-[1.5rem] py-3 bg-[#fafbfc] border-b border-[#f1f3f6] text-[11.5px] font-semibold text-slate-400 uppercase tracking-widest select-none">
+                        <div class="w-16 flex-shrink-0">Jam</div>
+                        <div class="flex-1">Nama Surat</div>
+                        <div class="w-40">Tgl Masuk</div>
+                        <div class="w-8"></div>
+                    </div>
+
+                    <!-- ── Desktop: rows grouped by day ── -->
+                    <div id="tableBody" class="hidden md:block">
+                        @forelse($grouped as $dateKey => $suratsOnDay)
+                            @php
+                                $groupDate = \Carbon\Carbon::parse($dateKey);
+                                if ($groupDate->isToday()) {
+                                    $dayLabel = 'Hari Ini';
+                                } elseif ($groupDate->isYesterday()) {
+                                    $dayLabel = 'Kemarin';
+                                } else {
+                                    $dayLabel = $groupDate->translatedFormat('l, d F Y');
+                                }
+                            @endphp
+                            <div class="day-group" data-day-group>
+                                <div class="day-header sticky top-0 z-[5]">
+                                    <div class="day-icon"><i class="bi bi-calendar-event"></i></div>
+                                    <span class="text-[13.5px] font-semibold text-slate-700">{{ $dayLabel }}</span>
+                                    <span class="text-[11.5px] font-light text-slate-400">{{ $groupDate->translatedFormat('d F Y') }}</span>
+                                    <span class="ml-auto text-[11px] font-medium text-[#4B164C] bg-[#f0dcf0] px-2.5 py-1 rounded-full">{{ $suratsOnDay->count() }} surat</span>
+                                </div>
+                                <div class="divide-y divide-[#f5f6f8]">
+                                    @foreach($suratsOnDay as $surat)
+                                    <div class="hist-row surat-row group"
+                                         data-action="view"
+                                         data-nosurat="{{ strtolower($surat->nomor_surat) }}"
+                                         data-pengirim="{{ strtolower($surat->nama_pengirim) }}"
+                                         data-status="{{ $surat->status }}"
+                                         data-tanggalbuat="{{ \Carbon\Carbon::parse($surat->tanggal_buat)->translatedFormat('d M Y') }}"
+                                         data-tanggalmasuk="{{ \Carbon\Carbon::parse($surat->tanggal_masuk)->translatedFormat('d M Y') }}"
+                                         data-namasurat="{{ $surat->nama_surat }}"
+                                         data-fileurl="{{ route('surat.preview', $surat->id) }}"
+                                         data-filename="{{ $surat->nama_file }}">
+
+                                        <!-- Jam -->
+                                        <div class="w-16 flex-shrink-0 hist-time">
+                                            <i class="bi bi-clock"></i> {{ $surat->created_at->setTimezone('Asia/Jakarta')->format('H:i') }}
+                                        </div>
+
+                                        <!-- Nama Surat + No + Pengirim -->
+                                        <div class="flex-1 flex items-center gap-3 min-w-0">
+                                            <div class="hist-avatar">{{ strtoupper(substr($surat->nama_surat, 0, 1)) }}</div>
+                                            <div class="min-w-0">
+                                                <p class="text-[14px] font-medium text-slate-700 truncate leading-snug" title="{{ $surat->nama_surat }}">{{ $surat->nama_surat }}</p>
+                                                <p class="text-[12.5px] font-light text-slate-400 truncate mt-1">{{ $surat->nomor_surat }} &middot; {{ $surat->nama_pengirim }}</p>
+                                            </div>
+                                        </div>
+
+                                        <!-- Tgl Masuk -->
+                                        <div class="w-40 flex items-center gap-2.5">
+                                            <div class="hist-date-icon"><i class="bi bi-box-arrow-in-down"></i></div>
+                                            <span class="text-[12.5px] font-light text-slate-500">{{ \Carbon\Carbon::parse($surat->tanggal_masuk)->translatedFormat('d M Y') }}</span>
+                                        </div>
+
+                                        <!-- Edit btn -->
+                                        <div class="w-8 flex justify-end flex-shrink-0">
+                                            <a href="{{ route('surat.edit', $surat->id) }}"
+                                               class="btn-edit opacity-0 group-hover:opacity-100 transition-opacity"
+                                               title="Edit" onclick="event.stopPropagation()">
+                                                <i class="bi bi-pencil text-[13px]"></i>
+                                            </a>
+                                        </div>
+                                    </div>
+                                    @endforeach
+                                </div>
+                            </div>
+                        @empty
+                        <div class="flex flex-col items-center gap-3 py-16">
+                            <div class="w-14 h-14 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center">
+                                <i class="bi bi-inbox text-2xl text-slate-300"></i>
+                            </div>
+                            <p class="text-[13px] font-light text-slate-400">Belum ada riwayat surat.</p>
+                        </div>
+                        @endforelse
+                    </div>
+
+                    <!-- ── Mobile: cards grouped by day ── -->
+                    <div id="mobileCards" class="md:hidden">
+                        @forelse($grouped as $dateKey => $suratsOnDay)
+                            @php
+                                $groupDate = \Carbon\Carbon::parse($dateKey);
+                                if ($groupDate->isToday()) {
+                                    $dayLabel = 'Hari Ini';
+                                } elseif ($groupDate->isYesterday()) {
+                                    $dayLabel = 'Kemarin';
+                                } else {
+                                    $dayLabel = $groupDate->translatedFormat('l, d F Y');
+                                }
+                            @endphp
+                            <div class="day-group" data-day-group>
+                                <div class="day-header sticky top-0 z-[5]">
+                                    <div class="day-icon"><i class="bi bi-calendar-event"></i></div>
+                                    <span class="text-[13px] font-semibold text-slate-700">{{ $dayLabel }}</span>
+                                    <span class="ml-auto text-[11px] font-medium text-[#4B164C] bg-[#f0dcf0] px-2.5 py-1 rounded-full">{{ $suratsOnDay->count() }} surat</span>
+                                </div>
+                                <div class="divide-y divide-[#f5f6f8]">
+                                    @foreach($suratsOnDay as $surat)
+                                    <div class="surat-card px-5 py-4 hover:bg-[#fafbfc] transition"
+                                         data-nosurat="{{ strtolower($surat->nomor_surat) }}"
+                                         data-pengirim="{{ strtolower($surat->nama_pengirim) }}"
+                                         data-status="{{ $surat->status }}">
+                                        <!-- top row -->
+                                        <div class="flex items-start gap-3">
+                                            <div class="hist-avatar mt-0.5">{{ strtoupper(substr($surat->nama_surat, 0, 1)) }}</div>
+                                            <div class="flex-1 min-w-0">
+                                                <p class="text-[14px] font-medium text-slate-700 truncate">{{ $surat->nama_surat }}</p>
+                                                <p class="text-[12px] font-light text-slate-400 mt-1">{{ $surat->nomor_surat }}</p>
+                                            </div>
+                                            <span class="hist-time flex-shrink-0 mt-1"><i class="bi bi-clock"></i> {{ $surat->created_at->setTimezone('Asia/Jakarta')->format('H:i') }}</span>
+                                        </div>
+                                        <!-- meta row -->
+                                        <div class="mt-3 grid grid-cols-2 gap-y-2 text-[12px]">
+                                            <div>
+                                                <span class="text-slate-400 font-light block">Pengirim</span>
+                                                <span class="text-slate-600 font-medium">{{ $surat->nama_pengirim }}</span>
+                                            </div>
+                                            <div>
+                                                <span class="text-slate-400 font-light block">Tgl Masuk</span>
+                                                <span class="text-slate-600 font-medium">{{ \Carbon\Carbon::parse($surat->tanggal_masuk)->translatedFormat('d M Y') }}</span>
+                                            </div>
+                                            <div>
+                                                <span class="text-slate-400 font-light block">Tgl Buat</span>
+                                                <span class="text-slate-600 font-medium">{{ \Carbon\Carbon::parse($surat->tanggal_buat)->translatedFormat('d M Y') }}</span>
+                                            </div>
+                                        </div>
+                                        <!-- actions -->
+                                        <div class="mt-3 flex gap-2">
+                                            <button type="button"
+                                                data-action="view"
+                                                data-nosurat="{{ $surat->nomor_surat }}"
+                                                data-tanggalbuat="{{ \Carbon\Carbon::parse($surat->tanggal_buat)->translatedFormat('d M Y') }}"
+                                                data-tanggalmasuk="{{ \Carbon\Carbon::parse($surat->tanggal_masuk)->translatedFormat('d M Y') }}"
+                                                data-pengirim="{{ $surat->nama_pengirim }}"
+                                                data-namasurat="{{ $surat->nama_surat }}"
+                                                data-status="{{ $surat->status }}"
+                                                data-fileurl="{{ route('surat.preview', $surat->id) }}"
+                                                data-filename="{{ $surat->nama_file }}"
+                                                class="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[12px] font-medium bg-[#f0f5ff] text-[#3b63d8] hover:bg-[#e5eeff] transition">
+                                                <i class="bi bi-eye"></i> Detail
+                                            </button>
+                                            <a href="{{ route('surat.edit', $surat->id) }}"
+                                                class="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[12px] font-medium bg-[#fffbeb] text-[#b45309] hover:bg-[#fef3c7] transition">
+                                                <i class="bi bi-pencil"></i> Edit
+                                            </a>
+                                        </div>
+                                    </div>
+                                    @endforeach
+                                </div>
+                            </div>
+                        @empty
+                        <div class="flex flex-col items-center gap-3 py-14">
+                            <div class="w-14 h-14 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center">
+                                <i class="bi bi-inbox text-2xl text-slate-300"></i>
+                            </div>
+                            <p class="text-[13px] font-light text-slate-400">Belum ada data surat.</p>
+                        </div>
+                        @endforelse
+                    </div>
+
+                    <!-- No results -->
+                    <div id="noResults" class="hidden flex flex-col items-center gap-3 py-14">
+                        <i class="bi bi-search text-2xl text-slate-300"></i>
+                        <p class="text-[13px] font-light text-slate-400">Tidak ada surat yang cocok.</p>
+                    </div>
+
             </section>
         </div>
     </main>
 
-    <div id="modalOverlay" class="fixed inset-0 z-40 hidden items-center justify-center bg-black/40">
-        <div class="w-full max-w-2xl rounded-xl bg-white p-6 shadow-lg">
-            <h3 id="modalTitle" class="text-lg font-semibold text-[#4B164C]">Tambah Surat</h3>
-            <form id="suratForm" class="mt-4 grid grid-cols-1 gap-3">
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <input id="inputNoSurat" type="text" placeholder="No Surat" class="rounded-lg border border-slate-200 px-3 py-2" required />
-                    <input id="inputTanggalBuat" type="date" placeholder="Tanggal Buat" class="rounded-lg border border-slate-200 px-3 py-2" required />
-                </div>
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <input id="inputTanggalMasuk" type="date" placeholder="Tanggal Masuk" class="rounded-lg border border-slate-200 px-3 py-2" required />
-                    <input id="inputPengirim" type="text" placeholder="Pengirim" class="rounded-lg border border-slate-200 px-3 py-2" required />
-                </div>
-                <input id="inputNamaSurat" type="text" placeholder="Nama Surat" class="rounded-lg border border-slate-200 px-3 py-2" required />
-
+    <!-- Modal for Viewing Letter Details -->
+    <div id="viewModalOverlay" class="fixed inset-0 z-[110] hidden items-center justify-center bg-black/50 backdrop-blur-sm transition-opacity duration-300 opacity-0 p-4">
+        <div id="viewModalContainer" class="w-full max-w-2xl rounded-3xl bg-white p-6 md:p-10 shadow-2xl transition-all duration-300 scale-95 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl md:text-2xl font-semibold text-[#4B164C]">Detail Surat Masuk</h3>
+                <button type="button" id="closeViewModalBtn" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100">
+                    <i class="bi bi-x-lg text-lg"></i>
+                </button>
+            </div>
+            <div class="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2">
                 <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-2">Status Surat</label>
-                    <select id="inputStatus" class="w-full rounded-lg border border-slate-200 px-3 py-2">
-                        <option value="pending">Belum Direspon</option>
-                        <option value="processing">Dalam Proses</option>
-                        <option value="done">Selesai</option>
-                    </select>
+                    <label class="block text-xs font-medium text-slate-500 mb-1.5 ml-1">No Surat</label>
+                    <p id="viewNoSurat" class="w-full rounded-xl border border-gray-200 bg-slate-50 px-4 py-3 text-sm text-slate-800"></p>
                 </div>
-
-                <div class="mt-4 flex justify-end gap-2">
-                    <button type="button" id="cancelBtn" class="rounded-lg border border-slate-200 px-4 py-2">Batal</button>
-                    <button type="submit" id="saveBtn" class="rounded-lg bg-[#4B164C] px-4 py-2 text-white">Simpan</button>
+                <div>
+                    <label class="block text-xs font-medium text-slate-500 mb-1.5 ml-1">Tanggal Buat</label>
+                    <p id="viewTanggalBuat" class="w-full rounded-xl border border-gray-200 bg-slate-50 px-4 py-3 text-sm text-slate-800"></p>
                 </div>
-            </form>
+                <div>
+                    <label class="block text-xs font-medium text-slate-500 mb-1.5 ml-1">Tanggal Masuk</label>
+                    <p id="viewTanggalMasuk" class="w-full rounded-xl border border-gray-200 bg-slate-50 px-4 py-3 text-sm text-slate-800"></p>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-500 mb-1.5 ml-1">Pengirim</label>
+                    <p id="viewPengirim" class="w-full rounded-xl border border-gray-200 bg-slate-50 px-4 py-3 text-sm text-slate-800"></p>
+                </div>
+                <div class="sm:col-span-2">
+                    <label class="block text-xs font-medium text-slate-500 mb-1.5 ml-1">Nama Surat / Perihal</label>
+                    <p id="viewNamaSurat" class="w-full rounded-xl border border-gray-200 bg-slate-50 px-4 py-3 text-sm text-slate-800"></p>
+                </div>
+                <div class="sm:col-span-2">
+                    <label class="block text-xs font-medium text-slate-500 mb-1.5 ml-1">File Surat</label>
+                    <a id="viewFileLink" href="#" target="_blank" rel="noopener"
+                       class="w-full flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 hover:bg-[#F3E8F3] hover:border-[#DD88CF] transition group">
+                        <span class="flex items-center gap-2 min-w-0">
+                            <i class="bi bi-file-earmark-text text-lg text-[#4B164C] flex-shrink-0"></i>
+                            <span id="viewFileName" class="truncate"></span>
+                        </span>
+                        <span class="flex items-center gap-1 text-[#4B164C] font-semibold text-xs flex-shrink-0">
+                            Lihat File <i class="bi bi-box-arrow-up-right"></i>
+                        </span>
+                    </a>
+                </div>
+            </div>
         </div>
     </div>
 
     <script>
-        // Toggle sidebar
         document.getElementById('toggleBtn').addEventListener('click', () => {
             document.body.classList.toggle('sidebar-collapsed');
         });
@@ -235,218 +449,87 @@
         function closeMobileSidebar() { document.body.classList.remove('sidebar-mobile-open'); }
         document.querySelectorAll('#sidebar nav a').forEach(link => link.addEventListener('click', closeMobileSidebar));
 
-        /***** Manajemen Surat: Front-end Logic (vanilla JS) *****/
-        document.addEventListener('DOMContentLoaded', () => {
-            // Elements
-            const tableBody = document.getElementById('tableBody');
-            const searchInput = document.getElementById('searchInput');
-            const addButton = document.getElementById('addButton');
-            const cardButtons = Array.from(document.querySelectorAll('.card-filter'));
-            const counts = {
-                all: document.getElementById('count-all'),
-                pending: document.getElementById('count-pending'),
-                processing: document.getElementById('count-processing'),
-                done: document.getElementById('count-done')
-            };
+        const viewModalOverlay   = document.getElementById('viewModalOverlay');
+        const viewModalContainer = document.getElementById('viewModalContainer');
+        const closeViewModalBtn  = document.getElementById('closeViewModalBtn');
 
-            // Modal elements
-            const modalOverlay = document.getElementById('modalOverlay');
-            const modalTitle = document.getElementById('modalTitle');
-            const suratForm = document.getElementById('suratForm');
-            const inputNoSurat = document.getElementById('inputNoSurat');
-            const inputTanggalBuat = document.getElementById('inputTanggalBuat');
-            const inputTanggalMasuk = document.getElementById('inputTanggalMasuk');
-            const inputPengirim = document.getElementById('inputPengirim');
-            const inputNamaSurat = document.getElementById('inputNamaSurat');
-            const inputStatus = document.getElementById('inputStatus');
-            const cancelBtn = document.getElementById('cancelBtn');
+        function openViewModal(btn) {
+            document.getElementById('viewNoSurat').textContent      = btn.dataset.nosurat;
+            document.getElementById('viewTanggalBuat').textContent  = btn.dataset.tanggalbuat;
+            document.getElementById('viewTanggalMasuk').textContent = btn.dataset.tanggalmasuk;
+            document.getElementById('viewPengirim').textContent     = btn.dataset.pengirim;
+            document.getElementById('viewNamaSurat').textContent    = btn.dataset.namasurat;
+            document.getElementById('viewFileLink').href            = btn.dataset.fileurl;
+            document.getElementById('viewFileName').textContent     = btn.dataset.filename;
+            viewModalOverlay.classList.remove('hidden');
+            viewModalOverlay.classList.add('flex');
+            setTimeout(() => {
+                viewModalOverlay.classList.remove('opacity-0');
+                viewModalContainer.classList.remove('scale-95');
+            }, 10);
+        }
 
-            // State
-            let activeFilter = 'all';
-            let nextId = 6; // next id for dummy data
-            let editingId = null; // if editing existing record
+        function closeViewModal() {
+            viewModalOverlay.classList.add('opacity-0');
+            viewModalContainer.classList.add('scale-95');
+            setTimeout(() => {
+                viewModalOverlay.classList.add('hidden');
+                viewModalOverlay.classList.remove('flex');
+            }, 300);
+        }
 
-            // Dummy initial data
-            const suratData = [
-                { id: 1, noSurat: 'SM-2026-001', tanggalBuat: '2026-07-01', tanggalMasuk: '2026-07-02', pengirim: 'Dewi Ariani', namaSurat: 'Pengajuan Cuti', status: 'pending' },
-                { id: 2, noSurat: 'SM-2026-002', tanggalBuat: '2026-07-02', tanggalMasuk: '2026-07-03', pengirim: 'Rian Saputra', namaSurat: 'Permintaan Materai', status: 'processing' },
-                { id: 3, noSurat: 'SM-2026-003', tanggalBuat: '2026-07-03', tanggalMasuk: '2026-07-04', pengirim: 'Mira Yustina', namaSurat: 'Surat Undangan', status: 'done' },
-                { id: 4, noSurat: 'SM-2026-004', tanggalBuat: '2026-07-04', tanggalMasuk: '2026-07-05', pengirim: 'Ardi H.', namaSurat: 'Laporan Kegiatan', status: 'pending' },
-                { id: 5, noSurat: 'SM-2026-005', tanggalBuat: '2026-07-05', tanggalMasuk: '2026-07-06', pengirim: 'Nadia S.', namaSurat: 'Permohonan Izin', status: 'done' }
-            ];
-
-            const statusLabel = {
-                pending: 'Belum Direspon',
-                processing: 'Dalam Proses',
-                done: 'Selesai'
-            };
-
-            const statusClasses = {
-                pending: 'bg-orange-100 text-orange-700',
-                processing: 'bg-sky-100 text-sky-700',
-                done: 'bg-emerald-100 text-emerald-700'
-            };
-
-            // Helpers
-            function openModal(isEdit = false) {
-                modalOverlay.classList.remove('hidden');
-                modalOverlay.classList.add('flex');
-                modalTitle.textContent = isEdit ? 'Edit Surat' : 'Tambah Surat';
-            }
-            function closeModal() {
-                modalOverlay.classList.add('hidden');
-                modalOverlay.classList.remove('flex');
-                suratForm.reset();
-                editingId = null;
-                // remove gradient state from add button when modal closed
-                if (addButton) addButton.classList.remove('btn-gradient-active', 'active-gradient');
-            }
-
-            function updateCounts() {
-                counts.all.textContent = suratData.length;
-                counts.pending.textContent = suratData.filter(i => i.status === 'pending').length;
-                counts.processing.textContent = suratData.filter(i => i.status === 'processing').length;
-                counts.done.textContent = suratData.filter(i => i.status === 'done').length;
-            }
-
-            function getFilteredData() {
-                const q = searchInput.value.trim().toLowerCase();
-                return suratData.filter(item => {
-                    const matchesFilter = activeFilter === 'all' || item.status === activeFilter;
-                    const matchesSearch = item.noSurat.toLowerCase().includes(q) || item.pengirim.toLowerCase().includes(q);
-                    return matchesFilter && matchesSearch;
-                });
-            }
-
-            function renderTable() {
-                const rows = getFilteredData();
-                tableBody.innerHTML = rows.map((item, idx) => `
-                    <tr class="transition hover:bg-slate-50">
-                        <td class="px-5 py-4 font-medium text-slate-900">${idx + 1}</td>
-                        <td class="px-5 py-4 text-slate-700">${item.noSurat}</td>
-                        <td class="px-5 py-4 text-slate-700">${item.tanggalBuat}</td>
-                        <td class="px-5 py-4 text-slate-700">${item.tanggalMasuk}</td>
-                        <td class="px-5 py-4 text-slate-700">${item.pengirim}</td>
-                        <td class="px-5 py-4 text-slate-700">${item.namaSurat}</td>
-                        <td class="px-5 py-4 text-right">
-                            <div class="inline-flex items-center justify-end gap-2">
-                                <button data-action="view" data-id="${item.id}" class="table-action-btn" title="Lihat"><i class="bi bi-eye"></i></button>
-                                <button data-action="edit" data-id="${item.id}" class="table-action-btn" title="Edit"><i class="bi bi-pencil"></i></button>
-                                <button data-action="delete" data-id="${item.id}" class="table-action-btn table-action-delete" title="Hapus"><i class="bi bi-trash"></i></button>
-                            </div>
-                        </td>
-                    </tr>
-                `).join('');
-                attachRowActions();
-            }
-
-            function attachRowActions() {
-                tableBody.querySelectorAll('button[data-action]').forEach(btn => {
-                    btn.onclick = (e) => {
-                        const action = btn.dataset.action;
-                        const id = Number(btn.dataset.id);
-                        const index = suratData.findIndex(s => s.id === id);
-                        if (action === 'view') {
-                            const s = suratData[index];
-                            alert(`Detail:\nNo Surat: ${s.noSurat}\nPengirim: ${s.pengirim}\nNama: ${s.namaSurat}\nStatus: ${statusLabel[s.status]}`);
-                        }
-                        if (action === 'edit') {
-                            const s = suratData[index];
-                            if (s) {
-                                editingId = s.id;
-                                inputNoSurat.value = s.noSurat;
-                                inputTanggalBuat.value = s.tanggalBuat;
-                                inputTanggalMasuk.value = s.tanggalMasuk;
-                                inputPengirim.value = s.pengirim;
-                                inputNamaSurat.value = s.namaSurat;
-                                inputStatus.value = s.status;
-                                openModal(true);
-                            }
-                        }
-                        if (action === 'delete') {
-                            if (confirm('Hapus surat ini?')) {
-                                if (index !== -1) {
-                                    suratData.splice(index, 1);
-                                    updateCounts();
-                                    renderTable();
-                                }
-                            }
-                        }
-                    };
-                });
-            }
-
-            // Add button opens modal for new surat
-            addButton.addEventListener('click', () => {
-                editingId = null;
-                suratForm.reset();
-                // toggle persistent gradient on add button to match active card
-                addButton.classList.add('btn-gradient-active', 'active-gradient');
-                openModal(false);
-            });
-
-            // Cancel modal
-            cancelBtn.addEventListener('click', closeModal);
-
-            // Submit form: add or update
-            suratForm.addEventListener('submit', (e) => {
-                e.preventDefault();
-                const payload = {
-                    id: editingId || nextId++,
-                    noSurat: inputNoSurat.value.trim(),
-                    tanggalBuat: inputTanggalBuat.value,
-                    tanggalMasuk: inputTanggalMasuk.value,
-                    pengirim: inputPengirim.value.trim(),
-                    namaSurat: inputNamaSurat.value.trim(),
-                    status: inputStatus.value
-                };
-
-                if (editingId) {
-                    const idx = suratData.findIndex(s => s.id === editingId);
-                    if (idx !== -1) suratData[idx] = payload;
-                } else {
-                    // add to top
-                    suratData.unshift(payload);
-                }
-
-                updateCounts();
-                renderTable();
-                closeModal();
-            });
-
-            // Card filter behavior: toggle active-gradient on selected card
-            function setActiveCardVisual(filterKey) {
-                cardButtons.forEach(b => {
-                    if (b.dataset.filter === filterKey) {
-                        b.classList.add('active-gradient');
-                        b.classList.remove('ring-2', 'ring-[#DD88CF]');
-                    } else {
-                        b.classList.remove('active-gradient');
-                        b.classList.remove('ring-2', 'ring-[#DD88CF]');
-                    }
-                });
-            }
-
-            cardButtons.forEach(btn => btn.addEventListener('click', () => {
-                activeFilter = btn.dataset.filter;
-                setActiveCardVisual(activeFilter);
-                renderTable();
-            }));
-
-            // Search
-            searchInput.addEventListener('input', renderTable);
-
-            // Add button gradient press visual (transient while pressing)
-            addButton.addEventListener('mousedown', () => addButton.classList.add('btn-gradient-active'));
-            addButton.addEventListener('mouseup', () => addButton.classList.remove('btn-gradient-active'));
-            addButton.addEventListener('mouseleave', () => addButton.classList.remove('btn-gradient-active'));
-
-            // Initialize
-            updateCounts();
-            // set default active card visual
-            setActiveCardVisual('all');
-            renderTable();
+        closeViewModalBtn.addEventListener('click', closeViewModal);
+        viewModalOverlay.addEventListener('click', function(e) {
+            if (e.target === viewModalOverlay) closeViewModal();
         });
+
+        // Buka modal detail surat saat baris tabel di-klik
+        document.body.addEventListener('click', function(e) {
+            const targetRow = e.target.closest('[data-action="view"]');
+            if (targetRow) {
+                openViewModal(targetRow);
+            }
+        });
+
+        const searchInput = document.getElementById('searchInput');
+        const tableRows   = document.querySelectorAll('.surat-row');
+        const mobileCards = document.querySelectorAll('.surat-card');
+        const noResults   = document.getElementById('noResults');
+
+        function toggleDayGroups(container) {
+            if (!container) return;
+            container.querySelectorAll(':scope > [data-day-group]').forEach(group => {
+                const anyVisible = Array.from(group.querySelectorAll('.surat-row, .surat-card'))
+                    .some(el => el.style.display !== 'none');
+                group.style.display = anyVisible ? '' : 'none';
+            });
+        }
+
+        function applyFilters() {
+            const q = searchInput.value.trim().toLowerCase();
+            let visCount = 0;
+
+            tableRows.forEach(row => {
+                const show = !q || row.dataset.nosurat.includes(q) || row.dataset.pengirim.includes(q);
+                row.style.display = show ? '' : 'none';
+                if (show) visCount++;
+            });
+
+            mobileCards.forEach(card => {
+                const show = !q || card.dataset.nosurat.includes(q) || card.dataset.pengirim.includes(q);
+                card.style.display = show ? '' : 'none';
+                if (show) visCount++;
+            });
+
+            toggleDayGroups(document.getElementById('tableBody'));
+            toggleDayGroups(document.getElementById('mobileCards'));
+
+            if (tableRows.length > 0 || mobileCards.length > 0) {
+                noResults.classList.toggle('hidden', visCount > 0);
+            }
+        }
+
+        searchInput.addEventListener('input', applyFilters);
     </script>
 
     @include('profile.partials.logout-modal')

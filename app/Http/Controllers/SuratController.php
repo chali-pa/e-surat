@@ -27,6 +27,7 @@ class SuratController extends Controller
             'tanggal_buat'  => 'required|date',
             'nama_pengirim' => 'required|string|max:255',
             'nama_surat'    => 'required|string|max:255',
+            'status'        => 'nullable|in:pending,processing,done',
             'file_surat'    => 'required|file|mimes:pdf,jpg,jpeg,png,doc,docx,xls,xlsx,odt,txt,rtf,html,zip,epub|max:102400',
         ]);
 
@@ -42,6 +43,7 @@ class SuratController extends Controller
             'nama_surat' => $request->nama_surat,
             'nama_file' => $nama_file,
             'file_path' => $file_path,
+            'status' => $request->status ?? 'pending',
         ]);
 
         return redirect()->route('surat.index')->with('success', 'Surat berhasil ditambahkan');
@@ -63,6 +65,7 @@ class SuratController extends Controller
             'tanggal_buat'  => 'required|date',
             'nama_pengirim' => 'required|string|max:255',
             'nama_surat'    => 'required|string|max:255',
+            'status'        => 'nullable|in:pending,processing,done',
             'file_surat'    => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx,xlsx|max:102400', 
         ]);
 
@@ -72,6 +75,7 @@ class SuratController extends Controller
             'tanggal_buat'  => $request->tanggal_buat,
             'nama_pengirim' => $request->nama_pengirim,
             'nama_surat'    => $request->nama_surat,
+            'status'        => $request->status ?? $surat->status,
         ];
 
         // Jika ada file baru di-upload, ganti file lama
@@ -149,11 +153,6 @@ class SuratController extends Controller
     $pdfCachePath = $cacheDir . '/' . $pdfCacheName;
 
     if (!file_exists($pdfCachePath)) {
-        // ===== SESUAIKAN PATH INI DENGAN LOKASI soffice DI SERVERMU =====
-        // Windows (contoh default LibreOffice):
-        //   'C:\\Program Files\\LibreOffice\\program\\soffice.exe'
-        // Linux/Mac (biasanya cukup 'soffice' kalau sudah ada di PATH):
-        //   'soffice'
         $sofficeBin = env('LIBREOFFICE_PATH', 'soffice');
 
         $cmd = escapeshellarg($sofficeBin)
@@ -163,9 +162,6 @@ class SuratController extends Controller
             . ' 2>&1';
 
         exec($cmd, $output, $exitCode);
-
-        // LibreOffice menyimpan hasil dengan nama asli (tanpa timestamp),
-        // jadi kita rename supaya sesuai skema cache di atas.
         $generatedPath = $cacheDir . '/' . $baseName . '.pdf';
 
         if (file_exists($generatedPath)) {

@@ -3,6 +3,7 @@
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SuratController;
+use App\Models\Surat;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -10,7 +11,10 @@ Route::get('/', function () {
 })->name('welcome');
 
 Route::get('/dashboard', function () {
-    return view('dashboard');
+    // Data surat terbaru diambil langsung dari database yang sama
+    // dengan yang diisi lewat halaman Kelola Surat.
+    $surats = Surat::orderByDesc('created_at')->get();
+    return view('dashboard', compact('surats'));
 })->middleware(['auth', 'verified'])->name('dashboard');
 
 Route::middleware('auth')->group(function () {

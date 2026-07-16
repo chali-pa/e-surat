@@ -121,8 +121,8 @@
   }
   h1{
     font-weight: 700;
-    font-size: clamp(30px, 6.2vw, 52px);
-    line-height: 1.15;
+    font-size: clamp(36px, 7.5vw, 64px);
+    line-height: 1.12;
     letter-spacing: -.01em;
     margin: 0 0 clamp(14px, 3vw, 22px);
     color: #fff;
@@ -293,7 +293,7 @@
   @media (max-width: 380px){
     .logo-word{ font-size:15px; }
     .glass-btn{ padding: 8px 14px; font-size:12px; }
-    h1{ font-size: 27px; }
+    h1{ font-size: 33px; }
     .stamp-badge{ display:none; }
   }
 </style>

@@ -13,6 +13,7 @@ class Surat extends Model
         'nama_pengirim', 
         'nama_surat', 
         'nama_file', 
-        'file_path'
+        'file_path',
+        'status',
     ];
 }

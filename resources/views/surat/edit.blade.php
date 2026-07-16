@@ -7,6 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <style>
         body { font-family: 'Poppins', sans-serif; background-color: #F9FAFB; }
 
@@ -90,52 +91,58 @@
                 </div>
             @endif
 
-            <form action="{{ route('surat.store') }}" method="POST" enctype="multipart/form-data" class="space-y-6">
+            <form action="{{ route('surat.update', $surat->id) }}" method="POST" enctype="multipart/form-data" class="space-y-6">
                 @csrf
+                @method('PUT')
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-2">Nomor Surat</label>
-                        <input type="text" name="nomor_surat" value="{{ old('nomor_surat') }}" required
+                        <input type="text" name="nomor_surat" value="{{ old('nomor_surat', $surat->nomor_surat) }}" required
                             class="w-full border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-[#DD88CF] outline-none transition">
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-2">Nama Pengirim</label>
-                        <input type="text" name="nama_pengirim" value="{{ old('nama_pengirim') }}" required
+                        <input type="text" name="nama_pengirim" value="{{ old('nama_pengirim', $surat->nama_pengirim) }}" required
                             class="w-full border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-[#DD88CF] outline-none transition">
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-2">Tanggal Masuk</label>
-                        <input type="date" name="tanggal_masuk" value="{{ old('tanggal_masuk') }}" required
-                            class="w-full border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-[#DD88CF] outline-none transition">
+                        <input type="text" id="tanggal_masuk" name="tanggal_masuk" value="{{ old('tanggal_masuk', \Carbon\Carbon::parse($surat->tanggal_masuk)->format('Y-m-d')) }}" required autocomplete="off" placeholder="Pilih tanggal"
+                            class="w-full border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-[#DD88CF] outline-none transition cursor-pointer bg-white">
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-2">Tanggal Buat</label>
-                        <input type="date" name="tanggal_buat" value="{{ old('tanggal_buat') }}" required
-                            class="w-full border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-[#DD88CF] outline-none transition">
+                        <input type="text" id="tanggal_buat" name="tanggal_buat" value="{{ old('tanggal_buat', \Carbon\Carbon::parse($surat->tanggal_buat)->format('Y-m-d')) }}" required autocomplete="off" placeholder="Pilih tanggal"
+                            class="w-full border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-[#DD88CF] outline-none transition cursor-pointer bg-white">
                     </div>
                 </div>
 
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 mb-2">Nama Surat</label>
-                    <input type="text" name="nama_surat" value="{{ old('nama_surat') }}" required
+                    <input type="text" name="nama_surat" value="{{ old('nama_surat', $surat->nama_surat) }}" required
                         class="w-full border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-[#DD88CF] outline-none transition">
                 </div>
 
                 <div>
-                    <label class="block text-sm font-semibold text-gray-700 mb-2">Upload File Surat</label>
-                    <input type="file" name="file_surat" required
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">
+                        Upload File Surat <span class="font-normal text-gray-400">(kosongkan jika tidak ingin mengganti file)</span>
+                    </label>
+                    <p class="text-sm text-gray-500 mb-2">File saat ini: <span class="font-medium text-gray-700">{{ $surat->nama_file }}</span></p>
+                    <input type="file" name="file_surat"
                         class="w-full border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-[#DD88CF] outline-none transition file:mr-4 file:rounded-lg file:border-0 file:bg-[#F3E8F3] file:px-4 file:py-2 file:text-[#4B164C]">
                 </div>
 
                 <div class="flex justify-end pt-4">
                     <button type="submit" class="bg-[#4B164C] text-white px-8 py-3 rounded-xl font-semibold hover:bg-[#DD88CF] transition shadow-lg">
-                        Simpan Surat
+                        Simpan Perubahan
                     </button>
                 </div>
             </form>
         </div>
     </main>
 
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/id.js"></script>
     <script>
         document.getElementById('toggleBtn').addEventListener('click', () => {
             document.body.classList.toggle('sidebar-collapsed');
@@ -143,6 +150,18 @@
         function openMobileSidebar() { document.body.classList.add('sidebar-mobile-open'); }
         function closeMobileSidebar() { document.body.classList.remove('sidebar-mobile-open'); }
         document.querySelectorAll('#sidebar nav a').forEach(link => link.addEventListener('click', closeMobileSidebar));
+
+        // Format tanggal: tanggal, bulan, lalu tahun (contoh: 16 Juli 2026)
+        flatpickr.localize(flatpickr.l10ns.id);
+        const datePickerOptions = {
+            altInput: true,
+            altFormat: "j F Y",
+            dateFormat: "Y-m-d",
+            locale: "id",
+            disableMobile: true,
+        };
+        flatpickr("#tanggal_masuk", datePickerOptions);
+        flatpickr("#tanggal_buat", datePickerOptions);
     </script>
 
     @include('profile.partials.logout-modal')

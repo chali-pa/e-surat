@@ -42,61 +42,76 @@
     gap: 12px;
     padding: clamp(16px, 4vw, 26px) 0;
   }
-  .logo{ display:flex; align-items:center; gap:8px; min-width:0; }
-  .logo-mark{
-    flex-shrink:0;
-    width:34px; height:34px; border-radius:50%;
-    background: rgba(255,255,255,.18);
-    border: 1.5px solid rgba(255,255,255,.55);
-    display:flex; align-items:center; justify-content:center;
-    color:#fff; font-weight:700; font-size:14px;
-  }
-  .logo-word{
-    font-weight:700;
-    font-size: clamp(16px, 4vw, 20px);
-    letter-spacing:.01em;
-    color:#fff;
-    white-space:nowrap;
-  }
   nav{ display:flex; align-items:center; gap: clamp(8px, 2vw, 14px); flex-shrink:0; }
 
-  /* ---------- glass buttons (Masuk / Daftar) ---------- */
-  .glass-btn{
-    position:relative;
-    font-size: clamp(12.5px, 3vw, 14px);
-    font-weight:500;
-    color:#fff;
-    text-decoration:none;
-    white-space:nowrap;
-    padding: clamp(9px, 2.2vw, 11px) clamp(16px, 4vw, 26px);
-    border-radius: 999px;
-    background: rgba(255,255,255,.12);
-    border: 1px solid rgba(255,255,255,.35);
-    -webkit-backdrop-filter: blur(14px) saturate(160%);
-    backdrop-filter: blur(14px) saturate(160%);
-    box-shadow:
-      0 4px 18px rgba(43,10,45,.18),
-      inset 0 1px 0 rgba(255,255,255,.35),
-      inset 0 -1px 0 rgba(0,0,0,.05);
-    transition: background .2s ease, transform .15s ease, box-shadow .2s ease;
+  /* HEADER */
+
+  header{
+      position:absolute;
+      top:0;
+      left:0;
+      right:0;
+      z-index:100;
   }
-  .glass-btn:hover{
-    background: rgba(255,255,255,.22);
-    transform: translateY(-1px);
+
+  .header-inner{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      padding:22px 0;
   }
-  .glass-btn-solid{
-    background: rgba(255,255,255,.32);
-    border: 1px solid rgba(255,255,255,.55);
-    font-weight:600;
-    color:#fff;
+
+  .logo-text{
+      text-decoration:none;
+      color:#2b1730;
+      font-size:30px;
+      font-weight:700;
   }
-  .glass-btn-solid:hover{ background: rgba(255,255,255,.45); }
+
+  nav{
+      display:flex;
+      gap:18px;
+  }
+
+  .header-btn{
+
+      min-width:95px;
+      text-align:center;
+
+      padding:12px 28px;
+
+      border-radius:12px;
+
+      background:rgba(87,36,95,.25);
+
+      color:white;
+
+      text-decoration:none;
+
+      font-weight:500;
+
+      border:1px solid rgba(255,255,255,.15);
+
+      backdrop-filter:blur(12px);
+
+      transition:.25s;
+  }
+
+  .header-btn:hover{
+
+      background:rgba(255,255,255,.18);
+
+      transform:translateY(-2px);
+
+      box-shadow:0 10px 20px rgba(0,0,0,.15);
+
+  }
 
   /* ---------- hero ---------- */
   .hero{
-    padding: clamp(110px, 22vw, 150px) 0 clamp(64px, 10vw, 120px);
+    padding:150px 0 120px;
     position: relative;
-    background: radial-gradient(120% 140% at 20% 15%, var(--pink-light) 0%, var(--purple-mid) 45%, var(--purple-deep) 100%);
+    background:linear-gradient(90deg, #D57BC6 0%, #B14FB2 45%, #742B88 100%);
     overflow: hidden;
   }
   .hero::after{
@@ -120,9 +135,9 @@
     font-weight: 500;
   }
   h1{
-    font-weight: 700;
-    font-size: clamp(36px, 7.5vw, 64px);
-    line-height: 1.12;
+    font-size: clamp(46px, 6vw, 68px);
+    font-weight:700;
+    line-height:1.1;
     letter-spacing: -.01em;
     margin: 0 0 clamp(14px, 3vw, 22px);
     color: #fff;
@@ -301,31 +316,42 @@
 <body>
 
 <header>
-  <div class="wrap header-inner">
-    <div class="logo">
-      <div class="logo-mark">E</div>
-      <div class="logo-word">{{ config('app.name', 'E-Surat') }}</div>
+    <div class="wrap header-inner">
+
+        <a href="/" class="logo-text">
+            {{ config('app.name', 'E-Surat') }}
+        </a>
+
+        <nav>
+            @if (Route::has('login'))
+                @auth
+                    <a href="{{ url('/dashboard') }}" class="header-btn">
+                        Dashboard
+                    </a>
+                @else
+                    <a href="{{ route('login') }}" class="header-btn">
+                        Masuk
+                    </a>
+
+                    @if (Route::has('register'))
+                        <a href="{{ route('register') }}" class="header-btn">
+                            Daftar
+                        </a>
+                    @endif
+                @endauth
+            @endif
+        </nav>
+
     </div>
-    <nav>
-      @if (Route::has('login'))
-        @auth
-          <a href="{{ url('/dashboard') }}" class="glass-btn glass-btn-solid">Dashboard</a>
-        @else
-          <a href="{{ route('login') }}" class="glass-btn">Masuk</a>
-          @if (Route::has('register'))
-            <a href="{{ route('register') }}" class="glass-btn glass-btn-solid">Daftar</a>
-          @endif
-        @endauth
-      @endif
-    </nav>
-  </div>
 </header>
 
 <section class="hero">
   <div class="wrap hero-grid">
     <div>
       <div class="eyebrow">✉ Sistem Manajemen Surat</div>
-      <h1>Urus surat jadi <em>lebih mudah</em>.</h1>
+      <!-- BAGIAN DIUBAH DI BAWAH INI -->
+      <h1 style="font-size: 60px; font-weight: 800;">Urus surat jauh <em>lebih mudah</em>.</h1>
+      <!-- BAGIAN DIUBAH DI ATAS INI -->
       <p class="lede">Satu tempat untuk mencatat, mengunggah, dan memantau status setiap surat — dari belum direspon sampai selesai. Nggak perlu lagi bolak-balik buku agenda atau kehilangan berkas penting.</p>
       <div class="cta-row">
         <a class="btn-primary" href="{{ auth()->check() ? url('/dashboard') : (Route::has('login') ? route('login') : '#') }}">Masuk ke Dashboard →</a>

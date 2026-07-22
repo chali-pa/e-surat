@@ -355,12 +355,32 @@
             }
             #printArea img { max-width: 100% !important; }
 
-            /* Gaya cetak XLSX */
-            #printArea .print-xlsx-wrap table { border-collapse: collapse; width: 100%; font-size: 10pt; }
+            /* Gaya cetak XLSX — mempertahankan format semirip mungkin dengan Excel */
+            #printArea .print-xlsx-wrap {
+                font-family: Calibri, Arial, sans-serif;
+                font-size: 11pt;
+            }
+            #printArea .print-xlsx-wrap .sheet-title {
+                font-size: 12pt;
+                font-weight: 700;
+                margin: 18px 0 6px;
+                color: #111;
+            }
+            #printArea .print-xlsx-wrap table {
+                border-collapse: collapse;
+                width: 100%;
+                table-layout: fixed;
+                page-break-inside: auto;
+            }
+            #printArea .print-xlsx-wrap tr { page-break-inside: avoid; }
             #printArea .print-xlsx-wrap th,
-            #printArea .print-xlsx-wrap td { border: 1px solid #888; padding: 4px 8px; }
-            #printArea .print-xlsx-wrap th { background: #e0e0e0 !important; font-weight: 700; }
-            #printArea .print-xlsx-wrap h3 { font-size: 11pt; margin: 14px 0 4px; }
+            #printArea .print-xlsx-wrap td {
+                border: 1px solid #aaa;
+                padding: 3px 6px;
+                word-break: break-word;
+                vertical-align: middle;
+                font-size: 10pt;
+            }
 
             /* Gaya cetak gambar */
             #printArea .print-img-wrap {
@@ -474,7 +494,7 @@
 
         /* ===== Responsive: Mobile Sidebar ===== */
         #sidebarOverlay { display: none; }
-        @media (max-width: 767px) {
+        @media (max-width: 1023px) {
             #sidebar, body.sidebar-collapsed #sidebar {
                 width: 260px !important;
                 transform: translateX(-100%);
@@ -508,13 +528,64 @@
             position: relative !important;
         }
     </style>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+        }
+    </script>
+    <script>
+        if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+    </script>
+    <style>
+        /* Dark Mode Overrides */
+        .dark body { background-color: #0f172a !important; color: #f8fafc !important; }
+        .dark #sidebar { background-color: #1e293b !important; border-color: #334155 !important; }
+        .dark .bg-white { background-color: #1e293b !important; }
+        .dark .bg-gray-50, .dark .bg-slate-50, .dark .bg-\[\#F4F6F9\], .dark .bg-\[\#F9FAFB\] { background-color: #0f172a !important; }
+        .dark .text-gray-900, .dark .text-gray-800, .dark .text-\[\#1a1a2e\] { color: #f8fafc !important; }
+        .dark .text-gray-600, .dark .text-gray-500, .dark .text-slate-500 { color: #94a3b8 !important; }
+        .dark .border-gray-200, .dark .border-gray-100, .dark .border-slate-100, .dark .border-\[\#eaecf0\], .dark .border-\[\#e5e7eb\] { border-color: #334155 !important; }
+        .dark header { background-color: #1e293b !important; border-color: #334155 !important; }
+        
+        /* Dashboard & Surat Specifics */
+        .dark .card-shadow { box-shadow: 0 1px 8px rgba(0,0,0,0.5) !important; }
+        .dark .day-header { background: #1e293b !important; color: #f8fafc !important; }
+        .dark .day-group + .day-group { border-top-color: #0f172a !important; }
+        .dark .hist-row:hover { background: #334155 !important; }
+        .dark .hist-date-icon { background: #0f172a !important; color: #cbd5e1 !important; }
+        .dark .transactions-card { background: #1e293b !important; border-color: #334155 !important; }
+        .dark .table-toolbar { background: #1e293b !important; border-color: #334155 !important; color: #cbd5e1 !important; }
+        .dark .table-header { background: #0f172a !important; border-color: #334155 !important; }
+        .dark .table-row:hover { background: #334155 !important; }
+        .dark td, .dark th { border-color: #334155 !important; }
+        .dark .table-pagination { background: #1e293b !important; border-color: #334155 !important; color: #cbd5e1 !important; }
+        .dark select { background-color: #0f172a !important; color: #f8fafc !important; border-color: #334155 !important; }
+        
+        /* Auth Specifics */
+        .dark .form-panel { background-color: #1e293b !important; }
+        .dark .form-input, .dark textarea { background-color: #0f172a !important; border-color: #334155 !important; color: #f8fafc !important; }
+        .dark .form-input:focus, .dark textarea:focus { border-color: #DD88CF !important; }
+        .dark .logo-text, .dark .welcome-heading { color: #f8fafc !important; }
+        .dark .form-label { color: #cbd5e1 !important; }
+        .dark .tab-switcher { background-color: #0f172a !important; }
+        .dark .tab-btn { color: #94a3b8 !important; }
+        .dark .tab-btn.active { color: #fff !important; }
+        .dark .success-box, .dark .error-box { background-color: #0f172a !important; border-color: #334155 !important; }
+        .dark .deco-desc { color: #cbd5e1 !important; }
+    </style>
+    <link rel="icon" type="image/svg+xml" href="{{ asset('image/favicon-esurat.svg') }}">
 </head>
 <body>
 
     <!-- Mobile Topbar -->
-    <header class="md:hidden sticky top-0 z-[80] bg-white border-b border-gray-100 flex items-center justify-between px-4 py-3">
+    <header class="lg:hidden sticky top-0 z-[80] bg-white border-b border-gray-100 flex items-center justify-between px-4 py-3">
         <button type="button" onclick="openMobileSidebar()" class="p-2 rounded-xl hover:bg-gray-100"><i class="bi bi-list text-2xl"></i></button>
-        <span class="font-bold text-[#4B164C] text-lg">E-Surat</span>
+        <span class="font-bold text-[#4B164C] text-lg sm:text-xl md:text-2xl">E-Surat</span>
         <span class="w-9"></span>
     </header>
     <div id="sidebarOverlay" onclick="closeMobileSidebar()"></div>
@@ -525,7 +596,7 @@
             <button id="toggleBtn" class="p-2 rounded-xl hover:bg-gray-100">
                 <i class="bi bi-list text-2xl"></i>
             </button>
-            <span class="ml-3 font-bold text-[#4B164C] text-lg menu-text">E-Surat</span>
+            <span class="ml-3 font-bold text-[#4B164C] text-lg sm:text-xl lg:text-2xl menu-text">E-Surat</span>
         </div>
         <nav class="flex-1 p-3 space-y-2">
             <a href="{{ route('dashboard') }}" class="flex items-center p-3 rounded-xl hover:bg-gray-100 transition">
@@ -615,8 +686,7 @@
                             <div class="action-wrapper">
                                 <!-- Lihat -->
                                 <a href="#" class="action-btn view-btn" title="Lihat"
-                                   data-file-url="{{ route('surat.preview', $surat->id) }}"
-                                   data-pdf-url="{{ route('surat.preview.pdf', $surat->id) }}"
+                                    data-file-url="{{ route('surat.preview', $surat->id) }}"
                                    data-file-name="{{ $surat->nama_file }}"
                                    data-surat-number="{{ $surat->nomor_surat }}"
                                    data-tanggal-buat="{{ \Carbon\Carbon::parse($surat->tanggal_buat)->format('d/m/Y') }}"
@@ -628,7 +698,6 @@
                                 <!-- Cetak -->
                                 <a href="#" class="action-btn print-btn" title="Cetak"
                                    data-file-url="{{ route('surat.preview', $surat->id) }}"
-                                   data-pdf-url="{{ route('surat.preview.pdf', $surat->id) }}"
                                    data-file-name="{{ $surat->nama_file }}"
                                    data-nama-surat="{{ $surat->nama_surat }}">
                                     <i class="bi bi-printer"></i>
@@ -1123,25 +1192,6 @@
             doPrint();
 
         } else if (EXT_DOCX.includes(ext)) {
-            /* DOCX: coba cetak via PDF hasil konversi server dulu (akurat,
-               support EMF/WMF). Fallback ke render docx-preview kalau gagal. */
-
-            if (pdfUrl) {
-                try {
-                    const head = await fetch(pdfUrl, { method: 'HEAD' });
-                    if (head.ok) {
-                        const pw = window.open(pdfUrl, '_blank', 'width=960,height=720');
-                        if (pw) {
-                            pw.addEventListener('load', () => setTimeout(() => pw.print(), 400));
-                        } else {
-                            alert('Izinkan popup untuk mencetak. Atau gunakan tombol Unduh lalu buka & cetak manual.');
-                        }
-                        return;
-                    }
-                } catch (err) {
-                    console.warn('[DOCX print via PDF] gagal, fallback ke docx-preview:', err);
-                }
-            }
 
             /* Fallback: render ulang khusus untuk cetak, memakai docx-preview */
 
@@ -1243,17 +1293,123 @@
             }
 
         } else if (EXT_XLSX.includes(ext)) {
-            /* XLSX: fetch → SheetJS → HTML tabel → printArea → print */
+            /* XLSX: fetch → SheetJS → HTML tabel dengan format semirip Excel */
             setPrintArea('<p style="padding:16px;color:#888;">Menyiapkan spreadsheet untuk dicetak…</p>');
             showPrintOverlay(true);
             try {
                 const ab = await fetch(fileUrl).then(r => r.arrayBuffer());
-                const wb = XLSX.read(ab, { type: 'array' });
-                let html = '<div class="print-xlsx-wrap">';
-                wb.SheetNames.forEach(name => {
-                    html += `<h3 style="font-family:Arial;font-size:12pt;margin:14px 0 4px;">Sheet: ${escHtml(name)}</h3>`;
-                    html += XLSX.utils.sheet_to_html(wb.Sheets[name], { editable: false });
+                const wb = XLSX.read(ab, {
+                    type: 'array',
+                    cellStyles: true,
+                    cellDates: true,
+                    sheetStubs: true
                 });
+
+                let html = '<div class="print-xlsx-wrap">';
+
+                wb.SheetNames.forEach(name => {
+                    const ws = wb.Sheets[name];
+                    if (!ws) return;
+
+                    /* ── Hitung lebar kolom dari properti ws['!cols'] ── */
+                    const cols = ws['!cols'] || [];
+                    const colWidths = cols.map(c => c ? Math.round((c.wpx || (c.wch ? c.wch * 7 : 80))) : 80);
+
+                    /* ── Merge cell info ── */
+                    const merges = ws['!merges'] || [];
+
+                    /* ── Range ── */
+                    const ref = ws['!ref'];
+                    if (!ref) return;
+                    const range = XLSX.utils.decode_range(ref);
+
+                    /* ── Build colgroup ── */
+                    let colgroup = '<colgroup>';
+                    for (let C = range.s.c; C <= range.e.c; C++) {
+                        const w = colWidths[C] || 80;
+                        colgroup += `<col style="width:${w}px">`;
+                    }
+                    colgroup += '</colgroup>';
+
+                    /* ── Build merge lookup ── */
+                    // mergeMap[r][c] = {rs, cs} atau 'skip'
+                    const mergeMap = {};
+                    merges.forEach(m => {
+                        // top-left cell
+                        if (!mergeMap[m.s.r]) mergeMap[m.s.r] = {};
+                        mergeMap[m.s.r][m.s.c] = {
+                            rs: m.e.r - m.s.r + 1,
+                            cs: m.e.c - m.s.c + 1
+                        };
+                        // cells yang di-cover (skip)
+                        for (let r = m.s.r; r <= m.e.r; r++) {
+                            for (let c = m.s.c; c <= m.e.c; c++) {
+                                if (r === m.s.r && c === m.s.c) continue;
+                                if (!mergeMap[r]) mergeMap[r] = {};
+                                mergeMap[r][c] = 'skip';
+                            }
+                        }
+                    });
+
+                    /* ── Build table rows ── */
+                    let rows = '';
+                    for (let R = range.s.r; R <= range.e.r; R++) {
+                        rows += '<tr>';
+                        for (let C = range.s.c; C <= range.e.c; C++) {
+                            const mm = mergeMap[R] && mergeMap[R][C];
+                            if (mm === 'skip') continue;
+
+                            const addr = XLSX.utils.encode_cell({ r: R, c: C });
+                            const cell = ws[addr];
+
+                            let val = '';
+                            if (cell) {
+                                if (cell.t === 'd') {
+                                    val = cell.w || cell.v.toLocaleDateString('id-ID');
+                                } else {
+                                    val = cell.w !== undefined ? cell.w : (cell.v !== undefined ? cell.v : '');
+                                }
+                            }
+
+                            /* Inline style dari cellStyle */
+                            let style = 'border:1px solid #aaa;padding:3px 6px;font-size:10pt;vertical-align:middle;';
+                            if (cell && cell.s) {
+                                const s = cell.s;
+                                if (s.alignment) {
+                                    if (s.alignment.horizontal) style += `text-align:${s.alignment.horizontal};`;
+                                    if (s.alignment.vertical)   style += `vertical-align:${s.alignment.vertical};`;
+                                    if (s.alignment.wrapText)   style += 'white-space:pre-wrap;word-break:break-word;';
+                                }
+                                if (s.font) {
+                                    if (s.font.bold)   style += 'font-weight:bold;';
+                                    if (s.font.italic) style += 'font-style:italic;';
+                                    if (s.font.color && s.font.color.rgb) style += `color:#${s.font.color.rgb.slice(-6)};`;
+                                    if (s.font.sz)     style += `font-size:${s.font.sz}pt;`;
+                                }
+                                if (s.fill && s.fill.fgColor && s.fill.fgColor.rgb) {
+                                    style += `background-color:#${s.fill.fgColor.rgb.slice(-6)} !important;-webkit-print-color-adjust:exact;`;
+                                }
+                                if (s.border) {
+                                    ['top','bottom','left','right'].forEach(side => {
+                                        if (s.border[side] && s.border[side].style) {
+                                            style += `border-${side}:1px solid #888;`;
+                                        }
+                                    });
+                                }
+                            }
+
+                            const rs = mm ? ` rowspan="${mm.rs}"` : '';
+                            const cs = mm ? ` colspan="${mm.cs}"` : '';
+                            const escVal = String(val).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                            rows += `<td${rs}${cs} style="${style}">${escVal}</td>`;
+                        }
+                        rows += '</tr>';
+                    }
+
+                    html += `<p class="sheet-title">Sheet: ${escHtml(name)}</p>`;
+                    html += `<table>${colgroup}<tbody>${rows}</tbody></table>`;
+                });
+
                 html += '</div>';
                 setPrintArea(html);
                 showPrintOverlay(false);

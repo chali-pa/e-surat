@@ -1,0 +1,23 @@
+<svg viewBox="0 0 104 104" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .bg { fill: #4B164C; }
+    .env { fill: #F5F5F8; }
+    .env-line { stroke: #4B164C; }
+    @media (prefers-color-scheme: light) {
+      .bg { fill: #F8E7F6; }
+      .env { fill: #4B164C; }
+      .env-line { stroke: #F8E7F6; }
+    }
+  </style>
+  <defs>
+    <clipPath id="badgeClip">
+      <rect x="0" y="0" width="104" height="104" rx="24"/>
+    </clipPath>
+  </defs>
+  <rect class="bg" x="0" y="0" width="104" height="104" rx="24"/>
+  <g clip-path="url(#badgeClip)">
+    <rect class="env" x="20" y="31" width="64" height="46" rx="3"/>
+    <path d="M 20 31 L 52 54 L 84 31 Z" fill="#DD88CF"/>
+    <path class="env-line" d="M 20 31 L 52 54 L 84 31" fill="none" stroke-width="2" stroke-linejoin="round"/>
+  </g>
+</svg>

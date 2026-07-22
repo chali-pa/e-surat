@@ -1,0 +1,20 @@
+<svg viewBox="0 0 420 130" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <clipPath id="badgeClipL">
+      <rect x="0" y="0" width="104" height="104" rx="24"/>
+    </clipPath>
+  </defs>
+
+  <g transform="translate(13,13)">
+    <rect x="0" y="0" width="104" height="104" rx="24" fill="#F8E7F6"/>
+    <g clip-path="url(#badgeClipL)">
+      <rect x="20" y="31" width="64" height="46" rx="3" fill="#4B164C"/>
+      <path d="M 20 31 L 52 54 L 84 31 Z" fill="#DD88CF"/>
+      <path d="M 20 31 L 52 54 L 84 31" fill="none" stroke="#F8E7F6" stroke-width="2" stroke-linejoin="round"/>
+    </g>
+  </g>
+
+  <text x="132" y="70" font-family="Poppins, 'Segoe UI', sans-serif" font-size="44" font-weight="600" fill="#4B164C">E-Surat</text>
+  <circle cx="135" cy="88" r="3.5" fill="#DD88CF"/>
+  <text x="146" y="92" font-family="Poppins, 'Segoe UI', sans-serif" font-size="11" font-weight="500" fill="#4B164C" letter-spacing="2" opacity="0.55">MANAJEMEN SURAT DIGITAL</text>
+</svg>

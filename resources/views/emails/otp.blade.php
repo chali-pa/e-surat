@@ -1,20 +1,8 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <meta name="csrf-token" content="{{ csrf_token() }}">
+<html>
+<head>
+    <title>Kode Verifikasi Masuk</title>
 
-        <title>{{ config('app.name', 'Laravel') }}</title>
-
-        <!-- Fonts -->
-        <link rel="preconnect" href="https://fonts.bunny.net">
-        <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
-
-        <!-- Scripts -->
-        @vite(['resources/css/app.css', 'resources/js/app.js'])
-        <link rel="icon" type="image/svg+xml" href="{{ asset('image/favicon-esurat.svg') }}">
-    
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -65,17 +53,21 @@
         .dark .deco-desc { color: #cbd5e1 !important; }
     </style>
 </head>
-    <body class="font-sans text-gray-900 antialiased">
-        <div class="min-h-screen flex flex-col sm:justify-center items-center pt-6 sm:pt-0 bg-gray-100 dark:bg-gray-900">
-            <div>
-                <a href="/">
-                    <x-application-logo class="w-20 h-20 fill-current text-gray-500" />
-                </a>
-            </div>
-
-            <div class="w-full sm:max-w-md mt-6 px-6 py-4 bg-white dark:bg-gray-800 shadow-md overflow-hidden sm:rounded-lg">
-                {{ $slot }}
-            </div>
+<body style="font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 20px;">
+    <div style="background-color: #ffffff; padding: 40px; max-width: 600px; margin: 0 auto; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+        <p style="font-size: 18px; color: #333; margin-bottom: 20px;">Halo {{ $userName }},</p>
+        
+        <p style="color: #555; font-size: 15px; margin-bottom: 20px; line-height: 1.6;">Kami menerima permintaan untuk masuk ke akun Anda di E-Surat. Untuk melanjutkan, masukkan kode verifikasi di bawah ini:</p>
+        
+        <div style="background-color: #e5e7eb; padding: 15px; text-align: center; margin-bottom: 20px;">
+            <span style="font-size: 24px; font-weight: bold; letter-spacing: 5px; color: #333;">{{ $otp }}</span>
         </div>
-    </body>
+        
+        <p style="color: #555; font-size: 15px; margin-bottom: 20px; line-height: 1.6;">Kode ini hanya berlaku selama <strong>2 menit</strong>. Jika Anda tidak meminta kode ini, abaikan email ini, dan silakan ganti password Anda.</p>
+        
+        <p style="color: #555; font-size: 15px; margin-bottom: 30px;">Untuk keamanan akun, jangan bagikan kode ini kepada siapa pun.</p>
+        
+        <p style="color: #555; font-size: 15px;">E-Surat Indonesia.</p>
+    </div>
+</body>
 </html>

@@ -17,6 +17,17 @@
     --card: #FFFFFF;
     --line: #EADCE9;
   }
+  
+  html.dark {
+    --purple-deep: #FCE4FA;
+    --pink-light: #A24BA0;
+    --purple-mid: #D57BC6;
+    --ink: #f8fafc;
+    --ink-soft: #cbd5e1;
+    --paper: #0f172a;
+    --card: #1e293b;
+    --line: #334155;
+  }
 
   *{ box-sizing: border-box; }
   html{ scroll-behavior: smooth; }
@@ -64,7 +75,7 @@
   .logo-text{
       text-decoration:none;
       color:#2b1730;
-      font-size:30px;
+      font-size:clamp(22px, 4vw, 30px);
       font-weight:700;
   }
 
@@ -75,10 +86,11 @@
 
   .header-btn{
 
-      min-width:95px;
+      min-width: clamp(70px, 8vw, 95px);
+
       text-align:center;
 
-      padding:12px 28px;
+      padding: clamp(8px, 2vw, 12px) clamp(16px, 4vw, 28px);
 
       border-radius:12px;
 
@@ -134,15 +146,15 @@
     margin-bottom: clamp(16px, 3vw, 24px);
     font-weight: 500;
   }
-  h1{
-    font-size: clamp(46px, 6vw, 68px);
+  .hero-title{
+    font-size: clamp(32px, 4.5vw, 52px);
     font-weight:700;
     line-height:1.1;
     letter-spacing: -.01em;
     margin: 0 0 clamp(14px, 3vw, 22px);
     color: #fff;
   }
-  h1 em{ font-style: normal; color: #FCE4FA; }
+  .hero-title em{ font-style: normal; color: #FCE4FA; }
   .lede{
     font-size: clamp(14.5px, 2.6vw, 16.5px);
     font-weight: 300;
@@ -155,7 +167,7 @@
   .btn-primary{
     display:inline-flex; align-items:center; gap:10px;
     background: #fff;
-    color: var(--purple-deep);
+    color: #7A2D7C;
     font-weight:600; font-size: clamp(14px, 3vw, 15px);
     padding: clamp(13px, 3vw, 15px) clamp(20px, 5vw, 28px);
     border-radius: 999px;
@@ -196,7 +208,7 @@
   .card-front{ top: 20%; left: 8%; height: 58%; z-index:3; }
   .card-front .tag{
     display:inline-block; font-size: 11px; font-weight:600;
-    background: rgba(122,45,124,.1); color: var(--purple-deep);
+    background: rgba(122,45,124,.1); color: #7A2D7C;
     padding: 5px 12px; border-radius: 999px; margin-top: 12px;
   }
   .stamp-badge{
@@ -244,7 +256,7 @@
   .row-no{
     display:inline-flex; align-items:center; justify-content:center;
     width: 36px; height:36px; border-radius: 50%;
-    background: linear-gradient(135deg, var(--pink-light), var(--purple-deep));
+    background: linear-gradient(135deg, #DD88CF, #7A2D7C);
     font-size: 13px; color: #fff; font-weight:600;
     margin-bottom: 18px;
   }
@@ -254,7 +266,7 @@
   /* ---------- closing banner ---------- */
   .closing{
     position: relative;
-    background: radial-gradient(120% 140% at 80% 20%, var(--pink-light) 0%, var(--purple-mid) 45%, var(--purple-deep) 100%);
+    background: radial-gradient(120% 140% at 80% 20%, #DD88CF 0%, #A24BA0 45%, #7A2D7C 100%);
     color: #fff;
     padding: clamp(40px, 8vw, 80px) 0;
     margin: 10px clamp(16px, 4vw, 0px) 40px;
@@ -271,7 +283,7 @@
   .btn-light{
     display:inline-flex; align-items:center; gap:10px;
     background: #fff;
-    color: var(--purple-deep);
+    color: #7A2D7C;
     font-weight:600; font-size: 15px;
     padding: 14px clamp(20px, 5vw, 28px);
     border-radius: 999px;
@@ -288,7 +300,7 @@
     color: var(--ink-soft); font-size: 12.5px; font-weight:300;
     text-align:center;
   }
-  .footer-inner .logo-word{ color: var(--ink); font-size:15px; font-weight:600; }
+  .footer-inner .logo-word{ color: var(--ink); font-size:clamp(15px, 2vw, 18px); font-weight:600; }
 
   /* ---------- responsive breakpoints ---------- */
   @media (max-width: 860px){
@@ -306,20 +318,27 @@
     .footer-inner{ flex-direction:column; text-align:center; }
   }
   @media (max-width: 380px){
-    .logo-word{ font-size:15px; }
+    .logo-word{ font-size:clamp(16px, 3vw, 22px); font-weight: 700; }
     .glass-btn{ padding: 8px 14px; font-size:12px; }
-    h1{ font-size: 33px; }
     .stamp-badge{ display:none; }
   }
 </style>
+    <link rel="icon" type="image/svg+xml" href="{{ asset('image/favicon-esurat.svg') }}">
 </head>
 <body>
 
 <header>
+    <style>
+        .logo-img-light { height: clamp(3rem, 6vw, 4.5rem); width: auto; display: block; transition: all 0.3s ease; }
+        .logo-img-dark { height: clamp(3rem, 6vw, 4.5rem); width: auto; display: none; transition: all 0.3s ease; }
+        html.dark .logo-img-light { display: none !important; }
+        html.dark .logo-img-dark { display: block !important; }
+    </style>
     <div class="wrap header-inner">
 
-        <a href="/" class="logo-text">
-            {{ config('app.name', 'E-Surat') }}
+        <a href="/" class="logo-text" style="display: flex; align-items: center; text-decoration: none;">
+            <img src="{{ asset('image/logo-esurat-light.svg') }}" alt="E-Surat" class="logo-img-light">
+            <img src="{{ asset('image/logo-esurat-dark.svg') }}" alt="E-Surat" class="logo-img-dark">
         </a>
 
         <nav>
@@ -349,9 +368,7 @@
   <div class="wrap hero-grid">
     <div>
       <div class="eyebrow">✉ Sistem Manajemen Surat</div>
-      <!-- BAGIAN DIUBAH DI BAWAH INI -->
-      <h1 style="font-size: 60px; font-weight: 800;">Urus surat jauh <em>lebih mudah</em>.</h1>
-      <!-- BAGIAN DIUBAH DI ATAS INI -->
+      <h1 class="hero-title">Urus surat jauh<br>lebih mudah.</h1>
       <p class="lede">Satu tempat untuk mencatat, mengunggah, dan memantau status setiap surat — dari belum direspon sampai selesai. Nggak perlu lagi bolak-balik buku agenda atau kehilangan berkas penting.</p>
       <div class="cta-row">
         <a class="btn-primary" href="{{ auth()->check() ? url('/dashboard') : (Route::has('login') ? route('login') : '#') }}">Masuk ke Dashboard →</a>
@@ -421,24 +438,39 @@
 
 <footer>
   <div class="wrap footer-inner">
-    <div class="logo-word">{{ config('app.name', 'E-Surat') }}</div>
+    <div class="logo-word" style="display: flex; align-items: center; justify-content: center; margin-bottom: 1rem;">
+        <img src="{{ asset('image/logo-esurat-light.svg') }}" alt="E-Surat" class="logo-img-light">
+        <img src="{{ asset('image/logo-esurat-dark.svg') }}" alt="E-Surat" class="logo-img-dark">
+    </div>
     <div>© {{ date('Y') }} · Sistem Manajemen Surat</div>
   </div>
 </footer>
 
 @include('profile.partials.toast')
+@if (session('success'))
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        @if (session('success'))
-            showToast(@json(session('success')), 'success');
-        @endif
+        showToast(@json(session('success')), 'success');
+    });
+</script>
+@endif
 
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
         const storedToast = sessionStorage.getItem('logoutToast');
         if (storedToast) {
             showToast(storedToast, 'success');
             sessionStorage.removeItem('logoutToast');
         }
     });
+</script>
+
+<script>
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+    } else {
+        document.documentElement.classList.remove('dark');
+    }
 </script>
 
 </body>

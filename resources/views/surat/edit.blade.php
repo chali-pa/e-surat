@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tambah Surat - E-Surat</title>
+    <title>Edit Surat - E-Surat</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <style>
         body { font-family: 'Poppins', sans-serif; background-color: #F9FAFB; }
+        .flatpickr-input.cursor-pointer { background-color: #fff; }
 
         /* Sidebar Styling */
         #sidebar { transition: width 0.3s; width: 260px; position: fixed; height: 100vh; z-index: 100; background-color: #ffffff; border-right: 1px solid #e5e7eb; }
@@ -20,7 +21,7 @@
 
         /* ===== Responsive: Mobile Sidebar ===== */
         #sidebarOverlay { display: none; }
-        @media (max-width: 767px) {
+        @media (max-width: 1023px) {
             #sidebar, body.sidebar-collapsed #sidebar {
                 width: 260px !important;
                 transform: translateX(-100%);
@@ -37,13 +38,64 @@
             }
         }
     </style>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+        }
+    </script>
+    <script>
+        if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+    </script>
+    <style>
+        /* Dark Mode Overrides */
+        .dark body { background-color: #0f172a !important; color: #f8fafc !important; }
+        .dark #sidebar { background-color: #1e293b !important; border-color: #334155 !important; }
+        .dark .bg-white { background-color: #1e293b !important; }
+        .dark .bg-gray-50, .dark .bg-slate-50, .dark .bg-\[\#F4F6F9\], .dark .bg-\[\#F9FAFB\] { background-color: #0f172a !important; }
+        .dark .text-gray-900, .dark .text-gray-800, .dark .text-\[\#1a1a2e\] { color: #f8fafc !important; }
+        .dark .text-gray-600, .dark .text-gray-500, .dark .text-slate-500 { color: #94a3b8 !important; }
+        .dark .border-gray-200, .dark .border-gray-100, .dark .border-slate-100, .dark .border-\[\#eaecf0\], .dark .border-\[\#e5e7eb\] { border-color: #334155 !important; }
+        .dark header { background-color: #1e293b !important; border-color: #334155 !important; }
+        
+        /* Dashboard & Surat Specifics */
+        .dark .card-shadow { box-shadow: 0 1px 8px rgba(0,0,0,0.5) !important; }
+        .dark .day-header { background: #1e293b !important; color: #f8fafc !important; }
+        .dark .day-group + .day-group { border-top-color: #0f172a !important; }
+        .dark .hist-row:hover { background: #334155 !important; }
+        .dark .hist-date-icon { background: #0f172a !important; color: #cbd5e1 !important; }
+        .dark .transactions-card { background: #1e293b !important; border-color: #334155 !important; }
+        .dark .table-toolbar { background: #1e293b !important; border-color: #334155 !important; color: #cbd5e1 !important; }
+        .dark .table-header { background: #0f172a !important; border-color: #334155 !important; }
+        .dark .table-row:hover { background: #334155 !important; }
+        .dark td, .dark th { border-color: #334155 !important; }
+        .dark .table-pagination { background: #1e293b !important; border-color: #334155 !important; color: #cbd5e1 !important; }
+        .dark select { background-color: #0f172a !important; color: #f8fafc !important; border-color: #334155 !important; }
+        
+        /* Auth Specifics */
+        .dark .form-panel { background-color: #1e293b !important; }
+        .dark .form-input, .dark textarea { background-color: #0f172a !important; border-color: #334155 !important; color: #f8fafc !important; }
+        .dark .form-input:focus, .dark textarea:focus { border-color: #DD88CF !important; }
+        .dark .logo-text, .dark .welcome-heading { color: #f8fafc !important; }
+        .dark .form-label { color: #cbd5e1 !important; }
+        .dark .tab-switcher { background-color: #0f172a !important; }
+        .dark .tab-btn { color: #94a3b8 !important; }
+        .dark .tab-btn.active { color: #fff !important; }
+        .dark .success-box, .dark .error-box { background-color: #0f172a !important; border-color: #334155 !important; }
+        .dark .deco-desc { color: #cbd5e1 !important; }
+    </style>
+    <link rel="icon" type="image/svg+xml" href="{{ asset('image/favicon-esurat.svg') }}">
 </head>
 <body>
 
     <!-- Mobile Topbar -->
-    <header class="md:hidden sticky top-0 z-[80] bg-white border-b border-gray-100 flex items-center justify-between px-4 py-3">
+    <header class="lg:hidden sticky top-0 z-[80] bg-white border-b border-gray-100 flex items-center justify-between px-4 py-3">
         <button type="button" onclick="openMobileSidebar()" class="p-2 rounded-xl hover:bg-gray-100"><i class="bi bi-list text-2xl"></i></button>
-        <span class="font-bold text-[#4B164C] text-lg">E-Surat</span>
+        <span class="font-bold text-[#4B164C] text-lg sm:text-xl md:text-2xl">E-Surat</span>
         <span class="w-9"></span>
     </header>
     <div id="sidebarOverlay" onclick="closeMobileSidebar()"></div>
@@ -52,7 +104,7 @@
     <aside id="sidebar" class="shadow-sm">
         <div class="h-[76px] flex items-center px-4">
             <button id="toggleBtn" class="p-2 rounded-xl hover:bg-gray-100"><i class="bi bi-list text-2xl"></i></button>
-            <span class="ml-3 font-bold text-[#4B164C] text-lg menu-text">E-Surat</span>
+            <span class="ml-3 font-bold text-[#4B164C] text-lg sm:text-xl lg:text-2xl menu-text">E-Surat</span>
         </div>
         <nav class="flex-1 p-3 space-y-2">
             <a href="{{ route('dashboard') }}" class="flex items-center p-3 rounded-xl hover:bg-gray-100 transition">

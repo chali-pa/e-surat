@@ -15,7 +15,7 @@ Route::get('/dashboard', function () {
     // dengan yang diisi lewat halaman Kelola Surat.
     $surats = Surat::orderByDesc('created_at')->get();
     return view('dashboard', compact('surats'));
-})->middleware(['auth', 'verified'])->name('dashboard');
+})->middleware(['auth'])->name('dashboard');
 
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
@@ -35,8 +35,7 @@ Route::middleware('auth')->group(function () {
     Route::put('/surat/{id}', [SuratController::class, 'update'])->name('surat.update');
     Route::delete('/surat/{id}', [SuratController::class, 'destroy'])->name('surat.destroy');
 
-    Route::get('/surat/{surat}/preview-pdf', [SuratController::class, 'previewPdf'])
-        ->name('surat.preview.pdf');
+
 });
 
 require __DIR__.'/auth.php';

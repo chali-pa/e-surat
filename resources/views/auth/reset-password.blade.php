@@ -10,11 +10,25 @@
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Inter', sans-serif; height: 100vh; display: flex; overflow: hidden; background: #0d0015; }
-        .form-panel { width: 45%; background: #ffffff; display: flex; flex-direction: column; justify-content: center; padding: 60px 56px; position: relative; z-index: 2; overflow-y: auto; }
-        .logo { display: flex; align-items: center; gap: 10px; margin-bottom: 36px; }
-        .logo-icon { width: 38px; height: 38px; background: linear-gradient(135deg, #4B164C, #DD88CF); border-radius: 10px; display: flex; align-items: center; justify-content: center; color: white; font-size: 18px; font-weight: 800; flex-shrink: 0; }
-        .logo-text { font-size: 1.35rem; font-weight: 800; color: #1a1a2e; letter-spacing: -0.5px; }
-        .welcome-heading { font-size: 1.75rem; font-weight: 800; color: #1a1a2e; margin-bottom: 6px; letter-spacing: -0.5px; }
+        .form-panel {
+            width: 45%;
+            background: #ffffff;
+            display: flex;
+            flex-direction: column;
+            padding: 60px 56px;
+            position: relative;
+            z-index: 2;
+            overflow-y: auto;
+            max-height: 100vh;
+        }
+        .form-panel::before,
+        .form-panel::after {
+            content: '';
+            margin: auto;
+        }      .logo { display: flex; align-items: center; gap: 0.625rem; margin-bottom: 2.25rem; }
+        .logo-icon { width: 2.375rem; height: 2.375rem; background: linear-gradient(135deg, #4B164C, #DD88CF); border-radius: 0.625rem; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.125rem; font-weight: 800; flex-shrink: 0; }
+        .logo-text { font-size: clamp(1.15rem, 5vw, 1.35rem); font-weight: 800; color: #1a1a2e; letter-spacing: -0.5px; }
+        .welcome-heading { font-size: clamp(1.4rem, 6vw, 1.75rem); font-weight: 800; color: #1a1a2e; margin-bottom: 6px; letter-spacing: -0.5px; }
         .welcome-sub { font-size: 0.875rem; color: #6b7280; margin-bottom: 32px; line-height: 1.5; }
         .form-group { margin-bottom: 18px; }
         .form-label { display: block; font-size: 0.8rem; font-weight: 600; color: #374151; margin-bottom: 7px; letter-spacing: 0.02em; }
@@ -40,14 +54,75 @@
         .deco-title { font-size: 2.4rem; font-weight: 800; color: #ffffff; line-height: 1.2; letter-spacing: -1px; margin-bottom: 16px; text-shadow: 0 4px 30px rgba(0,0,0,0.4); }
         .deco-title span { color: #f9d5f4; font-weight: 800; }
         .deco-desc { font-size: 0.95rem; color: rgba(255,255,255,0.65); line-height: 1.7; max-width: 300px; }
-        @media (max-width: 768px) { .deco-panel { display: none; } .form-panel { width: 100%; padding: 40px 28px; } }
+        @media (max-width: 1023px) {
+            body { height: auto; min-height: 100vh; overflow: auto; flex-direction: column; }
+            .deco-panel { display: none; }
+            .form-panel { width: 100%; min-height: 100vh; max-height: none; overflow-y: visible; padding: 40px 24px; }
+        }
     </style>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+        }
+    </script>
+    <script>
+        if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+    </script>
+    <style>
+        /* Dark Mode Overrides */
+        .dark body { background-color: #0f172a !important; color: #f8fafc !important; }
+        .dark #sidebar { background-color: #1e293b !important; border-color: #334155 !important; }
+        .dark .bg-white { background-color: #1e293b !important; }
+        .dark .bg-gray-50, .dark .bg-slate-50, .dark .bg-\[\#F4F6F9\], .dark .bg-\[\#F9FAFB\] { background-color: #0f172a !important; }
+        .dark .text-gray-900, .dark .text-gray-800, .dark .text-\[\#1a1a2e\] { color: #f8fafc !important; }
+        .dark .text-gray-600, .dark .text-gray-500, .dark .text-slate-500 { color: #94a3b8 !important; }
+        .dark .border-gray-200, .dark .border-gray-100, .dark .border-slate-100, .dark .border-\[\#eaecf0\], .dark .border-\[\#e5e7eb\] { border-color: #334155 !important; }
+        .dark header { background-color: #1e293b !important; border-color: #334155 !important; }
+        
+        /* Dashboard & Surat Specifics */
+        .dark .card-shadow { box-shadow: 0 1px 8px rgba(0,0,0,0.5) !important; }
+        .dark .day-header { background: #1e293b !important; color: #f8fafc !important; }
+        .dark .day-group + .day-group { border-top-color: #0f172a !important; }
+        .dark .hist-row:hover { background: #334155 !important; }
+        .dark .hist-date-icon { background: #0f172a !important; color: #cbd5e1 !important; }
+        .dark .transactions-card { background: #1e293b !important; border-color: #334155 !important; }
+        .dark .table-toolbar { background: #1e293b !important; border-color: #334155 !important; color: #cbd5e1 !important; }
+        .dark .table-header { background: #0f172a !important; border-color: #334155 !important; }
+        .dark .table-row:hover { background: #334155 !important; }
+        .dark td, .dark th { border-color: #334155 !important; }
+        .dark .table-pagination { background: #1e293b !important; border-color: #334155 !important; color: #cbd5e1 !important; }
+        .dark select { background-color: #0f172a !important; color: #f8fafc !important; border-color: #334155 !important; }
+        
+        /* Auth Specifics */
+        .dark .form-panel { background-color: #1e293b !important; }
+        .dark .form-input, .dark textarea { background-color: #0f172a !important; border-color: #334155 !important; color: #f8fafc !important; }
+        .dark .form-input:focus, .dark textarea:focus { border-color: #DD88CF !important; }
+        .dark .logo-text, .dark .welcome-heading { color: #f8fafc !important; }
+        .dark .form-label { color: #cbd5e1 !important; }
+        .dark .tab-switcher { background-color: #0f172a !important; }
+        .dark .tab-btn { color: #94a3b8 !important; }
+        .dark .tab-btn.active { color: #fff !important; }
+        .dark .success-box, .dark .error-box { background-color: #0f172a !important; border-color: #334155 !important; }
+        .dark .deco-desc { color: #cbd5e1 !important; }
+    </style>
+    <link rel="icon" type="image/svg+xml" href="{{ asset('image/favicon-esurat.svg') }}">
 </head>
 <body>
     <div class="form-panel">
+        <style>
+            .logo-light { height: clamp(2.75rem, 6vw, 3.5rem); width: auto; display: block; }
+            .logo-dark { height: clamp(2.75rem, 6vw, 3.5rem); width: auto; display: none; }
+            .dark .logo-light { display: none !important; }
+            .dark .logo-dark { display: block !important; }
+        </style>
         <div class="logo">
-            <div class="logo-icon">✉</div>
-            <span class="logo-text">E-Surat</span>
+            <img src="{{ asset('image/logo-esurat-light.svg') }}" alt="E-Surat" class="logo-light">
+            <img src="{{ asset('image/logo-esurat-dark.svg') }}" alt="E-Surat" class="logo-dark">
         </div>
         <h1 class="welcome-heading">Reset Password</h1>
         <p class="welcome-sub">Silakan buat password baru untuk mengamankan akun Anda.</p>

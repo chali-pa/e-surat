@@ -126,64 +126,7 @@ class SuratController extends Controller
         ]);
     }
 
-    public function previewPdf(Surat $surat)
-{
-    $originalPath = storage_path('app/public/surat/' . $surat->nama_file);
 
-    if (!file_exists($originalPath)) {
-        abort(404, 'File surat tidak ditemukan.');
-    }
-
-    $ext = strtolower(pathinfo($originalPath, PATHINFO_EXTENSION));
-
-    // Kalau bukan docx/doc, tidak perlu dikonversi — kirim apa adanya.
-    if (!in_array($ext, ['doc', 'docx'])) {
-        return response()->file($originalPath);
-    }
-
-    $cacheDir = storage_path('app/public/preview-cache');
-    if (!is_dir($cacheDir)) {
-        mkdir($cacheDir, 0755, true);
-    }
-
-    // Nama file cache disertai timestamp file asli, supaya otomatis
-    // re-convert kalau file surat diganti/diedit.
-    $baseName = pathinfo($originalPath, PATHINFO_FILENAME);
-    $pdfCacheName = $baseName . '_' . filemtime($originalPath) . '.pdf';
-    $pdfCachePath = $cacheDir . '/' . $pdfCacheName;
-
-    if (!file_exists($pdfCachePath)) {
-        $sofficeBin = env('LIBREOFFICE_PATH', 'soffice');
-
-        $cmd = escapeshellarg($sofficeBin)
-            . ' --headless --norestore --convert-to pdf --outdir '
-            . escapeshellarg($cacheDir) . ' '
-            . escapeshellarg($originalPath)
-            . ' 2>&1';
-
-        exec($cmd, $output, $exitCode);
-        $generatedPath = $cacheDir . '/' . $baseName . '.pdf';
-
-        if (file_exists($generatedPath)) {
-            rename($generatedPath, $pdfCachePath);
-        }
-
-        if (!file_exists($pdfCachePath)) {
-            \Log::error('Gagal konversi DOCX ke PDF', [
-                'surat_id' => $surat->id,
-                'file' => $originalPath,
-                'output' => $output,
-                'exit_code' => $exitCode,
-            ]);
-            abort(500, 'Gagal mengonversi dokumen ke PDF. Pastikan LibreOffice sudah terinstall di server.');
-        }
-    }
-
-    return response()->file($pdfCachePath, [
-        'Content-Type' => 'application/pdf',
-        'Content-Disposition' => 'inline; filename="' . $baseName . '.pdf"',
-    ]);
-}
     
     private function getMimeType($extension)
     {

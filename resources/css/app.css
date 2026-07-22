@@ -1,3 +1,22 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+    /* Mengubah ukuran dasar (rem) agar seluruh teks dan spacing menyesuaikan ukuran layar secara proporsional */
+    html {
+        font-size: 14px;
+    }
+    
+    @media (min-width: 768px) {
+        html {
+            font-size: 15px;
+        }
+    }
+    
+    @media (min-width: 1024px) {
+        html {
+            font-size: 16px;
+        }
+    }
+}

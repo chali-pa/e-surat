@@ -22,6 +22,19 @@
         /* ===== Base ===== */
         body { font-family: 'Poppins', sans-serif; background-color: #F9FAFB; }
 
+        /* ── Primary button ── */
+        .btn-primary {
+            background: linear-gradient(135deg, #4B164C 0%, #7B2D7C 55%, #DD88CF 100%);
+            color: #fff;
+            transition: all 300ms ease;
+            border: none;
+        }
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #3e123c 0%, #6B1D6C 55%, #C878BF 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(75, 22, 76, 0.35);
+        }
+
         /* ===== Sidebar ===== */
         #sidebar {
             transition: width 0.3s;
@@ -34,7 +47,9 @@
             overflow: hidden;
         }
         body.sidebar-collapsed #sidebar { width: 72px !important; }
-        body.sidebar-collapsed .menu-text { opacity: 0; display: none; }
+        body.sidebar-collapsed .menu-text { opacity: 0; display: none !important; }
+        body.sidebar-collapsed #sidebar nav a { justify-content: center; padding-left: 0 !important; padding-right: 0 !important; }
+        body.sidebar-collapsed #sidebar .sidebar-logo { display: none !important; }
         .main-content { margin-left: 260px; transition: margin-left 0.3s; }
         body.sidebar-collapsed .main-content { margin-left: 72px; }
 
@@ -43,63 +58,139 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            gap: .75rem;
-            margin-bottom: 1rem;
-            padding-bottom: .75rem;
-            border-bottom: 1px solid #E5E7EB;
+            gap: 1rem;
+            margin-bottom: 1.25rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #F1F5F9;
         }
-        .toolbar-select { display: inline-flex; align-items: center; gap: .5rem; color: #374151; font-size: .95rem; }
+        .toolbar-select { display: inline-flex; align-items: center; gap: .5rem; color: #475569; font-size: .88rem; }
         .toolbar-select select {
-            min-width: 4.5rem;
-            padding: .55rem .75rem;
-            border: 1px solid #D1D5DB;
-            border-radius: .75rem;
-            background: #fff;
-            color: #111827;
-            font-size: .95rem;
+            min-width: 4rem;
+            padding: .45rem .75rem;
+            border: 1px solid #E2E8F0;
+            border-radius: .625rem;
+            background: #F8FAFC;
+            color: #1E293B;
+            font-size: .88rem;
+            font-weight: 500;
             outline: none;
+            transition: all .2s;
         }
-        .toolbar-search { max-width: 280px; width: 100%; }
+        .toolbar-select select:focus { border-color: #DD88CF; background: #fff; box-shadow: 0 0 0 3px rgba(221,136,207,.15); }
+        .toolbar-search { max-width: 320px; width: 100%; }
         .search-input {
             width: 100%;
-            min-height: 44px;
-            padding: .9rem 1rem .9rem 3rem;
-            border: 1px solid #D1D5DB;
+            min-height: 42px;
+            padding: .6rem 1rem .6rem 2.6rem;
+            border: 1px solid #E2E8F0;
             border-radius: .75rem;
-            background: #fff;
-            color: #111827;
-            font-size: .95rem;
+            background: #F8FAFC;
+            color: #1E293B;
+            font-size: .88rem;
+            transition: all .2s;
         }
-        .search-input:focus { outline: none; border-color: #A5B4FC; box-shadow: 0 0 0 4px rgba(165,180,252,.14); }
-        .search-icon { position: absolute; left: .95rem; top: 50%; transform: translateY(-50%); font-size: 1rem; color: #6B7280; }
+        .search-input:focus { outline: none; background: #fff; border-color: #DD88CF; box-shadow: 0 0 0 4px rgba(221,136,207,.15); }
+        .search-icon { position: absolute; left: .9rem; top: 50%; transform: translateY(-50%); font-size: .95rem; color: #94A3B8; }
 
         /* ===== Table Card ===== */
-        .transactions-card { background: #fff; border-radius: 24px; padding: 20px 24px; border: 1px solid #e5e7eb; box-shadow: 0 12px 40px rgba(15,23,42,.06); }
-        .table-scroll-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 18px; }
-        .transactions-table { width: 100% !important; min-width: 720px; border-collapse: separate !important; border-spacing: 0 !important; border-radius: 18px; overflow: hidden; }
-        .transactions-table thead tr { background: #eef2ff !important; }
-        .transactions-table thead th { color: #475569 !important; font-weight: 600 !important; padding: 16px 18px !important; border: none !important; font-size: .85rem !important; }
-        .transactions-table thead th:first-child { text-align: center !important; }
-        .transactions-table tbody tr { border-bottom: 1px solid rgba(148,163,184,.16); }
-        .transactions-table tbody tr:hover { background: #f8fafc; }
+        .transactions-card {
+            background: #fff;
+            border-radius: 20px;
+            padding: 24px;
+            border: 1px solid #EAECF0;
+            box-shadow: 0 4px 20px rgba(15,23,42,.03);
+        }
+        .table-scroll-wrap {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            border-radius: 14px;
+            border: 1px solid #F1F5F9;
+        }
+        .transactions-table {
+            width: 100% !important;
+            min-width: 780px;
+            border-collapse: separate !important;
+            border-spacing: 0 !important;
+        }
+        .transactions-table thead tr { background: #FAF7FC !important; }
+        .transactions-table thead th {
+            color: #64748B !important;
+            font-weight: 600 !important;
+            padding: 14px 18px !important;
+            border-bottom: 1px solid #F1F5F9 !important;
+            font-size: .75rem !important;
+            text-transform: uppercase !important;
+            letter-spacing: .05em !important;
+        }
+        .transactions-table tbody tr {
+            transition: background .15s ease;
+            border-bottom: 1px solid #F1F5F9;
+        }
+        .transactions-table tbody tr:hover { background: #FAF5FF !important; }
         .transactions-table tbody tr:last-child td { border-bottom: none !important; }
-        .transactions-table tbody td { padding: 16px 18px !important; color: #475569 !important; font-size: .93rem !important; vertical-align: middle !important; }
-        .transactions-table tbody td:first-child { text-align: center !important; }
-        .transactions-table tbody td:last-child { text-align: right !important; }
+        .transactions-table tbody td {
+            padding: 14px 18px !important;
+            color: #334155 !important;
+            font-size: .9rem !important;
+            vertical-align: middle !important;
+        }
         .dataTables_wrapper .dataTables_filter,
         .dataTables_wrapper .dataTables_length { display: none !important; }
 
+        /* DataTables Custom Pagination & Info */
+        .dataTables_wrapper .dataTables_info {
+            color: #64748B !important;
+            font-size: .82rem !important;
+            padding-top: 1rem !important;
+        }
+        .dataTables_wrapper .dataTables_paginate {
+            padding-top: 1rem !important;
+            display: flex !important;
+            gap: 4px !important;
+        }
+        .dataTables_wrapper .dataTables_paginate .paginate_button {
+            border-radius: 8px !important;
+            border: 1px solid #E2E8F0 !important;
+            background: #fff !important;
+            color: #475569 !important;
+            font-size: .82rem !important;
+            font-weight: 500 !important;
+            padding: 4px 10px !important;
+            cursor: pointer !important;
+            transition: all .15s !important;
+        }
+        .dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+            background: #F1F5F9 !important;
+            border-color: #CBD5E1 !important;
+            color: #0F172A !important;
+        }
+        .dataTables_wrapper .dataTables_paginate .paginate_button.current,
+        .dataTables_wrapper .dataTables_paginate .paginate_button.current:hover {
+            background: #4B164C !important;
+            border-color: #4B164C !important;
+            color: #fff !important;
+            font-weight: 600 !important;
+        }
+
         /* ===== Action buttons ===== */
-        .action-wrapper { display: inline-flex; gap: 6px; align-items: center; justify-content: flex-end; }
+        .action-wrapper { display: inline-flex; gap: 8px; align-items: center; justify-content: flex-end; }
         .action-btn {
             display: inline-flex; align-items: center; justify-content: center;
-            width: 34px; height: 34px; border-radius: 50%;
-            color: #475569; background: #f8fafc; border: 1px solid #e2e8f0;
-            transition: background .15s, transform .15s, color .15s;
-            cursor: pointer; text-decoration: none;
+            width: 35px; height: 35px; border-radius: 10px;
+            font-size: .9rem; transition: all .2s ease;
+            cursor: pointer; text-decoration: none; border: 1px solid transparent;
         }
-        .action-btn:hover { background: #4B164C; color: #fff; border-color: #4B164C; transform: scale(1.06); }
-        .action-btn i { pointer-events: none; }
+        .action-btn.view-btn { background: #F3E8FF; color: #7E22CE; border-color: #E9D5FF; }
+        .action-btn.view-btn:hover { background: #7E22CE; color: #fff; border-color: #7E22CE; transform: translateY(-2px); box-shadow: 0 4px 10px rgba(126,34,206,.2); }
+
+        .action-btn.print-btn { background: #E0F2FE; color: #0369A1; border-color: #BAE6FD; }
+        .action-btn.print-btn:hover { background: #0284C7; color: #fff; border-color: #0284C7; transform: translateY(-2px); box-shadow: 0 4px 10px rgba(2,132,199,.2); }
+
+        .action-btn.edit-btn { background: #FEF3C7; color: #B45309; border-color: #FDE68A; }
+        .action-btn.edit-btn:hover { background: #D97706; color: #fff; border-color: #D97706; transform: translateY(-2px); box-shadow: 0 4px 10px rgba(217,119,6,.2); }
+
+        .action-btn.delete-btn { background: #FEE2E2; color: #B91C1C; border-color: #FECACA; }
+        .action-btn.delete-btn:hover { background: #DC2626; color: #fff; border-color: #DC2626; transform: translateY(-2px); box-shadow: 0 4px 10px rgba(220,38,38,.2); }
 
         /* ===== Preview Modal ===== */
         #previewModal {
@@ -159,7 +250,7 @@
             flex-shrink: 0;
         }
         @media (min-width: 640px) { .pv-meta { grid-template-columns: repeat(3, 1fr); } }
-        @media (min-width: 860px) { .pv-meta { grid-template-columns: repeat(6, 1fr); } }
+        @media (min-width: 860px) { .pv-meta { grid-template-columns: repeat(7, 1fr); } }
         .pv-meta-item .lbl { font-size: .68rem; color: #9ca3af; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 2px; }
         .pv-meta-item .val { font-size: .85rem; color: #1f2937; font-weight: 600; word-break: break-word; }
         .pv-meta-item .val.nomor { color: #4B164C; }
@@ -414,82 +505,11 @@
             .transactions-table tbody td { padding: 13px 12px !important; font-size: .88rem !important; }
         }
 
-        /* =====================================================================
-           Tabel -> tampilan kartu di layar sempit (HP & tablet portrait)
-           Menghindari scroll horizontal yang bikin susah dibaca di layar kecil.
-           ===================================================================== */
+        /* ===== Table Responsive Media Query ===== */
         @media (max-width: 768px) {
-            .table-toolbar { flex-direction: column; align-items: stretch; }
+            .table-toolbar { flex-direction: column; align-items: stretch; gap: 0.75rem; }
             .toolbar-search { max-width: 100%; }
             .toolbar-select { justify-content: space-between; }
-            .table-scroll-wrap { overflow: visible; border-radius: 0; }
-
-            .transactions-table { min-width: 0; width: 100% !important; border-spacing: 0 12px !important; }
-            .transactions-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
-            .transactions-table, .transactions-table tbody, .transactions-table tr { display: block; width: 100%; }
-
-            .transactions-table tbody tr {
-                background: #fff;
-                border: 1px solid #e5e7eb;
-                border-radius: 16px;
-                padding: 4px 16px;
-                box-shadow: 0 4px 16px rgba(15,23,42,.05);
-                position: relative;
-            }
-            .transactions-table tbody tr:hover { background: #fff; }
-
-            .transactions-table tbody td {
-                display: flex !important;
-                align-items: flex-start;
-                justify-content: space-between;
-                gap: 16px;
-                width: 100%;
-                padding: 11px 0 !important;
-                border-bottom: 1px dashed #eef1f5;
-                text-align: right !important;
-                font-size: .88rem !important;
-                color: #334155 !important;
-            }
-            .transactions-table tbody td:last-child { border-bottom: none; }
-
-            .transactions-table tbody td::before {
-                content: attr(data-label);
-                flex-shrink: 0;
-                text-align: left;
-                font-size: .68rem;
-                font-weight: 600;
-                color: #94a3b8;
-                text-transform: uppercase;
-                letter-spacing: .04em;
-                padding-top: 2px;
-            }
-
-            /* Kolom "No" ditampilkan sebagai badge kecil di pojok kartu, bukan baris */
-            .transactions-table tbody td:first-child {
-                position: absolute;
-                top: 12px; right: 14px;
-                width: auto; padding: 0 !important;
-                border-bottom: none;
-                background: #eef2ff;
-                color: #4B164C !important;
-                font-size: .72rem !important;
-                font-weight: 700;
-                border-radius: 999px;
-                min-width: 26px; height: 26px;
-                display: flex !important;
-                align-items: center; justify-content: center;
-            }
-            .transactions-table tbody td:first-child::before { display: none; }
-            .transactions-table tbody td:nth-child(2) { padding-right: 46px !important; }
-
-            /* Kolom Aksi jadi baris tombol rapi di bagian bawah kartu */
-            .transactions-table tbody td:last-child {
-                display: block !important;
-                text-align: center !important;
-                padding-top: 12px !important;
-            }
-            .transactions-table tbody td:last-child::before { display: none; }
-            .transactions-table tbody td:last-child .action-wrapper { width: 100%; justify-content: center; flex-wrap: wrap; }
         }
 
         /* ===== Responsive: Mobile Sidebar ===== */
@@ -541,81 +561,54 @@
             document.documentElement.classList.remove('dark');
         }
     </script>
-    <style>
-        /* Dark Mode Overrides */
-        .dark body { background-color: #0f172a !important; color: #f8fafc !important; }
-        .dark #sidebar { background-color: #1e293b !important; border-color: #334155 !important; }
-        .dark .bg-white { background-color: #1e293b !important; }
-        .dark .bg-gray-50, .dark .bg-slate-50, .dark .bg-\[\#F4F6F9\], .dark .bg-\[\#F9FAFB\] { background-color: #0f172a !important; }
-        .dark .text-gray-900, .dark .text-gray-800, .dark .text-\[\#1a1a2e\] { color: #f8fafc !important; }
-        .dark .text-gray-600, .dark .text-gray-500, .dark .text-slate-500 { color: #94a3b8 !important; }
-        .dark .border-gray-200, .dark .border-gray-100, .dark .border-slate-100, .dark .border-\[\#eaecf0\], .dark .border-\[\#e5e7eb\] { border-color: #334155 !important; }
-        .dark header { background-color: #1e293b !important; border-color: #334155 !important; }
-        
-        /* Dashboard & Surat Specifics */
-        .dark .card-shadow { box-shadow: 0 1px 8px rgba(0,0,0,0.5) !important; }
-        .dark .day-header { background: #1e293b !important; color: #f8fafc !important; }
-        .dark .day-group + .day-group { border-top-color: #0f172a !important; }
-        .dark .hist-row:hover { background: #334155 !important; }
-        .dark .hist-date-icon { background: #0f172a !important; color: #cbd5e1 !important; }
-        .dark .transactions-card { background: #1e293b !important; border-color: #334155 !important; }
-        .dark .table-toolbar { background: #1e293b !important; border-color: #334155 !important; color: #cbd5e1 !important; }
-        .dark .table-header { background: #0f172a !important; border-color: #334155 !important; }
-        .dark .table-row:hover { background: #334155 !important; }
-        .dark td, .dark th { border-color: #334155 !important; }
-        .dark .table-pagination { background: #1e293b !important; border-color: #334155 !important; color: #cbd5e1 !important; }
-        .dark select { background-color: #0f172a !important; color: #f8fafc !important; border-color: #334155 !important; }
-        
-        /* Auth Specifics */
-        .dark .form-panel { background-color: #1e293b !important; }
-        .dark .form-input, .dark textarea { background-color: #0f172a !important; border-color: #334155 !important; color: #f8fafc !important; }
-        .dark .form-input:focus, .dark textarea:focus { border-color: #DD88CF !important; }
-        .dark .logo-text, .dark .welcome-heading { color: #f8fafc !important; }
-        .dark .form-label { color: #cbd5e1 !important; }
-        .dark .tab-switcher { background-color: #0f172a !important; }
-        .dark .tab-btn { color: #94a3b8 !important; }
-        .dark .tab-btn.active { color: #fff !important; }
-        .dark .success-box, .dark .error-box { background-color: #0f172a !important; border-color: #334155 !important; }
-        .dark .deco-desc { color: #cbd5e1 !important; }
-    </style>
+    @include('partials.dark-mode-styles')
     <link rel="icon" type="image/svg+xml" href="{{ asset('image/favicon-esurat.svg') }}">
+    <link rel="shortcut icon" type="image/svg+xml" href="{{ asset('image/favicon-esurat.svg') }}">
 </head>
 <body>
 
     <!-- Mobile Topbar -->
-    <header class="lg:hidden sticky top-0 z-[80] bg-white border-b border-gray-100 flex items-center justify-between px-4 py-3">
-        <button type="button" onclick="openMobileSidebar()" class="p-2 rounded-xl hover:bg-gray-100"><i class="bi bi-list text-2xl"></i></button>
-        <span class="font-bold text-[#4B164C] text-lg sm:text-xl md:text-2xl">E-Surat</span>
+    <header class="lg:hidden sticky top-0 z-[80] bg-white border-b border-gray-100 flex items-center justify-between px-4 py-3 shadow-sm">
+        <button type="button" onclick="toggleMobileSidebar()" class="p-2 rounded-xl text-slate-700 hover:bg-slate-100"><i class="bi bi-list text-2xl"></i></button>
+        <a href="{{ route('dashboard') }}" class="flex items-center">
+            <img src="{{ asset('image/logo-esurat-light.svg') }}" alt="E-Surat" class="h-11 sm:h-12 w-auto logo-img-light">
+            <img src="{{ asset('image/logo-esurat-dark.svg') }}" alt="E-Surat" class="h-11 sm:h-12 w-auto logo-img-dark">
+        </a>
         <span class="w-9"></span>
     </header>
     <div id="sidebarOverlay" onclick="closeMobileSidebar()"></div>
 
     <!-- ========= SIDEBAR ========= -->
     <aside id="sidebar" class="shadow-sm">
-        <div class="h-[76px] flex items-center px-4">
-            <button id="toggleBtn" class="p-2 rounded-xl hover:bg-gray-100">
+        <div class="h-[76px] flex items-center px-4 border-b border-gray-100">
+            <button id="toggleBtn" class="p-2 rounded-xl text-slate-700 hover:bg-slate-100 transition">
                 <i class="bi bi-list text-2xl"></i>
             </button>
-            <span class="ml-3 font-bold text-[#4B164C] text-lg sm:text-xl lg:text-2xl menu-text">E-Surat</span>
+            <a href="{{ route('dashboard') }}" class="ml-3 flex items-center sidebar-logo">
+                <img src="{{ asset('image/logo-esurat-light.svg') }}" alt="E-Surat" class="h-11 sm:h-12 w-auto logo-img-light">
+                <img src="{{ asset('image/logo-esurat-dark.svg') }}" alt="E-Surat" class="h-11 sm:h-12 w-auto logo-img-dark">
+            </a>
         </div>
-        <nav class="flex-1 p-3 space-y-2">
-            <a href="{{ route('dashboard') }}" class="flex items-center p-3 rounded-xl hover:bg-gray-100 transition">
+        <nav class="flex-1 p-3 space-y-2 mt-2">
+            <a href="{{ route('dashboard') }}" class="flex items-center p-3 rounded-xl text-slate-600 hover:bg-slate-100 transition">
                 <i class="bi bi-grid-1x2-fill text-lg"></i>
                 <span class="ml-4 menu-text">Dashboard</span>
             </a>
-            <a href="{{ route('surat.index') }}" class="flex items-center p-3 rounded-xl bg-purple-50 text-[#4B164C]">
+            <a href="{{ route('surat.index') }}" class="flex items-center p-3 rounded-xl bg-purple-50 text-[#4B164C] font-medium">
                 <i class="bi bi-envelope-fill text-lg"></i>
                 <span class="ml-4 menu-text">Kelola Surat</span>
             </a>
-            <a href="{{ route('profile.edit') }}" class="flex items-center p-3 rounded-xl hover:bg-gray-100 transition">
+            <a href="{{ route('profile.edit') }}" class="flex items-center p-3 rounded-xl text-slate-600 hover:bg-slate-100 transition">
                 <i class="bi bi-person-fill text-lg"></i>
                 <span class="ml-4 menu-text">Profil</span>
             </a>
-            <button type="button" onclick="openLogoutModal()"
-                    class="w-full flex items-center p-3 rounded-xl hover:bg-red-50 hover:text-red-600 text-gray-600 transition mt-4 border-t border-gray-100 pt-4">
-                <i class="bi bi-box-arrow-right text-lg"></i>
-                <span class="ml-4 menu-text">Keluar</span>
-            </button>
+            <div class="mt-4 border-t border-gray-100 pt-4">
+                <button type="button" onclick="openLogoutModal()"
+                        class="w-full flex items-center p-3 rounded-xl text-slate-600 hover:bg-red-50 hover:text-red-600 transition">
+                    <i class="bi bi-box-arrow-right text-lg"></i>
+                    <span class="ml-4 menu-text">Keluar</span>
+                </button>
+            </div>
         </nav>
     </aside>
 
@@ -627,7 +620,7 @@
                 <p class="mt-1 text-sm text-slate-500">Kelola surat masuk dan keluar dengan tampilan ringkas, bersih, dan proporsional.</p>
             </div>
             <a href="{{ route('surat.create') }}"
-               class="inline-flex items-center gap-2 bg-[#4B164C] text-white px-5 py-2.5 rounded-lg font-medium hover:bg-[#3F125A] transition shadow-sm">
+               class="btn-primary inline-flex items-center gap-2 text-white px-5 py-2.5 rounded-xl font-medium transition shadow-sm">
                 <i class="bi bi-plus-lg"></i>Tambah Surat
             </a>
         </header>
@@ -642,20 +635,23 @@
         <div class="transactions-card">
             <div class="table-toolbar">
                 <div class="toolbar-select">
-                    <span>Show</span>
-                    <select id="entriesSelect" aria-label="Show entries">
+                    <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Tampilkan</span>
+                    <select id="entriesSelect" aria-label="Tampilkan entri">
                         <option value="10">10</option>
                         <option value="25">25</option>
                         <option value="50">50</option>
                         <option value="100">100</option>
                     </select>
-                    <span>entries</span>
+                    <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Data</span>
+                    <span class="ml-2 hidden sm:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-50 text-[#4B164C] border border-purple-100">
+                        Total {{ $surats->count() }} Surat
+                    </span>
                 </div>
                 <div class="toolbar-search">
                     <div class="relative">
                         <i class="bi bi-search search-icon"></i>
                         <input id="tableSearch" type="search" class="search-input"
-                               placeholder="Cari nomor, pengirim, nama surat…">
+                               placeholder="Cari nomor, pengirim, atau perihal surat…">
                     </div>
                 </div>
             </div>
@@ -664,29 +660,49 @@
             <table id="tabelSurat" class="transactions-table">
                 <thead>
                     <tr>
-                        <th>No</th>
+                        <th class="w-12 text-center">No</th>
                         <th>Nomor Surat</th>
+                        <th>Perihal / Nama Surat</th>
+                        <th>Pengirim</th>
                         <th>Tgl Buat</th>
                         <th>Tgl Masuk</th>
-                        <th>Pengirim</th>
-                        <th>Nama Surat</th>
-                        <th>Aksi</th>
+                        <th class="text-right">Aksi</th>
                     </tr>
                 </thead>
                 <tbody>
                     @foreach($surats as $surat)
                     <tr>
-                        <td class="font-medium" data-label="No">{{ $loop->iteration }}</td>
-                        <td class="font-semibold text-[#4B164C]" data-label="Nomor Surat">{{ $surat->nomor_surat }}</td>
-                        <td class="text-gray-500" data-label="Tgl Buat">{{ \Carbon\Carbon::parse($surat->tanggal_buat)->format('d/m/Y') }}</td>
-                        <td class="text-gray-500" data-label="Tgl Masuk">{{ $surat->tanggal_masuk ? \Carbon\Carbon::parse($surat->tanggal_masuk)->format('d/m/Y') : '-' }}</td>
-                        <td class="text-gray-700" data-label="Pengirim">{{ $surat->nama_pengirim }}</td>
-                        <td class="text-gray-700" data-label="Nama Surat">{{ $surat->nama_surat }}</td>
-                        <td data-label="Aksi">
+                        <td class="text-center font-medium text-slate-400" data-label="No">
+                            <span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-100 text-slate-600 text-xs font-semibold">{{ $loop->iteration }}</span>
+                        </td>
+                        <td data-label="Nomor Surat">
+                            <span class="font-semibold text-[#4B164C] bg-purple-50/80 border border-purple-100 px-2.5 py-1 rounded-lg text-[13px] inline-block shadow-2xs">
+                                {{ $surat->nomor_surat }}
+                            </span>
+                        </td>
+                        <td data-label="Nama Surat">
+                            <div class="font-semibold text-slate-800 text-[14px] leading-snug">{{ $surat->nama_surat }}</div>
+                            <div class="text-xs text-slate-400 font-normal mt-0.5 flex items-center gap-1.5 truncate max-w-xs" title="{{ $surat->nama_file }}">
+                                <i class="bi bi-file-earmark-text text-[#DD88CF]"></i> {{ $surat->nama_file }}
+                            </div>
+                        </td>
+                        <td data-label="Pengirim">
+                            <div class="inline-flex items-center gap-2 text-slate-700 text-[13.5px]">
+                                <i class="bi bi-building text-slate-400 text-sm"></i>
+                                <span>{{ $surat->nama_pengirim }}</span>
+                            </div>
+                        </td>
+                        <td data-label="Tgl Buat">
+                            <span class="text-slate-600 text-[13px] font-medium">{{ \Carbon\Carbon::parse($surat->tanggal_buat)->format('d/m/Y') }}</span>
+                        </td>
+                        <td data-label="Tgl Masuk">
+                            <span class="text-slate-600 text-[13px] font-medium">{{ $surat->tanggal_masuk ? \Carbon\Carbon::parse($surat->tanggal_masuk)->format('d/m/Y') : '-' }}</span>
+                        </td>
+                        <td data-label="Aksi" class="text-right">
                             <div class="action-wrapper">
                                 <!-- Lihat -->
-                                <a href="#" class="action-btn view-btn" title="Lihat"
-                                    data-file-url="{{ route('surat.preview', $surat->id) }}"
+                                <a href="#" class="action-btn view-btn" title="Lihat Detail & Preview"
+                                    data-file-url="{{ route('surat.preview', [$surat->id, $surat->nama_file]) }}"
                                    data-file-name="{{ $surat->nama_file }}"
                                    data-surat-number="{{ $surat->nomor_surat }}"
                                    data-tanggal-buat="{{ \Carbon\Carbon::parse($surat->tanggal_buat)->format('d/m/Y') }}"
@@ -696,14 +712,14 @@
                                     <i class="bi bi-eye"></i>
                                 </a>
                                 <!-- Cetak -->
-                                <a href="#" class="action-btn print-btn" title="Cetak"
-                                   data-file-url="{{ route('surat.preview', $surat->id) }}"
+                                <a href="#" class="action-btn print-btn" title="Cetak Surat"
+                                   data-file-url="{{ route('surat.preview', [$surat->id, $surat->nama_file]) }}"
                                    data-file-name="{{ $surat->nama_file }}"
                                    data-nama-surat="{{ $surat->nama_surat }}">
                                     <i class="bi bi-printer"></i>
                                 </a>
                                 <!-- Edit -->
-                                <a href="{{ route('surat.edit', $surat->id) }}" class="action-btn" title="Edit">
+                                <a href="{{ route('surat.edit', $surat->id) }}" class="action-btn edit-btn" title="Edit Surat">
                                     <i class="bi bi-pencil-square"></i>
                                 </a>
                                 <!-- Hapus -->
@@ -711,7 +727,7 @@
                                       onsubmit="return confirm('Yakin hapus surat &quot;{{ $surat->nama_surat }}&quot;?');">
                                     @csrf
                                     @method('DELETE')
-                                    <button type="submit" class="action-btn" title="Hapus"><i class="bi bi-trash"></i></button>
+                                    <button type="submit" class="action-btn delete-btn" title="Hapus Surat"><i class="bi bi-trash"></i></button>
                                 </form>
                             </div>
                         </td>
@@ -752,6 +768,10 @@
                 <div class="pv-meta-item">
                     <div class="lbl">Nama Surat</div>
                     <div class="val" id="pvNamaSurat">-</div>
+                </div>
+                <div class="pv-meta-item">
+                    <div class="lbl">Nama File</div>
+                    <div class="val" id="pvFileName" title="">-</div>
                 </div>
                 <div class="pv-meta-item">
                     <div class="lbl">Pengirim</div>
@@ -833,12 +853,24 @@
     /* ================================================================
        SIDEBAR TOGGLE
     ================================================================ */
-    document.getElementById('toggleBtn').addEventListener('click', () =>
-        document.body.classList.toggle('sidebar-collapsed'));
+    document.addEventListener('DOMContentLoaded', () => {
+        document.body.classList.remove('sidebar-mobile-open');
+    });
+    document.getElementById('toggleBtn')?.addEventListener('click', () => {
+        if (window.innerWidth < 1024) {
+            closeMobileSidebar();
+        } else {
+            document.body.classList.toggle('sidebar-collapsed');
+        }
+    });
 
+    function toggleMobileSidebar() { document.body.classList.toggle('sidebar-mobile-open'); }
     function openMobileSidebar() { document.body.classList.add('sidebar-mobile-open'); }
     function closeMobileSidebar() { document.body.classList.remove('sidebar-mobile-open'); }
-    document.querySelectorAll('#sidebar nav a').forEach(link => link.addEventListener('click', closeMobileSidebar));
+
+    document.querySelectorAll('#sidebar nav a').forEach(link => {
+        link.addEventListener('click', closeMobileSidebar);
+    });
 
     /* ================================================================
        HELPERS
@@ -937,13 +969,15 @@
         const ext = getExt(fileName);
 
         // Fill meta
-        document.getElementById('pvTitle').textContent   = namaSurat || 'Detail Surat';
-        document.getElementById('pvNomor').textContent   = nomor      || '-';
-        document.getElementById('pvNamaSurat').textContent = namaSurat|| '-';
-        document.getElementById('pvPengirim').textContent = pengirim  || '-';
-        document.getElementById('pvTglBuat').textContent  = tglBuat   || '-';
-        document.getElementById('pvTglMasuk').textContent = tglMasuk  || '-';
-        document.getElementById('pvFormat').textContent   = ext ? ext.toUpperCase() : '-';
+        document.getElementById('pvTitle').textContent     = namaSurat || 'Detail Surat';
+        document.getElementById('pvNomor').textContent     = nomor      || '-';
+        document.getElementById('pvNamaSurat').textContent   = namaSurat|| '-';
+        document.getElementById('pvFileName').textContent    = fileName || '-';
+        document.getElementById('pvFileName').title          = fileName || '';
+        document.getElementById('pvPengirim').textContent   = pengirim  || '-';
+        document.getElementById('pvTglBuat').textContent    = tglBuat   || '-';
+        document.getElementById('pvTglMasuk').textContent   = tglMasuk  || '-';
+        document.getElementById('pvFormat').textContent     = ext ? ext.toUpperCase() : '-';
 
         // Open modal
         document.getElementById('previewModal').classList.add('open');
@@ -1510,5 +1544,6 @@
     </script>
 
     @include('profile.partials.logout-modal')
+    @include('partials.security')
 </body>
 </html>

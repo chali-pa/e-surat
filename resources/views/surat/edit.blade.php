@@ -15,7 +15,9 @@
         /* Sidebar Styling */
         #sidebar { transition: width 0.3s; width: 260px; position: fixed; height: 100vh; z-index: 100; background-color: #ffffff; border-right: 1px solid #e5e7eb; }
         body.sidebar-collapsed #sidebar { width: 72px !important; }
-        body.sidebar-collapsed .menu-text { opacity: 0; display: none; }
+        body.sidebar-collapsed .menu-text { opacity: 0; display: none !important; }
+        body.sidebar-collapsed #sidebar nav a { justify-content: center; padding-left: 0 !important; padding-right: 0 !important; }
+        body.sidebar-collapsed #sidebar .sidebar-logo { display: none !important; }
         .main-content { margin-left: 260px; transition: margin-left 0.3s; }
         body.sidebar-collapsed .main-content { margin-left: 72px; }
 
@@ -51,74 +53,47 @@
             document.documentElement.classList.remove('dark');
         }
     </script>
-    <style>
-        /* Dark Mode Overrides */
-        .dark body { background-color: #0f172a !important; color: #f8fafc !important; }
-        .dark #sidebar { background-color: #1e293b !important; border-color: #334155 !important; }
-        .dark .bg-white { background-color: #1e293b !important; }
-        .dark .bg-gray-50, .dark .bg-slate-50, .dark .bg-\[\#F4F6F9\], .dark .bg-\[\#F9FAFB\] { background-color: #0f172a !important; }
-        .dark .text-gray-900, .dark .text-gray-800, .dark .text-\[\#1a1a2e\] { color: #f8fafc !important; }
-        .dark .text-gray-600, .dark .text-gray-500, .dark .text-slate-500 { color: #94a3b8 !important; }
-        .dark .border-gray-200, .dark .border-gray-100, .dark .border-slate-100, .dark .border-\[\#eaecf0\], .dark .border-\[\#e5e7eb\] { border-color: #334155 !important; }
-        .dark header { background-color: #1e293b !important; border-color: #334155 !important; }
-        
-        /* Dashboard & Surat Specifics */
-        .dark .card-shadow { box-shadow: 0 1px 8px rgba(0,0,0,0.5) !important; }
-        .dark .day-header { background: #1e293b !important; color: #f8fafc !important; }
-        .dark .day-group + .day-group { border-top-color: #0f172a !important; }
-        .dark .hist-row:hover { background: #334155 !important; }
-        .dark .hist-date-icon { background: #0f172a !important; color: #cbd5e1 !important; }
-        .dark .transactions-card { background: #1e293b !important; border-color: #334155 !important; }
-        .dark .table-toolbar { background: #1e293b !important; border-color: #334155 !important; color: #cbd5e1 !important; }
-        .dark .table-header { background: #0f172a !important; border-color: #334155 !important; }
-        .dark .table-row:hover { background: #334155 !important; }
-        .dark td, .dark th { border-color: #334155 !important; }
-        .dark .table-pagination { background: #1e293b !important; border-color: #334155 !important; color: #cbd5e1 !important; }
-        .dark select { background-color: #0f172a !important; color: #f8fafc !important; border-color: #334155 !important; }
-        
-        /* Auth Specifics */
-        .dark .form-panel { background-color: #1e293b !important; }
-        .dark .form-input, .dark textarea { background-color: #0f172a !important; border-color: #334155 !important; color: #f8fafc !important; }
-        .dark .form-input:focus, .dark textarea:focus { border-color: #DD88CF !important; }
-        .dark .logo-text, .dark .welcome-heading { color: #f8fafc !important; }
-        .dark .form-label { color: #cbd5e1 !important; }
-        .dark .tab-switcher { background-color: #0f172a !important; }
-        .dark .tab-btn { color: #94a3b8 !important; }
-        .dark .tab-btn.active { color: #fff !important; }
-        .dark .success-box, .dark .error-box { background-color: #0f172a !important; border-color: #334155 !important; }
-        .dark .deco-desc { color: #cbd5e1 !important; }
-    </style>
+    @include('partials.dark-mode-styles')
     <link rel="icon" type="image/svg+xml" href="{{ asset('image/favicon-esurat.svg') }}">
+    <link rel="shortcut icon" type="image/svg+xml" href="{{ asset('image/favicon-esurat.svg') }}">
 </head>
 <body>
 
     <!-- Mobile Topbar -->
-    <header class="lg:hidden sticky top-0 z-[80] bg-white border-b border-gray-100 flex items-center justify-between px-4 py-3">
-        <button type="button" onclick="openMobileSidebar()" class="p-2 rounded-xl hover:bg-gray-100"><i class="bi bi-list text-2xl"></i></button>
-        <span class="font-bold text-[#4B164C] text-lg sm:text-xl md:text-2xl">E-Surat</span>
+    <header class="lg:hidden sticky top-0 z-[80] bg-white border-b border-gray-100 flex items-center justify-between px-4 py-3 shadow-sm">
+        <button type="button" onclick="toggleMobileSidebar()" class="p-2 rounded-xl text-slate-700 hover:bg-slate-100"><i class="bi bi-list text-2xl"></i></button>
+        <a href="{{ route('dashboard') }}" class="flex items-center">
+            <img src="{{ asset('image/logo-esurat-light.svg') }}" alt="E-Surat" class="h-11 sm:h-12 w-auto logo-img-light">
+            <img src="{{ asset('image/logo-esurat-dark.svg') }}" alt="E-Surat" class="h-11 sm:h-12 w-auto logo-img-dark">
+        </a>
         <span class="w-9"></span>
     </header>
     <div id="sidebarOverlay" onclick="closeMobileSidebar()"></div>
 
     <!-- Sidebar Utama -->
     <aside id="sidebar" class="shadow-sm">
-        <div class="h-[76px] flex items-center px-4">
-            <button id="toggleBtn" class="p-2 rounded-xl hover:bg-gray-100"><i class="bi bi-list text-2xl"></i></button>
-            <span class="ml-3 font-bold text-[#4B164C] text-lg sm:text-xl lg:text-2xl menu-text">E-Surat</span>
+        <div class="h-[76px] flex items-center px-4 border-b border-gray-100">
+            <button id="toggleBtn" class="p-2 rounded-xl text-slate-700 hover:bg-slate-100 transition"><i class="bi bi-list text-2xl"></i></button>
+            <a href="{{ route('dashboard') }}" class="ml-3 flex items-center sidebar-logo">
+                <img src="{{ asset('image/logo-esurat-light.svg') }}" alt="E-Surat" class="h-11 sm:h-12 w-auto logo-img-light">
+                <img src="{{ asset('image/logo-esurat-dark.svg') }}" alt="E-Surat" class="h-11 sm:h-12 w-auto logo-img-dark">
+            </a>
         </div>
-        <nav class="flex-1 p-3 space-y-2">
-            <a href="{{ route('dashboard') }}" class="flex items-center p-3 rounded-xl hover:bg-gray-100 transition">
+        <nav class="flex-1 p-3 space-y-2 mt-2">
+            <a href="{{ route('dashboard') }}" class="flex items-center p-3 rounded-xl text-slate-600 hover:bg-slate-100 transition">
                 <i class="bi bi-grid-1x2-fill text-lg"></i><span class="ml-4 menu-text">Dashboard</span>
             </a>
-            <a href="{{ route('surat.index') }}" class="flex items-center p-3 rounded-xl bg-purple-50 text-[#4B164C]">
+            <a href="{{ route('surat.index') }}" class="flex items-center p-3 rounded-xl bg-purple-50 text-[#4B164C] font-medium">
                 <i class="bi bi-envelope-fill text-lg"></i><span class="ml-4 menu-text">Kelola Surat</span>
             </a>
-            <a href="{{ route('profile.edit') }}" class="flex items-center p-3 rounded-xl hover:bg-gray-100 transition">
+            <a href="{{ route('profile.edit') }}" class="flex items-center p-3 rounded-xl text-slate-600 hover:bg-slate-100 transition">
                 <i class="bi bi-person-fill text-lg"></i><span class="ml-4 menu-text">Profil</span>
             </a>
-            <button type="button" onclick="openLogoutModal()" class="w-full flex items-center p-3 rounded-xl hover:bg-red-50 hover:text-red-600 text-gray-600 transition mt-4 border-t border-gray-100 pt-4">
-                <i class="bi bi-box-arrow-right text-lg"></i><span class="ml-4 menu-text">Keluar</span>
-            </button>
+            <div class="mt-4 border-t border-gray-100 pt-4">
+                <button type="button" onclick="openLogoutModal()" class="w-full flex items-center p-3 rounded-xl text-slate-600 hover:bg-red-50 hover:text-red-600 transition">
+                    <i class="bi bi-box-arrow-right text-lg"></i><span class="ml-4 menu-text">Keluar</span>
+                </button>
+            </div>
         </nav>
     </aside>
 
@@ -185,7 +160,7 @@
                 </div>
 
                 <div class="flex justify-end pt-4">
-                    <button type="submit" class="bg-[#4B164C] text-white px-8 py-3 rounded-xl font-semibold hover:bg-[#DD88CF] transition shadow-lg">
+                    <button type="submit" class="px-6 py-3 bg-gradient-to-r from-[#4B164C] to-[#DD88CF] text-white font-semibold rounded-xl hover:opacity-90 transition shadow-md">
                         Simpan Perubahan
                     </button>
                 </div>
@@ -196,12 +171,23 @@
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/id.js"></script>
     <script>
-        document.getElementById('toggleBtn').addEventListener('click', () => {
-            document.body.classList.toggle('sidebar-collapsed');
+        document.addEventListener('DOMContentLoaded', () => {
+            document.body.classList.remove('sidebar-mobile-open');
         });
+        document.getElementById('toggleBtn')?.addEventListener('click', () => {
+            if (window.innerWidth < 1024) {
+                closeMobileSidebar();
+            } else {
+                document.body.classList.toggle('sidebar-collapsed');
+            }
+        });
+        function toggleMobileSidebar() { document.body.classList.toggle('sidebar-mobile-open'); }
         function openMobileSidebar() { document.body.classList.add('sidebar-mobile-open'); }
         function closeMobileSidebar() { document.body.classList.remove('sidebar-mobile-open'); }
-        document.querySelectorAll('#sidebar nav a').forEach(link => link.addEventListener('click', closeMobileSidebar));
+
+        document.querySelectorAll('#sidebar nav a').forEach(link => {
+            link.addEventListener('click', closeMobileSidebar);
+        });
 
         // Format tanggal: tanggal, bulan, lalu tahun (contoh: 16 Juli 2026)
         flatpickr.localize(flatpickr.l10ns.id);
@@ -217,5 +203,6 @@
     </script>
 
     @include('profile.partials.logout-modal')
+    @include('partials.security')
 </body>
 </html>

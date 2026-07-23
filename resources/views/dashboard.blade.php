@@ -22,7 +22,9 @@
             box-shadow: 1px 0 12px rgba(0,0,0,0.03);
         }
         body.sidebar-collapsed #sidebar { width: 72px !important; }
-        body.sidebar-collapsed .menu-text { opacity: 0; display: none; }
+        body.sidebar-collapsed .menu-text { opacity: 0; display: none !important; }
+        body.sidebar-collapsed #sidebar nav a { justify-content: center; padding-left: 0 !important; padding-right: 0 !important; }
+        body.sidebar-collapsed #sidebar .sidebar-logo { display: none !important; }
         .main-content { margin-left: 260px; transition: margin-left 0.3s; }
         body.sidebar-collapsed .main-content { margin-left: 72px; }
 
@@ -31,10 +33,16 @@
 
         /* ── Primary button ── */
         .btn-primary {
-            background: #4B164C; color: #fff;
-            transition: background 200ms ease;
+            background: linear-gradient(135deg, #4B164C 0%, #7B2D7C 55%, #DD88CF 100%);
+            color: #fff;
+            transition: all 300ms ease;
+            border: none;
         }
-        .btn-primary:hover { background: #3e123c; }
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #3e123c 0%, #6B1D6C 55%, #C878BF 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(75, 22, 76, 0.35);
+        }
 
         /* ── History row ── */
         .hist-row {
@@ -115,15 +123,113 @@
         #sidebarOverlay { display: none; }
         @media (max-width: 1023px) {
             #sidebar, body.sidebar-collapsed #sidebar {
-                width: 260px !important; transform: translateX(-100%);
+                position: fixed !important;
+                top: 0; left: 0; bottom: 0;
+                width: 260px !important;
+                height: 100vh !important;
+                z-index: 100 !important;
+                transform: translateX(-100%);
                 transition: transform 0.3s ease;
+                border-right: 1px solid #eaecf0;
+                box-shadow: 2px 0 12px rgba(0,0,0,0.1);
             }
             body.sidebar-mobile-open #sidebar { transform: translateX(0); }
             body.sidebar-collapsed .menu-text { opacity: 1 !important; display: inline !important; }
             .main-content { margin-left: 0 !important; }
             body.sidebar-mobile-open #sidebarOverlay {
-                display: block; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 90;
+                display: block;
+                position: fixed; inset: 0;
+                background: rgba(0,0,0,0.5);
+                z-index: 90;
             }
+        }
+
+        /* ── Date Filter Pills ── */
+        .filter-pills {
+            display: flex;
+            align-items: center;
+            gap: 0;
+            border-radius: 10px;
+            border: 1px solid #e5e7eb;
+            flex-shrink: 0;
+        }
+        .filter-pill {
+            padding: 7px 14px;
+            font-size: 12.5px;
+            font-weight: 500;
+            color: #64748b;
+            background: #fff;
+            border: none;
+            border-right: 1px solid #e5e7eb;
+            cursor: pointer;
+            transition: background 150ms, color 150ms;
+            white-space: nowrap;
+            position: relative;
+        }
+        .filter-pills > .filter-pill:first-child { border-radius: 10px 0 0 10px; }
+        .filter-more-wrap { position: relative; }
+        .filter-more-btn { border-radius: 0 10px 10px 0; }
+        .filter-pill:hover { background: #f8f5f9; color: #4B164C; }
+        .filter-pill.active {
+            background: #4B164C;
+            color: #fff;
+        }
+        .filter-pill.active::before {
+            content: '\2713';
+            margin-right: 5px;
+            font-size: 11px;
+        }
+        .filter-more-wrap { position: relative; }
+        .filter-more-btn {
+            padding: 7px 14px;
+            font-size: 12.5px;
+            font-weight: 500;
+            color: #64748b;
+            background: #fff;
+            border: none;
+            cursor: pointer;
+            transition: background 150ms, color 150ms;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .filter-more-btn:hover { background: #f8f5f9; color: #4B164C; }
+        .filter-more-btn.active { background: #4B164C; color: #fff; }
+        .filter-more-btn.active::before { content: '\2713'; margin-right: 3px; font-size: 11px; }
+        .filter-dropdown {
+            display: none;
+            position: absolute;
+            right: 0;
+            top: calc(100% + 4px);
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+            z-index: 999;
+            min-width: 160px;
+            overflow: hidden;
+        }
+        .filter-dropdown.open { display: block; }
+        .filter-dropdown button {
+            display: block;
+            width: 100%;
+            text-align: left;
+            padding: 10px 16px;
+            font-size: 13px;
+            font-weight: 500;
+            color: #475569;
+            background: none;
+            border: none;
+            cursor: pointer;
+            transition: background 120ms;
+        }
+        .filter-dropdown button:hover { background: #f8f5f9; color: #4B164C; }
+        .filter-dropdown button.active { color: #4B164C; font-weight: 600; }
+        .filter-dropdown button.active::before { content: '\2713 '; }
+        @media (max-width: 639px) {
+            .filter-pills { width: 100%; }
+            .filter-pill, .filter-more-btn { flex: 1; text-align: center; padding: 8px 6px; font-size: 11.5px; }
         }
 
         /* ── Mobile card ── */
@@ -147,50 +253,18 @@
             document.documentElement.classList.remove('dark');
         }
     </script>
-    <style>
-        /* Dark Mode Overrides */
-        .dark body { background-color: #0f172a !important; color: #f8fafc !important; }
-        .dark #sidebar { background-color: #1e293b !important; border-color: #334155 !important; }
-        .dark .bg-white { background-color: #1e293b !important; }
-        .dark .bg-gray-50, .dark .bg-slate-50, .dark .bg-\[\#F4F6F9\], .dark .bg-\[\#F9FAFB\] { background-color: #0f172a !important; }
-        .dark .text-gray-900, .dark .text-gray-800, .dark .text-\[\#1a1a2e\] { color: #f8fafc !important; }
-        .dark .text-gray-600, .dark .text-gray-500, .dark .text-slate-500 { color: #94a3b8 !important; }
-        .dark .border-gray-200, .dark .border-gray-100, .dark .border-slate-100, .dark .border-\[\#eaecf0\], .dark .border-\[\#e5e7eb\] { border-color: #334155 !important; }
-        .dark header { background-color: #1e293b !important; border-color: #334155 !important; }
-        
-        /* Dashboard & Surat Specifics */
-        .dark .card-shadow { box-shadow: 0 1px 8px rgba(0,0,0,0.5) !important; }
-        .dark .day-header { background: #1e293b !important; color: #f8fafc !important; }
-        .dark .day-group + .day-group { border-top-color: #0f172a !important; }
-        .dark .hist-row:hover { background: #334155 !important; }
-        .dark .hist-date-icon { background: #0f172a !important; color: #cbd5e1 !important; }
-        .dark .transactions-card { background: #1e293b !important; border-color: #334155 !important; }
-        .dark .table-toolbar { background: #1e293b !important; border-color: #334155 !important; color: #cbd5e1 !important; }
-        .dark .table-header { background: #0f172a !important; border-color: #334155 !important; }
-        .dark .table-row:hover { background: #334155 !important; }
-        .dark td, .dark th { border-color: #334155 !important; }
-        .dark .table-pagination { background: #1e293b !important; border-color: #334155 !important; color: #cbd5e1 !important; }
-        .dark select { background-color: #0f172a !important; color: #f8fafc !important; border-color: #334155 !important; }
-        
-        /* Auth Specifics */
-        .dark .form-panel { background-color: #1e293b !important; }
-        .dark .form-input, .dark textarea { background-color: #0f172a !important; border-color: #334155 !important; color: #f8fafc !important; }
-        .dark .form-input:focus, .dark textarea:focus { border-color: #DD88CF !important; }
-        .dark .logo-text, .dark .welcome-heading { color: #f8fafc !important; }
-        .dark .form-label { color: #cbd5e1 !important; }
-        .dark .tab-switcher { background-color: #0f172a !important; }
-        .dark .tab-btn { color: #94a3b8 !important; }
-        .dark .tab-btn.active { color: #fff !important; }
-        .dark .success-box, .dark .error-box { background-color: #0f172a !important; border-color: #334155 !important; }
-        .dark .deco-desc { color: #cbd5e1 !important; }
-    </style>
+    @include('partials.dark-mode-styles')
     <link rel="icon" type="image/svg+xml" href="{{ asset('image/favicon-esurat.svg') }}">
+    <link rel="shortcut icon" type="image/svg+xml" href="{{ asset('image/favicon-esurat.svg') }}">
 </head>
 <body>
 
     <header class="lg:hidden sticky top-0 z-[80] bg-white border-b border-gray-100 flex items-center justify-between px-4 py-3 shadow-sm">
-        <button type="button" onclick="openMobileSidebar()" class="p-2 rounded-xl text-slate-700 hover:bg-slate-100"><i class="bi bi-list text-2xl"></i></button>
-        <span class="font-bold text-[#4B164C] text-lg sm:text-xl md:text-2xl">E-Surat</span>
+        <button type="button" onclick="toggleMobileSidebar()" class="p-2 rounded-xl text-slate-700 hover:bg-slate-100"><i class="bi bi-list text-2xl"></i></button>
+        <a href="{{ route('dashboard') }}" class="flex items-center">
+            <img src="{{ asset('image/logo-esurat-light.svg') }}" alt="E-Surat" class="h-11 sm:h-12 w-auto logo-img-light">
+            <img src="{{ asset('image/logo-esurat-dark.svg') }}" alt="E-Surat" class="h-11 sm:h-12 w-auto logo-img-dark">
+        </a>
         <span class="w-9"></span>
     </header>
     <div id="sidebarOverlay" onclick="closeMobileSidebar()"></div>
@@ -198,7 +272,10 @@
     <aside id="sidebar" class="shadow-sm">
         <div class="h-[76px] flex items-center px-4 border-b border-gray-100">
             <button id="toggleBtn" class="p-2 rounded-xl text-slate-700 hover:bg-slate-100 transition"><i class="bi bi-list text-2xl"></i></button>
-            <span class="ml-3 font-bold text-[#4B164C] text-lg sm:text-xl lg:text-2xl menu-text">E-Surat</span>
+            <a href="{{ route('dashboard') }}" class="ml-3 flex items-center sidebar-logo">
+                <img src="{{ asset('image/logo-esurat-light.svg') }}" alt="E-Surat" class="h-11 sm:h-12 w-auto logo-img-light">
+                <img src="{{ asset('image/logo-esurat-dark.svg') }}" alt="E-Surat" class="h-11 sm:h-12 w-auto logo-img-dark">
+            </a>
         </div>
         <nav class="flex-1 p-3 space-y-2 mt-2">
             <a href="{{ route('dashboard') }}" class="flex items-center p-3 rounded-xl bg-purple-50 text-[#4B164C] font-medium">
@@ -251,24 +328,41 @@
                 <div class="bg-white rounded-3xl card-shadow border border-[#eaecf0] overflow-hidden">
 
                     <!-- Header card -->
-                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-6 py-5 border-b border-[#f1f3f6]">
-                        <div>
-                            <h2 class="text-lg font-semibold text-slate-800 tracking-tight">Riwayat Surat</h2>
-                            <p class="text-[13px] font-light text-slate-400 mt-0.5">Semua surat masuk tercatat di sini</p>
+                    <div class="px-6 py-5 border-b border-[#f1f3f6] space-y-4">
+                        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                            <div>
+                                <h2 class="text-lg font-semibold text-slate-800 tracking-tight">Riwayat Surat</h2>
+                                <p class="text-[13px] font-light text-slate-400 mt-0.5">Semua surat masuk tercatat di sini</p>
+                            </div>
+                            <div class="flex items-center gap-3 w-full sm:w-auto">
+                                <div class="relative flex-1 sm:flex-initial sm:w-56">
+                                    <i class="bi bi-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-300 text-sm"></i>
+                                    <input id="searchInput" type="text" placeholder="Cari nama atau pengirim…"
+                                        class="w-full rounded-xl border border-[#eaecf0] bg-[#f8f9fb] pl-9 pr-4 py-2.5 text-[13px] font-light text-slate-700 outline-none transition placeholder:text-slate-300 focus:border-[#c084cf] focus:ring-2 focus:ring-[#DD88CF]/15" />
+                                </div>
+                            </div>
                         </div>
-                        <div class="relative w-full sm:w-64">
-                            <i class="bi bi-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-300 text-sm"></i>
-                            <input id="searchInput" type="text" placeholder="Cari nama atau pengirim…"
-                                class="w-full rounded-xl border border-[#eaecf0] bg-[#f8f9fb] pl-9 pr-4 py-2.5 text-[13px] font-light text-slate-700 outline-none transition placeholder:text-slate-300 focus:border-[#c084cf] focus:ring-2 focus:ring-[#DD88CF]/15" />
+                        <!-- Date Filter Pills -->
+                        <div class="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                            <div class="filter-pills" id="filterPills">
+                                <button type="button" class="filter-pill active" data-filter="all">Semua</button>
+                                <button type="button" class="filter-pill" data-filter="today">Hari Ini</button>
+                                <button type="button" class="filter-pill" data-filter="yesterday">Kemarin</button>
+                                <button type="button" class="filter-pill" data-filter="7days">7 Hari</button>
+                                <div class="filter-more-wrap">
+                                    <button type="button" class="filter-more-btn" id="filterMoreBtn">Lainnya <i class="bi bi-chevron-down text-[10px]"></i></button>
+                                    <div class="filter-dropdown" id="filterDropdown">
+                                        <button type="button" data-filter="30days">30 Hari Terakhir</button>
+                                        <button type="button" data-filter="90days">90 Hari Terakhir</button>
+                                        <button type="button" data-filter="year">Tahun Ini</button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
-
                     @php
-                        $grouped = $surats->groupBy(function ($s) {
-                            return $s->created_at->format('Y-m-d');
-                        });
+                        $grouped = $surats->groupBy(fn ($s) => $s->created_at->format('Y-m-d'));
                     @endphp
-
                     <!-- ── Desktop: column header ── -->
                     <div class="hidden lg:flex items-center gap-[1.1rem] px-[1.5rem] py-3 bg-[#fafbfc] border-b border-[#f1f3f6] text-[11.5px] font-semibold text-slate-400 uppercase tracking-widest select-none">
                         <div class="w-16 flex-shrink-0">Jam</div>
@@ -304,10 +398,11 @@
                                          data-nosurat="{{ strtolower($surat->nomor_surat) }}"
                                          data-pengirim="{{ strtolower($surat->nama_pengirim) }}"
                                          data-status="{{ $surat->status }}"
+                                         data-createdraw="{{ $surat->created_at->toIso8601String() }}"
                                          data-tanggalbuat="{{ \Carbon\Carbon::parse($surat->tanggal_buat)->translatedFormat('d M Y') }}"
                                          data-tanggalmasuk="{{ \Carbon\Carbon::parse($surat->tanggal_masuk)->translatedFormat('d M Y') }}"
                                          data-namasurat="{{ $surat->nama_surat }}"
-                                         data-fileurl="{{ route('surat.preview', $surat->id) }}"
+                                         data-fileurl="{{ route('surat.preview', [$surat->id, $surat->nama_file]) }}"
                                          data-filename="{{ $surat->nama_file }}">
 
                                         <!-- Jam -->
@@ -376,6 +471,7 @@
                                     <div class="surat-card px-5 py-4 hover:bg-[#fafbfc] transition"
                                          data-nosurat="{{ strtolower($surat->nomor_surat) }}"
                                          data-pengirim="{{ strtolower($surat->nama_pengirim) }}"
+                                         data-createdraw="{{ $surat->created_at->toIso8601String() }}"
                                          data-status="{{ $surat->status }}">
                                         <!-- top row -->
                                         <div class="flex items-start gap-3">
@@ -411,7 +507,7 @@
                                                 data-pengirim="{{ $surat->nama_pengirim }}"
                                                 data-namasurat="{{ $surat->nama_surat }}"
                                                 data-status="{{ $surat->status }}"
-                                                data-fileurl="{{ route('surat.preview', $surat->id) }}"
+                                                data-fileurl="{{ route('surat.preview', [$surat->id, $surat->nama_file]) }}"
                                                 data-filename="{{ $surat->nama_file }}"
                                                 class="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[12px] font-medium bg-[#f0f5ff] text-[#3b63d8] hover:bg-[#e5eeff] transition">
                                                 <i class="bi bi-eye"></i> Detail
@@ -436,7 +532,7 @@
                     </div>
 
                     <!-- No results -->
-                    <div id="noResults" class="hidden flex flex-col items-center gap-3 py-14">
+                    <div id="noResults" class="flex flex-col items-center gap-3 py-14">                        
                         <i class="bi bi-search text-2xl text-slate-300"></i>
                         <p class="text-[13px] font-light text-slate-400">Tidak ada surat yang cocok.</p>
                     </div>
@@ -494,12 +590,23 @@
     </div>
 
     <script>
-        document.getElementById('toggleBtn').addEventListener('click', () => {
-            document.body.classList.toggle('sidebar-collapsed');
+        document.addEventListener('DOMContentLoaded', () => {
+            document.body.classList.remove('sidebar-mobile-open');
         });
+        document.getElementById('toggleBtn')?.addEventListener('click', () => {
+            if (window.innerWidth < 1024) {
+                closeMobileSidebar();
+            } else {
+                document.body.classList.toggle('sidebar-collapsed');
+            }
+        });
+        function toggleMobileSidebar() { document.body.classList.toggle('sidebar-mobile-open'); }
         function openMobileSidebar() { document.body.classList.add('sidebar-mobile-open'); }
         function closeMobileSidebar() { document.body.classList.remove('sidebar-mobile-open'); }
-        document.querySelectorAll('#sidebar nav a').forEach(link => link.addEventListener('click', closeMobileSidebar));
+
+        document.querySelectorAll('#sidebar nav a').forEach(link => {
+            link.addEventListener('click', closeMobileSidebar);
+        });
 
         const viewModalOverlay   = document.getElementById('viewModalOverlay');
         const viewModalContainer = document.getElementById('viewModalContainer');
@@ -557,18 +664,68 @@
             });
         }
 
+        // ── Date filter state ──
+        let activeFilter = 'all';
+
+        function getFilterDateRange(filter) {
+            const now = new Date();
+            const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            switch(filter) {
+                case 'today':
+                    return { from: startOfToday, to: now };
+                case 'yesterday': {
+                    const y = new Date(startOfToday);
+                    y.setDate(y.getDate() - 1);
+                    return { from: y, to: startOfToday };
+                }
+                case '7days': {
+                    const d = new Date(startOfToday);
+                    d.setDate(d.getDate() - 7);
+                    return { from: d, to: now };
+                }
+                case '30days': {
+                    const d = new Date(startOfToday);
+                    d.setDate(d.getDate() - 30);
+                    return { from: d, to: now };
+                }
+                case '90days': {
+                    const d = new Date(startOfToday);
+                    d.setDate(d.getDate() - 90);
+                    return { from: d, to: now };
+                }
+                case 'year':
+                    return { from: new Date(now.getFullYear(), 0, 1), to: now };
+                default:
+                    return null;
+            }
+        }
+
+        function matchesDateFilter(el) {
+            if (activeFilter === 'all') return true;
+            const range = getFilterDateRange(activeFilter);
+            if (!range) return true;
+            const raw = el.dataset.createdraw;
+            if (!raw) return true;
+            const d = new Date(raw);
+            return d >= range.from && d <= range.to;
+        }
+
         function applyFilters() {
             const q = searchInput.value.trim().toLowerCase();
             let visCount = 0;
 
             tableRows.forEach(row => {
-                const show = !q || row.dataset.nosurat.includes(q) || row.dataset.pengirim.includes(q);
+                const textMatch = !q || row.dataset.nosurat.includes(q) || row.dataset.pengirim.includes(q);
+                const dateMatch = matchesDateFilter(row);
+                const show = textMatch && dateMatch;
                 row.style.display = show ? '' : 'none';
                 if (show) visCount++;
             });
 
             mobileCards.forEach(card => {
-                const show = !q || card.dataset.nosurat.includes(q) || card.dataset.pengirim.includes(q);
+                const textMatch = !q || card.dataset.nosurat.includes(q) || card.dataset.pengirim.includes(q);
+                const dateMatch = matchesDateFilter(card);
+                const show = textMatch && dateMatch;
                 card.style.display = show ? '' : 'none';
                 if (show) visCount++;
             });
@@ -582,8 +739,50 @@
         }
 
         searchInput.addEventListener('input', applyFilters);
+
+        // ── Filter pills logic ──
+        const filterPills = document.getElementById('filterPills');
+        const filterMoreBtn = document.getElementById('filterMoreBtn');
+        const filterDropdown = document.getElementById('filterDropdown');
+
+        function setActiveFilter(filterVal, clickedBtn) {
+            activeFilter = filterVal;
+            // Remove active from all pills and dropdown items
+            filterPills.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+            filterDropdown.querySelectorAll('button').forEach(p => p.classList.remove('active'));
+            filterMoreBtn.classList.remove('active');
+
+            if (clickedBtn && clickedBtn.closest('.filter-dropdown')) {
+                // Clicked from dropdown
+                clickedBtn.classList.add('active');
+                filterMoreBtn.classList.add('active');
+            } else if (clickedBtn) {
+                clickedBtn.classList.add('active');
+            }
+            filterDropdown.classList.remove('open');
+            applyFilters();
+        }
+
+        filterPills.querySelectorAll('.filter-pill').forEach(btn => {
+            btn.addEventListener('click', () => setActiveFilter(btn.dataset.filter, btn));
+        });
+
+        filterMoreBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            filterDropdown.classList.toggle('open');
+        });
+
+        filterDropdown.querySelectorAll('button').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                setActiveFilter(btn.dataset.filter, btn);
+            });
+        });
+
+        document.addEventListener('click', () => filterDropdown.classList.remove('open'));
     </script>
 
     @include('profile.partials.logout-modal')
+    @include('partials.security')
 </body>
 </html>

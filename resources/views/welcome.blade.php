@@ -473,5 +473,6 @@
     }
 </script>
 
+@include('partials.security')
 </body>
 </html>

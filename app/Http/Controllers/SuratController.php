@@ -105,7 +105,7 @@ class SuratController extends Controller
         return redirect()->back()->with('success', 'Surat berhasil dihapus');
     }
 
-    public function preview($id)
+    public function preview($id, $filename = null)
     {
         $surat = Surat::findOrFail($id);
         $path = \Storage::disk('public')->path($surat->file_path);

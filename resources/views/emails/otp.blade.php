@@ -67,7 +67,7 @@
         
         <p style="color: #555; font-size: 15px; margin-bottom: 30px;">Untuk keamanan akun, jangan bagikan kode ini kepada siapa pun.</p>
         
-        <p style="color: #555; font-size: 15px;">E-Surat Indonesia.</p>
+        <p style="color: #555; font-size: 15px;">E-Surat.</p>
     </div>
 </body>
 </html>

@@ -86,9 +86,9 @@ class PasswordResetLinkController extends Controller
         $user = User::where('email', session('otp_login_email'))->first();
 
         if ($user) {
-            Auth::login($user);
+            Auth::login($user, remember: true);
             session()->forget(['otp_login_code', 'otp_login_email', 'otp_expires_at']);
-            session()->regenerate();
+            $request->session()->regenerate();
             return redirect()->intended(route('dashboard', absolute: false));
         }
 

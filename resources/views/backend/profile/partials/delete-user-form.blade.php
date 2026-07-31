@@ -1,4 +1,4 @@
-<form method="post" action="{{ route('profile.destroy') }}" class="space-y-4" onsubmit="return confirm('Yakin ingin menghapus akun Anda? Tindakan ini tidak dapat dibatalkan.');">
+<form id="delete-user-form" method="post" action="{{ route('profile.destroy') }}" class="space-y-4">
     @csrf
     @method('delete')
 
@@ -21,3 +21,29 @@
         </button>
     </div>
 </form>
+
+<script>
+    document.getElementById('delete-user-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        Swal.fire({
+            title: 'Hapus Akun?',
+            text: "Tindakan ini permanen dan data Anda akan hilang sepenuhnya!",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#dc2626',
+            cancelButtonColor: '#6b7280',
+            confirmButtonText: 'Ya, hapus!',
+            cancelButtonText: 'Batal',
+            customClass: {
+                popup: 'rounded-2xl',
+                confirmButton: 'rounded-xl px-4 py-2 font-medium',
+                cancelButton: 'rounded-xl px-4 py-2 font-medium'
+            }
+        }).then((result) => {
+            if (result.isConfirmed) {
+                this.submit();
+            }
+        });
+    });
+</script>

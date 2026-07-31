@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Edit Surat - E-Surat</title>
+    <title>Edit Surat Keluar - E-Surat</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -13,13 +13,19 @@
         .flatpickr-input.cursor-pointer { background-color: #fff; }
 
         /* Sidebar Styling */
-        #sidebar { transition: width 0.3s; width: 260px; position: fixed; height: 100vh; z-index: 100; background-color: #ffffff; border-right: 1px solid #e5e7eb; }
+        #sidebar { transition: width 0.3s, transform 0.3s; width: 260px; position: fixed; height: 100vh; z-index: 100; background-color: #ffffff; border-right: 1px solid #e5e7eb; overflow: hidden; overflow-y: auto; }
         body.sidebar-collapsed #sidebar { width: 72px !important; }
         body.sidebar-collapsed .menu-text { opacity: 0; display: none !important; }
         body.sidebar-collapsed #sidebar nav a { justify-content: center; padding-left: 0 !important; padding-right: 0 !important; }
         body.sidebar-collapsed #sidebar .sidebar-logo { display: none !important; }
         .main-content { margin-left: 260px; transition: margin-left 0.3s; }
         body.sidebar-collapsed .main-content { margin-left: 72px; }
+
+        /* Hide scrollbar for sidebar */
+        #sidebar::-webkit-scrollbar { width: 4px; }
+        #sidebar::-webkit-scrollbar-track { background: transparent; }
+        #sidebar::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 2px; }
+        #sidebar::-webkit-scrollbar-thumb:hover { background: #d1d5db; }
 
         /* ===== Responsive: Mobile Sidebar ===== */
         #sidebarOverlay { display: none; }
@@ -53,6 +59,12 @@
             document.documentElement.classList.remove('dark');
         }
     </script>
+    <script>
+        // Proteksi ringan - hanya disable right-click
+        document.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+        });
+    </script>
     @include('partials.dark-mode-styles')
     <link rel="icon" type="image/svg+xml" href="{{ asset('image/favicon-esurat.svg') }}">
     <link rel="shortcut icon" type="image/svg+xml" href="{{ asset('image/favicon-esurat.svg') }}">
@@ -83,8 +95,11 @@
             <a href="{{ route('dashboard') }}" class="flex items-center p-3 rounded-xl text-slate-600 hover:bg-slate-100 transition">
                 <i class="bi bi-grid-1x2-fill text-lg"></i><span class="ml-4 menu-text">Dashboard</span>
             </a>
-            <a href="{{ route('surat.index') }}" class="flex items-center p-3 rounded-xl bg-purple-50 text-[#4B164C] font-medium">
-                <i class="bi bi-envelope-fill text-lg"></i><span class="ml-4 menu-text">Kelola Surat</span>
+            <a href="{{ route('surat.index') }}" class="flex items-center p-3 rounded-xl text-slate-600 hover:bg-slate-100 transition">
+                <i class="bi bi-envelope-fill text-lg"></i><span class="ml-4 menu-text">Surat Masuk</span>
+            </a>
+            <a href="{{ route('surat_keluar.index') }}" class="flex items-center p-3 rounded-xl bg-purple-50 text-[#4B164C] font-medium">
+                <i class="bi bi-send-fill text-lg"></i><span class="ml-4 menu-text">Surat Keluar</span>
             </a>
             <a href="{{ route('profile.edit') }}" class="flex items-center p-3 rounded-xl text-slate-600 hover:bg-slate-100 transition">
                 <i class="bi bi-person-fill text-lg"></i><span class="ml-4 menu-text">Profil</span>
@@ -101,24 +116,42 @@
     <main class="main-content min-h-screen p-4 md:p-8">
         <!-- Header dengan Gradient -->
         <header class="bg-gradient-to-r from-[#4B164C] to-[#DD88CF] shadow-md p-5 flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center rounded-2xl mb-8 max-w-3xl mx-auto">
-            <h2 class="text-xl font-bold text-white">Edit Surat</h2>
-            <a href="{{ route('surat.index') }}" class="text-white hover:text-gray-200 transition flex items-center gap-2 font-medium">
+            <h2 class="text-xl font-bold text-white">Edit Surat Keluar</h2>
+            <a href="{{ route('surat_keluar.index') }}" class="text-white hover:text-gray-200 transition flex items-center gap-2 font-medium">
                 <i class="bi bi-arrow-left"></i> Kembali
             </a>
         </header>
 
         <div class="max-w-3xl mx-auto bg-white border border-gray-100 rounded-2xl shadow-sm p-5 sm:p-8">
+            @php
+                $googleDrive = app(\App\Services\GoogleDriveService::class);
+                $googleSheetKeluar = app(\App\Services\GoogleSheetKeluarService::class);
+                $googleConfigured = $googleDrive->isConfigured() && $googleSheetKeluar->isConfigured();
+            @endphp
+
+            @if (!$googleConfigured)
+                <div class="bg-yellow-50 text-yellow-800 p-4 rounded-xl mb-6 border border-yellow-200">
+                    <div class="flex items-start gap-3">
+                        <i class="bi bi-exclamation-triangle-fill text-xl mt-0.5"></i>
+                        <div>
+                            <p class="font-semibold">Integrasi Google belum dikonfigurasi</p>
+                            <p class="text-sm mt-1">Silakan <a href="{{ route('google.connect') }}" class="underline font-semibold">hubungkan akun Google</a> terlebih dahulu untuk menyimpan surat ke Google Drive dan Google Sheets.</p>
+                        </div>
+                    </div>
+                </div>
+            @endif
+
             @if ($errors->any())
                 <div class="bg-red-50 text-red-600 p-4 rounded-xl mb-6 border border-red-100">
                     <ul class="list-disc pl-5">
                         @foreach ($errors->all() as $error)
-                            <li>{{ $error }}</li>
+                            <li>{!! $error !!}</li>
                         @endforeach
                     </ul>
                 </div>
             @endif
 
-            <form action="{{ route('surat.update', $surat->id) }}" method="POST" enctype="multipart/form-data" class="space-y-6">
+            <form action="{{ route('surat_keluar.update', $surat->id) }}" method="POST" enctype="multipart/form-data" class="space-y-6">
                 @csrf
                 @method('PUT')
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -128,13 +161,13 @@
                             class="w-full border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-[#DD88CF] outline-none transition">
                     </div>
                     <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-2">Nama Pengirim</label>
-                        <input type="text" name="nama_pengirim" value="{{ old('nama_pengirim', $surat->nama_pengirim) }}" required
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Nama Penerima</label>
+                        <input type="text" name="nama_penerima" value="{{ old('nama_penerima', $surat->nama_penerima) }}" required
                             class="w-full border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-[#DD88CF] outline-none transition">
                     </div>
                     <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-2">Tanggal Masuk</label>
-                        <input type="text" id="tanggal_masuk" name="tanggal_masuk" value="{{ old('tanggal_masuk', \Carbon\Carbon::parse($surat->tanggal_masuk)->format('Y-m-d')) }}" required autocomplete="off" placeholder="Pilih tanggal"
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Tanggal Keluar</label>
+                        <input type="text" id="tanggal_keluar" name="tanggal_keluar" value="{{ old('tanggal_keluar', \Carbon\Carbon::parse($surat->tanggal_keluar)->format('Y-m-d')) }}" required autocomplete="off" placeholder="Pilih tanggal"
                             class="w-full border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-[#DD88CF] outline-none transition cursor-pointer bg-white">
                     </div>
                     <div>
@@ -198,7 +231,7 @@
             locale: "id",
             disableMobile: true,
         };
-        flatpickr("#tanggal_masuk", datePickerOptions);
+        flatpickr("#tanggal_keluar", datePickerOptions);
         flatpickr("#tanggal_buat", datePickerOptions);
     </script>
 

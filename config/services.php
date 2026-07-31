@@ -40,4 +40,19 @@ return [
         'secret_key' => env('RECAPTCHA_SECRET_KEY'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Google Login (Socialite)
+    |--------------------------------------------------------------------------
+    |
+    | Credential ini khusus untuk login pengguna via Google.
+    | Berbeda dari GOOGLE_OAUTH_* yang dipakai untuk Google Drive & Sheets.
+    |
+    */
+    'google' => [
+        'client_id' => env('GOOGLE_LOGIN_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_LOGIN_CLIENT_SECRET'),
+        'redirect' => env('APP_URL', 'http://127.0.0.1:8000') . '/auth/google/callback',
+    ],
+
 ];

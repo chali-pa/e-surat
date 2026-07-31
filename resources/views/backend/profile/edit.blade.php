@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Edit Profil</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <style>
@@ -169,6 +170,7 @@
                 <div class="lg:col-span-2 space-y-6">
                     @include('profile.partials.update-profile-information-form')
                     @include('profile.partials.update-password-form')
+                    @include('profile.partials.connected-accounts')
 
                     <div class="bg-white p-6 md:p-8 rounded-2xl border border-red-100 shadow-sm">
                         <h2 class="text-lg font-bold text-red-600 mb-1 flex items-center gap-2">

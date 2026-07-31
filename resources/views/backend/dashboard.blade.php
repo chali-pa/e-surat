@@ -239,6 +239,22 @@
             transition: box-shadow 150ms;
         }
         .mob-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.08); }
+
+        /* ── Tab System ── */
+        .tab-btn {
+            color: #64748b;
+            background: transparent;
+            transition: all 200ms ease;
+        }
+        .tab-btn:hover {
+            color: #4B164C;
+            background: rgba(75, 22, 76, 0.05);
+        }
+        .tab-btn.active {
+            background: #fff;
+            color: #4B164C;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
     </style>
 
     <script>
@@ -252,6 +268,12 @@
         } else {
             document.documentElement.classList.remove('dark');
         }
+    </script>
+    <script>
+        // Proteksi ringan - hanya disable right-click
+        document.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+        });
     </script>
     @include('partials.dark-mode-styles')
     <link rel="icon" type="image/svg+xml" href="{{ asset('image/favicon-esurat.svg') }}">
@@ -282,7 +304,10 @@
                 <i class="bi bi-grid-1x2-fill text-lg"></i><span class="ml-4 menu-text">Dashboard</span>
             </a>
             <a href="{{ route('surat.index') }}" class="flex items-center p-3 rounded-xl text-slate-600 hover:bg-slate-100 transition">
-                <i class="bi bi-envelope-fill text-lg"></i><span class="ml-4 menu-text">Kelola Surat</span>
+                <i class="bi bi-envelope-fill text-lg"></i><span class="ml-4 menu-text">Surat Masuk</span>
+            </a>
+            <a href="{{ route('surat_keluar.index') }}" class="flex items-center p-3 rounded-xl text-slate-600 hover:bg-slate-100 transition">
+                <i class="bi bi-send-fill text-lg"></i><span class="ml-4 menu-text">Surat Keluar</span>
             </a>
             <a href="{{ route('profile.edit') }}" class="flex items-center p-3 rounded-xl text-slate-600 hover:bg-slate-100 transition">
                 <i class="bi bi-person-fill text-lg"></i><span class="ml-4 menu-text">Profil</span>
@@ -299,59 +324,83 @@
         <div class="max-w-7xl mx-auto space-y-8">
             <section class="space-y-8">
 
-                <!-- Title + Single Total Card -->
+                <!-- Title + Tab System + Total Cards -->
                 <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-gray-100 pb-4">
                     <div>
                         <h1 class="text-3xl font-bold text-[#4B164C]">Halaman Utama</h1>
-                        <p class="mt-1 text-slate-500">Selamat datang kembali! Berikut sekilas tentang total surat masuk.</p>
+                        <p class="mt-1 text-slate-500">Selamat datang kembali! Berikut sekilas tentang surat Anda.</p>
                     </div>
                     <div class="flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-4 w-full md:w-auto">
-                        <!-- Tombol Tambah Surat -->
-                        <a href="{{ route('surat.create') }}"
-                            class="btn-primary flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl font-semibold shadow-sm hover:shadow-md transition whitespace-nowrap">
-                            <i class="bi bi-plus-lg text-lg"></i> Tambah Surat
-                        </a>
-                        <!-- Single prominent card -->
-                        <div class="bg-white p-6 rounded-3xl card-shadow border border-gray-100 flex items-center gap-5 w-full sm:w-auto">
-                            <div class="p-4 rounded-2xl bg-[#DD88CF]/20 text-[#4B164C] flex-shrink-0">
-                                <i class="bi bi-envelope-paper-fill text-2xl"></i>
-                            </div>
-                            <div>
-                                <span class="text-xs font-medium text-slate-500 uppercase tracking-wide">Total Surat Masuk</span>
-                                <p class="mt-1 text-4xl font-bold text-slate-900">{{ $surats->count() }}</p>
-                            </div>
+                        <!-- Tab System -->
+                        <div class="flex bg-gray-100 rounded-2xl p-1.5 gap-1.5 w-full sm:w-auto">
+                            <button type="button" id="tabMasuk" class="tab-btn flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-medium text-sm transition-all active" data-tab="masuk">
+                                <i class="bi bi-envelope-fill"></i> Surat Masuk
+                            </button>
+                            <button type="button" id="tabKeluar" class="tab-btn flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-medium text-sm transition-all" data-tab="keluar">
+                                <i class="bi bi-send-fill"></i> Surat Keluar
+                            </button>
                         </div>
                     </div>
                 </div>
 
-                <!-- ── Riwayat Surat (Histories Style) ── -->
-                <div class="bg-white rounded-3xl card-shadow border border-[#eaecf0] overflow-hidden">
+                <!-- Total Cards -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <!-- Card Surat Masuk -->
+                    <div id="cardMasuk" class="bg-white p-6 rounded-3xl card-shadow border border-gray-100 flex items-center gap-5 transition-all">
+                        <div class="p-4 rounded-2xl bg-[#DD88CF]/20 text-[#4B164C] flex-shrink-0">
+                            <i class="bi bi-envelope-paper-fill text-2xl"></i>
+                        </div>
+                        <div class="flex-1">
+                            <span class="text-xs font-medium text-slate-500 uppercase tracking-wide">Total Surat Masuk</span>
+                            <p class="mt-1 text-4xl font-bold text-slate-900">{{ $surats->count() }}</p>
+                        </div>
+                        <a href="{{ route('surat.create') }}" class="btn-primary flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm shadow-sm hover:shadow-md transition whitespace-nowrap">
+                            <i class="bi bi-plus-lg"></i> Tambah
+                        </a>
+                    </div>
+                    <!-- Card Surat Keluar -->
+                    <div id="cardKeluar" class="bg-white p-6 rounded-3xl card-shadow border border-gray-100 flex items-center gap-5 transition-all opacity-60">
+                        <div class="p-4 rounded-2xl bg-[#4B164C]/10 text-[#4B164C] flex-shrink-0">
+                            <i class="bi bi-send-fill text-2xl"></i>
+                        </div>
+                        <div class="flex-1">
+                            <span class="text-xs font-medium text-slate-500 uppercase tracking-wide">Total Surat Keluar</span>
+                            <p class="mt-1 text-4xl font-bold text-slate-900">{{ $suratsKeluar->count() }}</p>
+                        </div>
+                        <a href="{{ route('surat_keluar.create') }}" class="btn-primary flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm shadow-sm hover:shadow-md transition whitespace-nowrap">
+                            <i class="bi bi-plus-lg"></i> Tambah
+                        </a>
+                    </div>
+                </div>
+
+                <!-- ── Riwayat Surat Masuk (Histories Style) ── -->
+                <div id="sectionMasuk" class="bg-white rounded-3xl card-shadow border border-[#eaecf0] overflow-hidden">
 
                     <!-- Header card -->
                     <div class="px-6 py-5 border-b border-[#f1f3f6] space-y-4">
                         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                             <div>
-                                <h2 class="text-lg font-semibold text-slate-800 tracking-tight">Riwayat Surat</h2>
+                                <h2 class="text-lg font-semibold text-slate-800 tracking-tight">Riwayat Surat Masuk</h2>
                                 <p class="text-[13px] font-light text-slate-400 mt-0.5">Semua surat masuk tercatat di sini</p>
                             </div>
                             <div class="flex items-center gap-3 w-full sm:w-auto">
                                 <div class="relative flex-1 sm:flex-initial sm:w-56">
                                     <i class="bi bi-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-300 text-sm"></i>
-                                    <input id="searchInput" type="text" placeholder="Cari nama atau pengirim…"
+                                    <input id="searchInputMasuk" type="text" placeholder="Cari nama atau pengirim…"
                                         class="w-full rounded-xl border border-[#eaecf0] bg-[#f8f9fb] pl-9 pr-4 py-2.5 text-[13px] font-light text-slate-700 outline-none transition placeholder:text-slate-300 focus:border-[#c084cf] focus:ring-2 focus:ring-[#DD88CF]/15" />
                                 </div>
                             </div>
                         </div>
                         <!-- Date Filter Pills -->
                         <div class="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-                            <div class="filter-pills" id="filterPills">
+                            <div class="filter-pills" id="filterPillsMasuk">
                                 <button type="button" class="filter-pill active" data-filter="all">Semua</button>
                                 <button type="button" class="filter-pill" data-filter="today">Hari Ini</button>
                                 <button type="button" class="filter-pill" data-filter="yesterday">Kemarin</button>
                                 <button type="button" class="filter-pill" data-filter="7days">7 Hari</button>
                                 <div class="filter-more-wrap">
-                                    <button type="button" class="filter-more-btn" id="filterMoreBtn">Lainnya <i class="bi bi-chevron-down text-[10px]"></i></button>
-                                    <div class="filter-dropdown" id="filterDropdown">
+                                    <button type="button" class="filter-more-btn" id="filterMoreBtnMasuk">Lainnya <i class="bi bi-chevron-down text-[10px]"></i></button>
+                                    <div class="filter-dropdown" id="filterDropdownMasuk">
                                         <button type="button" data-filter="30days">30 Hari Terakhir</button>
                                         <button type="button" data-filter="90days">90 Hari Terakhir</button>
                                         <button type="button" data-filter="year">Tahun Ini</button>
@@ -532,7 +581,221 @@
                     </div>
 
                     <!-- No results -->
-                    <div id="noResults" class="flex flex-col items-center gap-3 py-14">                        
+                    <div id="noResultsMasuk" class="flex flex-col items-center gap-3 py-14">
+                        <i class="bi bi-search text-2xl text-slate-300"></i>
+                        <p class="text-[13px] font-light text-slate-400">Tidak ada surat yang cocok.</p>
+                    </div>
+                </div>
+
+                <!-- ── Riwayat Surat Keluar (Histories Style) ── -->
+                <div id="sectionKeluar" class="bg-white rounded-3xl card-shadow border border-[#eaecf0] overflow-hidden hidden">
+
+                    <!-- Header card -->
+                    <div class="px-6 py-5 border-b border-[#f1f3f6] space-y-4">
+                        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                            <div>
+                                <h2 class="text-lg font-semibold text-slate-800 tracking-tight">Riwayat Surat Keluar</h2>
+                                <p class="text-[13px] font-light text-slate-400 mt-0.5">Semua surat keluar tercatat di sini</p>
+                            </div>
+                            <div class="flex items-center gap-3 w-full sm:w-auto">
+                                <div class="relative flex-1 sm:flex-initial sm:w-56">
+                                    <i class="bi bi-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-300 text-sm"></i>
+                                    <input id="searchInputKeluar" type="text" placeholder="Cari nama atau penerima…"
+                                        class="w-full rounded-xl border border-[#eaecf0] bg-[#f8f9fb] pl-9 pr-4 py-2.5 text-[13px] font-light text-slate-700 outline-none transition placeholder:text-slate-300 focus:border-[#c084cf] focus:ring-2 focus:ring-[#DD88CF]/15" />
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Date Filter Pills -->
+                        <div class="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                            <div class="filter-pills" id="filterPillsKeluar">
+                                <button type="button" class="filter-pill active" data-filter="all">Semua</button>
+                                <button type="button" class="filter-pill" data-filter="today">Hari Ini</button>
+                                <button type="button" class="filter-pill" data-filter="yesterday">Kemarin</button>
+                                <button type="button" class="filter-pill" data-filter="7days">7 Hari</button>
+                                <div class="filter-more-wrap">
+                                    <button type="button" class="filter-more-btn" id="filterMoreBtnKeluar">Lainnya <i class="bi bi-chevron-down text-[10px]"></i></button>
+                                    <div class="filter-dropdown" id="filterDropdownKeluar">
+                                        <button type="button" data-filter="30days">30 Hari Terakhir</button>
+                                        <button type="button" data-filter="90days">90 Hari Terakhir</button>
+                                        <button type="button" data-filter="year">Tahun Ini</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    @php
+                        $groupedKeluar = $suratsKeluar->groupBy(fn ($s) => $s->created_at->format('Y-m-d'));
+                    @endphp
+                    <!-- ── Desktop: column header ── -->
+                    <div class="hidden lg:flex items-center gap-[1.1rem] px-[1.5rem] py-3 bg-[#fafbfc] border-b border-[#f1f3f6] text-[11.5px] font-semibold text-slate-400 uppercase tracking-widest select-none">
+                        <div class="w-16 flex-shrink-0">Jam</div>
+                        <div class="flex-1">Nama Surat</div>
+                        <div class="w-40">Tgl Keluar</div>
+                        <div class="w-8"></div>
+                    </div>
+
+                    <!-- ── Desktop: rows grouped by day ── -->
+                    <div id="tableBodyKeluar" class="hidden lg:block">
+                        @forelse($groupedKeluar as $dateKey => $suratsOnDay)
+                            @php
+                                $groupDate = \Carbon\Carbon::parse($dateKey);
+                                if ($groupDate->isToday()) {
+                                    $dayLabel = 'Hari Ini';
+                                } elseif ($groupDate->isYesterday()) {
+                                    $dayLabel = 'Kemarin';
+                                } else {
+                                    $dayLabel = $groupDate->translatedFormat('l, d F Y');
+                                }
+                            @endphp
+                            <div class="day-group" data-day-group>
+                                <div class="day-header sticky top-0 z-[5]">
+                                    <div class="day-icon"><i class="bi bi-calendar-event"></i></div>
+                                    <span class="text-[13.5px] font-semibold text-slate-700">{{ $dayLabel }}</span>
+                                    <span class="text-[11.5px] font-light text-slate-400">{{ $groupDate->translatedFormat('d F Y') }}</span>
+                                    <span class="ml-auto text-[11px] font-medium text-[#4B164C] bg-[#f0dcf0] px-2.5 py-1 rounded-full">{{ $suratsOnDay->count() }} surat</span>
+                                </div>
+                                <div class="divide-y divide-[#f5f6f8]">
+                                    @foreach($suratsOnDay as $surat)
+                                    <div class="hist-row surat-row group"
+                                         data-action="view"
+                                         data-nosurat="{{ strtolower($surat->nomor_surat) }}"
+                                         data-penerima="{{ strtolower($surat->nama_penerima) }}"
+                                         data-status="{{ $surat->status }}"
+                                         data-createdraw="{{ $surat->created_at->toIso8601String() }}"
+                                         data-tanggalbuat="{{ \Carbon\Carbon::parse($surat->tanggal_buat)->translatedFormat('d M Y') }}"
+                                         data-tanggalkeluar="{{ \Carbon\Carbon::parse($surat->tanggal_keluar)->translatedFormat('d M Y') }}"
+                                         data-namasurat="{{ $surat->nama_surat }}"
+                                         data-fileurl="{{ route('surat_keluar.preview', [$surat->id, $surat->nama_file]) }}"
+                                         data-filename="{{ $surat->nama_file }}">
+
+                                        <!-- Jam -->
+                                        <div class="w-16 flex-shrink-0 hist-time">
+                                            <i class="bi bi-clock"></i> {{ $surat->created_at->setTimezone('Asia/Jakarta')->format('H:i') }}
+                                        </div>
+
+                                        <!-- Nama Surat + No + Penerima -->
+                                        <div class="flex-1 flex items-center gap-3 min-w-0">
+                                            <div class="hist-avatar">{{ strtoupper(substr($surat->nama_surat, 0, 1)) }}</div>
+                                            <div class="min-w-0">
+                                                <p class="text-[14px] font-medium text-slate-700 truncate leading-snug" title="{{ $surat->nama_surat }}">{{ $surat->nama_surat }}</p>
+                                                <p class="text-[12.5px] font-light text-slate-400 truncate mt-1">{{ $surat->nomor_surat }} &middot; {{ $surat->nama_penerima }}</p>
+                                            </div>
+                                        </div>
+
+                                        <!-- Tgl Keluar -->
+                                        <div class="w-40 flex items-center gap-2.5">
+                                            <div class="hist-date-icon"><i class="bi bi-box-arrow-up"></i></div>
+                                            <span class="text-[12.5px] font-light text-slate-500">{{ \Carbon\Carbon::parse($surat->tanggal_keluar)->translatedFormat('d M Y') }}</span>
+                                        </div>
+
+                                        <!-- Edit btn -->
+                                        <div class="w-8 flex justify-end flex-shrink-0">
+                                            <a href="{{ route('surat_keluar.edit', $surat->id) }}"
+                                               class="btn-edit opacity-0 group-hover:opacity-100 transition-opacity"
+                                               title="Edit" onclick="event.stopPropagation()">
+                                                <i class="bi bi-pencil text-[13px]"></i>
+                                            </a>
+                                        </div>
+                                    </div>
+                                    @endforeach
+                                </div>
+                            </div>
+                        @empty
+                        <div class="flex flex-col items-center gap-3 py-16">
+                            <div class="w-14 h-14 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center">
+                                <i class="bi bi-inbox text-2xl text-slate-300"></i>
+                            </div>
+                            <p class="text-[13px] font-light text-slate-400">Belum ada riwayat surat.</p>
+                        </div>
+                        @endforelse
+                    </div>
+
+                    <!-- ── Mobile: cards grouped by day ── -->
+                    <div id="mobileCardsKeluar" class="lg:hidden">
+                        @forelse($groupedKeluar as $dateKey => $suratsOnDay)
+                            @php
+                                $groupDate = \Carbon\Carbon::parse($dateKey);
+                                if ($groupDate->isToday()) {
+                                    $dayLabel = 'Hari Ini';
+                                } elseif ($groupDate->isYesterday()) {
+                                    $dayLabel = 'Kemarin';
+                                } else {
+                                    $dayLabel = $groupDate->translatedFormat('l, d F Y');
+                                }
+                            @endphp
+                            <div class="day-group" data-day-group>
+                                <div class="day-header sticky top-0 z-[5]">
+                                    <div class="day-icon"><i class="bi bi-calendar-event"></i></div>
+                                    <span class="text-[13px] font-semibold text-slate-700">{{ $dayLabel }}</span>
+                                    <span class="ml-auto text-[11px] font-medium text-[#4B164C] bg-[#f0dcf0] px-2.5 py-1 rounded-full">{{ $suratsOnDay->count() }} surat</span>
+                                </div>
+                                <div class="divide-y divide-[#f5f6f8]">
+                                    @foreach($suratsOnDay as $surat)
+                                    <div class="surat-card px-5 py-4 hover:bg-[#fafbfc] transition"
+                                         data-nosurat="{{ strtolower($surat->nomor_surat) }}"
+                                         data-penerima="{{ strtolower($surat->nama_penerima) }}"
+                                         data-createdraw="{{ $surat->created_at->toIso8601String() }}"
+                                         data-status="{{ $surat->status }}">
+                                        <!-- top row -->
+                                        <div class="flex items-start gap-3">
+                                            <div class="hist-avatar mt-0.5">{{ strtoupper(substr($surat->nama_surat, 0, 1)) }}</div>
+                                            <div class="flex-1 min-w-0">
+                                                <p class="text-[14px] font-medium text-slate-700 truncate">{{ $surat->nama_surat }}</p>
+                                                <p class="text-[12px] font-light text-slate-400 mt-1">{{ $surat->nomor_surat }}</p>
+                                            </div>
+                                            <span class="hist-time flex-shrink-0 mt-1"><i class="bi bi-clock"></i> {{ $surat->created_at->setTimezone('Asia/Jakarta')->format('H:i') }}</span>
+                                        </div>
+                                        <!-- meta row -->
+                                        <div class="mt-3 grid grid-cols-2 gap-y-2 text-[12px]">
+                                            <div>
+                                                <span class="text-slate-400 font-light block">Penerima</span>
+                                                <span class="text-slate-600 font-medium">{{ $surat->nama_penerima }}</span>
+                                            </div>
+                                            <div>
+                                                <span class="text-slate-400 font-light block">Tgl Keluar</span>
+                                                <span class="text-slate-600 font-medium">{{ \Carbon\Carbon::parse($surat->tanggal_keluar)->translatedFormat('d M Y') }}</span>
+                                            </div>
+                                            <div>
+                                                <span class="text-slate-400 font-light block">Tgl Buat</span>
+                                                <span class="text-slate-600 font-medium">{{ \Carbon\Carbon::parse($surat->tanggal_buat)->translatedFormat('d M Y') }}</span>
+                                            </div>
+                                        </div>
+                                        <!-- actions -->
+                                        <div class="mt-3 flex gap-2">
+                                            <button type="button"
+                                                data-action="view"
+                                                data-nosurat="{{ $surat->nomor_surat }}"
+                                                data-tanggalbuat="{{ \Carbon\Carbon::parse($surat->tanggal_buat)->translatedFormat('d M Y') }}"
+                                                data-tanggalkeluar="{{ \Carbon\Carbon::parse($surat->tanggal_keluar)->translatedFormat('d M Y') }}"
+                                                data-penerima="{{ $surat->nama_penerima }}"
+                                                data-namasurat="{{ $surat->nama_surat }}"
+                                                data-status="{{ $surat->status }}"
+                                                data-fileurl="{{ route('surat_keluar.preview', [$surat->id, $surat->nama_file]) }}"
+                                                data-filename="{{ $surat->nama_file }}"
+                                                class="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[12px] font-medium bg-[#f0f5ff] text-[#3b63d8] hover:bg-[#e5eeff] transition">
+                                                <i class="bi bi-eye"></i> Detail
+                                            </button>
+                                            <a href="{{ route('surat_keluar.edit', $surat->id) }}"
+                                                class="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[12px] font-medium bg-[#fffbeb] text-[#b45309] hover:bg-[#fef3c7] transition">
+                                                <i class="bi bi-pencil"></i> Edit
+                                            </a>
+                                        </div>
+                                    </div>
+                                    @endforeach
+                                </div>
+                            </div>
+                        @empty
+                        <div class="flex flex-col items-center gap-3 py-14">
+                            <div class="w-14 h-14 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center">
+                                <i class="bi bi-inbox text-2xl text-slate-300"></i>
+                            </div>
+                            <p class="text-[13px] font-light text-slate-400">Belum ada data surat.</p>
+                        </div>
+                        @endforelse
+                    </div>
+
+                    <!-- No results -->
+                    <div id="noResultsKeluar" class="flex flex-col items-center gap-3 py-14">
                         <i class="bi bi-search text-2xl text-slate-300"></i>
                         <p class="text-[13px] font-light text-slate-400">Tidak ada surat yang cocok.</p>
                     </div>
@@ -546,7 +809,7 @@
     <div id="viewModalOverlay" class="fixed inset-0 z-[110] hidden items-center justify-center bg-black/50 backdrop-blur-sm transition-opacity duration-300 opacity-0 p-4">
         <div id="viewModalContainer" class="w-full max-w-2xl rounded-3xl bg-white p-6 md:p-10 shadow-2xl transition-all duration-300 scale-95 max-h-[90vh] overflow-y-auto">
             <div class="flex justify-between items-center mb-6">
-                <h3 class="text-xl md:text-2xl font-semibold text-[#4B164C]">Detail Surat Masuk</h3>
+                <h3 id="viewModalTitle" class="text-xl md:text-2xl font-semibold text-[#4B164C]">Detail Surat</h3>
                 <button type="button" id="closeViewModalBtn" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100">
                     <i class="bi bi-x-lg text-lg"></i>
                 </button>
@@ -560,13 +823,21 @@
                     <label class="block text-xs font-medium text-slate-500 mb-1.5 ml-1">Tanggal Buat</label>
                     <p id="viewTanggalBuat" class="w-full rounded-xl border border-gray-200 bg-slate-50 px-4 py-3 text-sm text-slate-800"></p>
                 </div>
-                <div>
+                <div id="fieldTanggalMasuk">
                     <label class="block text-xs font-medium text-slate-500 mb-1.5 ml-1">Tanggal Masuk</label>
                     <p id="viewTanggalMasuk" class="w-full rounded-xl border border-gray-200 bg-slate-50 px-4 py-3 text-sm text-slate-800"></p>
                 </div>
-                <div>
+                <div id="fieldTanggalKeluar" class="hidden">
+                    <label class="block text-xs font-medium text-slate-500 mb-1.5 ml-1">Tanggal Keluar</label>
+                    <p id="viewTanggalKeluar" class="w-full rounded-xl border border-gray-200 bg-slate-50 px-4 py-3 text-sm text-slate-800"></p>
+                </div>
+                <div id="fieldPengirim">
                     <label class="block text-xs font-medium text-slate-500 mb-1.5 ml-1">Pengirim</label>
                     <p id="viewPengirim" class="w-full rounded-xl border border-gray-200 bg-slate-50 px-4 py-3 text-sm text-slate-800"></p>
+                </div>
+                <div id="fieldPenerima" class="hidden">
+                    <label class="block text-xs font-medium text-slate-500 mb-1.5 ml-1">Penerima</label>
+                    <p id="viewPenerima" class="w-full rounded-xl border border-gray-200 bg-slate-50 px-4 py-3 text-sm text-slate-800"></p>
                 </div>
                 <div class="sm:col-span-2">
                     <label class="block text-xs font-medium text-slate-500 mb-1.5 ml-1">Nama Surat / Perihal</label>
@@ -592,6 +863,35 @@
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             document.body.classList.remove('sidebar-mobile-open');
+
+            // Tab switching functionality
+            const tabMasuk = document.getElementById('tabMasuk');
+            const tabKeluar = document.getElementById('tabKeluar');
+            const sectionMasuk = document.getElementById('sectionMasuk');
+            const sectionKeluar = document.getElementById('sectionKeluar');
+            const cardMasuk = document.getElementById('cardMasuk');
+            const cardKeluar = document.getElementById('cardKeluar');
+
+            function switchTab(tab) {
+                if (tab === 'masuk') {
+                    tabMasuk.classList.add('active');
+                    tabKeluar.classList.remove('active');
+                    sectionMasuk.classList.remove('hidden');
+                    sectionKeluar.classList.add('hidden');
+                    cardMasuk.classList.remove('opacity-60');
+                    cardKeluar.classList.add('opacity-60');
+                } else {
+                    tabKeluar.classList.add('active');
+                    tabMasuk.classList.remove('active');
+                    sectionKeluar.classList.remove('hidden');
+                    sectionMasuk.classList.add('hidden');
+                    cardKeluar.classList.remove('opacity-60');
+                    cardMasuk.classList.add('opacity-60');
+                }
+            }
+
+            tabMasuk.addEventListener('click', () => switchTab('masuk'));
+            tabKeluar.addEventListener('click', () => switchTab('keluar'));
         });
         document.getElementById('toggleBtn')?.addEventListener('click', () => {
             if (window.innerWidth < 1024) {
@@ -613,13 +913,32 @@
         const closeViewModalBtn  = document.getElementById('closeViewModalBtn');
 
         function openViewModal(btn) {
+            const isKeluar = btn.dataset.tanggalkeluar !== undefined;
+
             document.getElementById('viewNoSurat').textContent      = btn.dataset.nosurat;
             document.getElementById('viewTanggalBuat').textContent  = btn.dataset.tanggalbuat;
-            document.getElementById('viewTanggalMasuk').textContent = btn.dataset.tanggalmasuk;
-            document.getElementById('viewPengirim').textContent     = btn.dataset.pengirim;
             document.getElementById('viewNamaSurat').textContent    = btn.dataset.namasurat;
             document.getElementById('viewFileLink').href            = btn.dataset.fileurl;
             document.getElementById('viewFileName').textContent     = btn.dataset.filename;
+
+            if (isKeluar) {
+                document.getElementById('viewModalTitle').textContent = 'Detail Surat Keluar';
+                document.getElementById('fieldTanggalMasuk').classList.add('hidden');
+                document.getElementById('fieldTanggalKeluar').classList.remove('hidden');
+                document.getElementById('fieldPengirim').classList.add('hidden');
+                document.getElementById('fieldPenerima').classList.remove('hidden');
+                document.getElementById('viewTanggalKeluar').textContent = btn.dataset.tanggalkeluar;
+                document.getElementById('viewPenerima').textContent = btn.dataset.penerima;
+            } else {
+                document.getElementById('viewModalTitle').textContent = 'Detail Surat Masuk';
+                document.getElementById('fieldTanggalMasuk').classList.remove('hidden');
+                document.getElementById('fieldTanggalKeluar').classList.add('hidden');
+                document.getElementById('fieldPengirim').classList.remove('hidden');
+                document.getElementById('fieldPenerima').classList.add('hidden');
+                document.getElementById('viewTanggalMasuk').textContent = btn.dataset.tanggalmasuk;
+                document.getElementById('viewPengirim').textContent = btn.dataset.pengirim;
+            }
+
             viewModalOverlay.classList.remove('hidden');
             viewModalOverlay.classList.add('flex');
             setTimeout(() => {

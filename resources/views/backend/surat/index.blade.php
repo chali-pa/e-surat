@@ -37,7 +37,7 @@
 
         /* ===== Sidebar ===== */
         #sidebar {
-            transition: width 0.3s;
+            transition: width 0.3s, transform 0.3s;
             width: 260px;
             position: fixed;
             height: 100vh;
@@ -45,6 +45,7 @@
             background: #ffffff;
             border-right: 1px solid #e5e7eb;
             overflow: hidden;
+            overflow-y: auto;
         }
         body.sidebar-collapsed #sidebar { width: 72px !important; }
         body.sidebar-collapsed .menu-text { opacity: 0; display: none !important; }
@@ -52,6 +53,21 @@
         body.sidebar-collapsed #sidebar .sidebar-logo { display: none !important; }
         .main-content { margin-left: 260px; transition: margin-left 0.3s; }
         body.sidebar-collapsed .main-content { margin-left: 72px; }
+
+        /* Hide scrollbar for sidebar */
+        #sidebar::-webkit-scrollbar {
+            width: 4px;
+        }
+        #sidebar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        #sidebar::-webkit-scrollbar-thumb {
+            background: #e5e7eb;
+            border-radius: 2px;
+        }
+        #sidebar::-webkit-scrollbar-thumb:hover {
+            background: #d1d5db;
+        }
 
         /* ===== Toolbar ===== */
         .table-toolbar {
@@ -530,6 +546,101 @@
                 z-index: 90;
             }
         }
+
+        /* ===== Delete Confirmation Modal ===== */
+        #deleteModal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            background: rgba(0,0,0,.6);
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+        #deleteModal.open { display: flex; }
+        .delete-dialog {
+            background: #fff;
+            border-radius: 20px;
+            box-shadow: 0 32px 100px rgba(0,0,0,.28);
+            width: 100%;
+            max-width: 420px;
+            padding: 28px;
+            animation: modalIn 250ms ease;
+        }
+        @keyframes modalIn {
+            from { opacity: 0; transform: scale(0.95) translateY(10px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        .delete-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #FEE2E2 0%, #FECACA 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 16px;
+        }
+        .delete-icon i {
+            font-size: 28px;
+            color: #DC2626;
+        }
+        .delete-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #1F2937;
+            text-align: center;
+            margin-bottom: 8px;
+        }
+        .delete-message {
+            font-size: 0.9rem;
+            color: #6B7280;
+            text-align: center;
+            margin-bottom: 24px;
+            line-height: 1.5;
+        }
+        .delete-message strong {
+            color: #1F2937;
+            font-weight: 600;
+        }
+        .delete-actions {
+            display: flex;
+            gap: 12px;
+        }
+        .delete-btn-cancel {
+            flex: 1;
+            padding: 12px 20px;
+            border-radius: 12px;
+            border: 1px solid #E5E7EB;
+            background: #fff;
+            color: #4B5563;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .delete-btn-cancel:hover {
+            background: #F9FAFB;
+            border-color: #D1D5DB;
+        }
+        .delete-btn-confirm {
+            flex: 1;
+            padding: 12px 20px;
+            border-radius: 12px;
+            border: none;
+            background: linear-gradient(135deg, #DC2626 0%, #B91C1C 100%);
+            color: #fff;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .delete-btn-confirm:hover {
+            background: linear-gradient(135deg, #B91C1C 0%, #991B1B 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(220,38,38,.3);
+        }
         
         /* Pastikan semua panel preview menggunakan ukuran yang sama dan tidak overlap */
         #pvPanelIframe, #pvPanelImage, #pvPanelDocx, #pvPanelXlsx, #pvPanelUnsupported {
@@ -561,7 +672,14 @@
             document.documentElement.classList.remove('dark');
         }
     </script>
+    <script>
+        // Proteksi ringan - hanya disable right-click
+        document.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+        });
+    </script>
     @include('partials.dark-mode-styles')
+    @include('profile.partials.toast')
     <link rel="icon" type="image/svg+xml" href="{{ asset('image/favicon-esurat.svg') }}">
     <link rel="shortcut icon" type="image/svg+xml" href="{{ asset('image/favicon-esurat.svg') }}">
 </head>
@@ -596,7 +714,11 @@
             </a>
             <a href="{{ route('surat.index') }}" class="flex items-center p-3 rounded-xl bg-purple-50 text-[#4B164C] font-medium">
                 <i class="bi bi-envelope-fill text-lg"></i>
-                <span class="ml-4 menu-text">Kelola Surat</span>
+                <span class="ml-4 menu-text">Surat Masuk</span>
+            </a>
+            <a href="{{ route('surat_keluar.index') }}" class="flex items-center p-3 rounded-xl text-slate-600 hover:bg-slate-100 transition">
+                <i class="bi bi-send-fill text-lg"></i>
+                <span class="ml-4 menu-text">Surat Keluar</span>
             </a>
             <a href="{{ route('profile.edit') }}" class="flex items-center p-3 rounded-xl text-slate-600 hover:bg-slate-100 transition">
                 <i class="bi bi-person-fill text-lg"></i>
@@ -723,12 +845,10 @@
                                     <i class="bi bi-pencil-square"></i>
                                 </a>
                                 <!-- Hapus -->
-                                <form action="{{ route('surat.destroy', $surat->id) }}" method="POST" class="inline-flex m-0"
-                                      onsubmit="return confirm('Yakin hapus surat &quot;{{ $surat->nama_surat }}&quot;?');">
-                                    @csrf
-                                    @method('DELETE')
-                                    <button type="submit" class="action-btn delete-btn" title="Hapus Surat"><i class="bi bi-trash"></i></button>
-                                </form>
+                                <button type="button" class="action-btn delete-btn" title="Hapus Surat"
+                                    onclick="showDeleteModal('{{ $surat->id }}', '{{ $surat->nama_surat }}')">
+                                    <i class="bi bi-trash"></i>
+                                </button>
                             </div>
                         </td>
                     </tr>
@@ -849,6 +969,28 @@
     <!-- ========= PRINT AREA (hidden on screen, visible during window.print()) ========= -->
     <div id="printArea"></div>
 
+    <!-- ========= DELETE CONFIRMATION MODAL ========= -->
+    <div id="deleteModal">
+        <div class="delete-dialog">
+            <div class="delete-icon">
+                <i class="bi bi-trash"></i>
+            </div>
+            <h3 class="delete-title">Hapus Surat?</h3>
+            <p class="delete-message">
+                Apakah Anda yakin ingin menghapus surat <strong id="deleteSuratName"></strong>?<br>
+                Tindakan ini tidak dapat dibatalkan.
+            </p>
+            <div class="delete-actions">
+                <button type="button" class="delete-btn-cancel" onclick="closeDeleteModal()">Batal</button>
+                <form id="deleteForm" method="POST" style="flex: 1;">
+                    @csrf
+                    @method('DELETE')
+                    <button type="submit" class="delete-btn-confirm">Ya, Hapus</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <script>
     /* ================================================================
        SIDEBAR TOGGLE
@@ -870,6 +1012,32 @@
 
     document.querySelectorAll('#sidebar nav a').forEach(link => {
         link.addEventListener('click', closeMobileSidebar);
+    });
+
+    /* ================================================================
+       DELETE MODAL
+    ================================================================ */
+    function showDeleteModal(id, namaSurat) {
+        const modal = document.getElementById('deleteModal');
+        const suratName = document.getElementById('deleteSuratName');
+        const form = document.getElementById('deleteForm');
+
+        suratName.textContent = namaSurat;
+        form.action = '{{ route('surat.destroy', ':id') }}'.replace(':id', id);
+
+        modal.classList.add('open');
+    }
+
+    function closeDeleteModal() {
+        const modal = document.getElementById('deleteModal');
+        modal.classList.remove('open');
+    }
+
+    // Close modal when clicking outside
+    document.getElementById('deleteModal')?.addEventListener('click', (e) => {
+        if (e.target.id === 'deleteModal') {
+            closeDeleteModal();
+        }
     });
 
     /* ================================================================
@@ -1210,7 +1378,7 @@
             if (pw) {
                 pw.addEventListener('load', () => setTimeout(() => pw.print(), 400));
             } else {
-                alert('Izinkan popup untuk mencetak PDF. Atau gunakan tombol Unduh lalu buka & cetak manual.');
+                showToast('Izinkan popup untuk mencetak PDF. Atau gunakan tombol Unduh lalu buka & cetak manual.', 'error');
             }
 
         } else if (EXT_IMG.includes(ext)) {
@@ -1230,7 +1398,7 @@
             /* Fallback: render ulang khusus untuk cetak, memakai docx-preview */
 
             if (isOldDocFormat(fileName)) {
-                alert('Format .doc (lama) tidak dapat dicetak otomatis.\nFile akan diunduh agar dapat dibuka dan dicetak secara manual.');
+                showToast('Format .doc (lama) tidak dapat dicetak otomatis. File akan diunduh agar dapat dibuka dan dicetak secara manual.', 'error');
                 const a = document.createElement('a');
                 a.href = fileUrl;
                 a.download = fileName || 'surat';
@@ -1239,7 +1407,7 @@
             }
 
             if (typeof window.docx === 'undefined') {
-                alert('Library dokumen belum siap. File akan diunduh untuk dicetak secara manual.');
+                showToast('Library dokumen belum siap. File akan diunduh untuk dicetak secara manual.', 'error');
                 const a = document.createElement('a');
                 a.href = fileUrl;
                 a.download = fileName || 'surat';
@@ -1319,7 +1487,7 @@
                 tempContainer.remove();
                 showPrintOverlay(false);
                 console.error('[DOCX print]', err);
-                alert('Gagal menyiapkan dokumen untuk dicetak. File akan diunduh untuk dibuka secara manual.');
+                showToast('Gagal menyiapkan dokumen untuk dicetak. File akan diunduh untuk dibuka secara manual.', 'error');
                 const a = document.createElement('a');
                 a.href = fileUrl;
                 a.download = fileName || 'surat';
@@ -1451,11 +1619,11 @@
             } catch (err) {
                 showPrintOverlay(false);
                 console.error('[XLSX print]', err);
-                alert('Gagal menyiapkan spreadsheet untuk dicetak. Coba gunakan tombol Unduh.');
+                showToast('Gagal menyiapkan spreadsheet untuk dicetak. Coba gunakan tombol Unduh.', 'error');
             }
 
         } else {
-            alert(`Format .${ext} tidak dapat dicetak otomatis.\nFile akan diunduh agar dapat dibuka dan dicetak secara manual.`);
+            showToast(`Format .${ext} tidak dapat dicetak otomatis. File akan diunduh agar dapat dibuka dan dicetak secara manual.`, 'error');
             const a = document.createElement('a');
             a.href     = fileUrl;
             a.download = fileName || 'surat';

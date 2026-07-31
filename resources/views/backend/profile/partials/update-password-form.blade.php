@@ -40,6 +40,19 @@
             @error('password', 'updatePassword')
                 <p class="text-red-500 text-xs mt-1">{{ $message }}</p>
             @enderror
+
+            <!-- Password Strength Meter -->
+            <div class="mt-2 hidden" id="password-strength-container">
+                <div class="flex justify-between items-center mb-1">
+                    <span class="text-xs font-medium text-gray-500" id="password-strength-text">Kekuatan Password</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-1.5 flex overflow-hidden">
+                    <div id="strength-bar-1" class="h-1.5 w-1/3 bg-transparent transition-colors duration-300"></div>
+                    <div id="strength-bar-2" class="h-1.5 w-1/3 bg-transparent transition-colors duration-300 border-l border-white"></div>
+                    <div id="strength-bar-3" class="h-1.5 w-1/3 bg-transparent transition-colors duration-300 border-l border-white"></div>
+                </div>
+                <p class="text-[11px] text-gray-400 mt-1">Gunakan kombinasi huruf, angka, dan simbol (min. 8 karakter).</p>
+            </div>
         </div>
 
         <div>
@@ -86,4 +99,47 @@
             icon.classList.add('bi-eye');
         }
     }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const newPasswordInput = document.getElementById('update_new_password');
+        const strengthContainer = document.getElementById('password-strength-container');
+        const strengthText = document.getElementById('password-strength-text');
+        const bar1 = document.getElementById('strength-bar-1');
+        const bar2 = document.getElementById('strength-bar-2');
+        const bar3 = document.getElementById('strength-bar-3');
+
+        if(newPasswordInput) {
+            newPasswordInput.addEventListener('input', function() {
+                const val = this.value;
+                if (val.length > 0) {
+                    strengthContainer.classList.remove('hidden');
+                } else {
+                    strengthContainer.classList.add('hidden');
+                }
+
+                let strength = 0;
+                if (val.length >= 8) strength += 1;
+                if (val.match(/[a-z]/) && val.match(/[A-Z]/)) strength += 1;
+                if (val.match(/\d/) || val.match(/[^a-zA-Z\d]/)) strength += 1;
+
+                bar1.className = 'h-1.5 w-1/3 transition-colors duration-300 ' + (strength >= 1 ? 'bg-red-400' : 'bg-transparent');
+                bar2.className = 'h-1.5 w-1/3 transition-colors duration-300 border-l border-white ' + (strength >= 2 ? (strength >= 3 ? 'bg-green-400' : 'bg-yellow-400') : 'bg-transparent');
+                bar3.className = 'h-1.5 w-1/3 transition-colors duration-300 border-l border-white ' + (strength >= 3 ? 'bg-green-400' : 'bg-transparent');
+
+                if (strength === 0 || strength === 1) {
+                    strengthText.textContent = 'Lemah';
+                    strengthText.className = 'text-xs font-medium text-red-500';
+                    if(strength === 1) bar1.classList.replace('bg-red-400', 'bg-red-500');
+                } else if (strength === 2) {
+                    strengthText.textContent = 'Sedang';
+                    strengthText.className = 'text-xs font-medium text-yellow-600';
+                    bar1.classList.replace('bg-red-400', 'bg-yellow-400');
+                } else if (strength >= 3) {
+                    strengthText.textContent = 'Kuat';
+                    strengthText.className = 'text-xs font-medium text-green-600';
+                    bar1.classList.replace('bg-red-400', 'bg-green-400');
+                }
+            });
+        }
+    });
 </script>

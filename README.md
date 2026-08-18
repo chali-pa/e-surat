@@ -589,7 +589,6 @@ Aplikasi ini dilisensikan sesuai dengan lisensi proyek asli.
 ## 🆘 Bantuan
 
 Jika mengalami masalah:
-1. Cek log Laravel: `storage/logs/laravel.log`
-2. Cek console browser untuk error frontend
-3. Pastikan semua environment variable sudah dikonfigurasi dengan benar
-4. Restart server Laravel dan React setelah perubahan konfigurasi
+1. Cek console browser untuk error frontend
+2. Pastikan semua environment variable sudah dikonfigurasi dengan benar
+3. Restart server Laravel dan React setelah perubahan konfigurasi

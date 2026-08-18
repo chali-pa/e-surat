@@ -95,4 +95,4 @@ git_log_index.txt
 *.pid.lock
 .eslintcache
 
-.PRODUCTION.md
+PRODUCTION.md

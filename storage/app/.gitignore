@@ -1,7 +1,0 @@
-*
-!private/
-!public/
-!.gitignore
-
-/storage/app/google/credentials.json
-/storage/app/google/token.json

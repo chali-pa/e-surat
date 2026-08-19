@@ -189,6 +189,17 @@ export default function TermsOfService() {
             </section>
 
             {/* Section 9 */}
+            <section>
+              <h2 className="text-lg sm:text-xl font-bold text-slate-900 mb-3 flex items-center gap-2">
+                <span className="w-7 h-7 rounded-lg bg-purple-100 text-[#4B164C] text-xs flex items-center justify-center font-bold">9</span>
+                Kebijakan Privasi
+              </h2>
+              <p>
+                Penggunaan data pribadi Anda diatur oleh Kebijakan Privasi E-Surat yang terpisah. Dengan menggunakan layanan ini, Anda menyetujui pengumpulan dan penggunaan data sesuai dengan kebijakan privasi yang berlaku.
+              </p>
+            </section>
+
+            {/* Section 10 */}
             <section className="border-t border-slate-100 pt-6">
               <h2 className="text-lg sm:text-xl font-bold text-slate-900 mb-3 flex items-center gap-2">
                 <span className="w-7 h-7 rounded-lg bg-purple-100 text-[#4B164C] text-xs flex items-center justify-center font-bold">10</span>
@@ -198,7 +209,7 @@ export default function TermsOfService() {
                 Pertanyaan atau klarifikasi mengenai Syarat dan Ketentuan Layanan ini dapat disampaikan melalui kontak berikut:
               </p>
               <div className="p-4 bg-slate-100 rounded-xl text-xs sm:text-sm font-mono text-slate-800 space-y-1">
-                <div><strong>Email Kontak:</strong> <span className="text-slate-600">[CONTACT_EMAIL_PLACEHOLDER]</span></div>
+                <div><strong>Email Kontak:</strong> <span className="text-slate-600">e33965238@gmail.com</span></div>
               </div>
             </section>
 

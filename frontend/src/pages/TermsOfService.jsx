@@ -62,7 +62,7 @@ export default function TermsOfService() {
                 Penerimaan Ketentuan
               </h2>
               <p className="mb-3">
-                Dengan mengakses, mendaftar, atau menggunakan aplikasi <strong>E-Surat (Sistem Manajemen Surat)</strong> yang dioperasikan oleh <span className="font-semibold text-slate-800">[OPERATOR_NAME_PLACEHOLDER]</span>, Anda menyatakan bahwa Anda telah membaca, memahami, dan menyetujui untuk terikat oleh Syarat dan Ketentuan Layanan ini.
+                Dengan mengakses, mendaftar, atau menggunakan aplikasi <strong>E-Surat (Sistem Manajemen Surat)</strong>, Anda menyatakan bahwa Anda telah membaca, memahami, dan menyetujui untuk terikat oleh Syarat dan Ketentuan Layanan ini.
               </p>
               <p>
                 Jika Anda tidak menyetujui bagian mana pun dari Syarat dan Ketentuan ini, Anda tidak diperkenankan mengakses atau menggunakan aplikasi E-Surat.
@@ -189,17 +189,6 @@ export default function TermsOfService() {
             </section>
 
             {/* Section 9 */}
-            <section>
-              <h2 className="text-lg sm:text-xl font-bold text-slate-900 mb-3 flex items-center gap-2">
-                <span className="w-7 h-7 rounded-lg bg-purple-100 text-[#4B164C] text-xs flex items-center justify-center font-bold">9</span>
-                Hukum yang Berlaku
-              </h2>
-              <p>
-                Syarat dan Ketentuan ini diatur dan ditafsirkan sesuai dengan hukum yang berlaku di wilayah hukum <span className="font-semibold text-slate-800">[JURISDICTION_PLACEHOLDER]</span>.
-              </p>
-            </section>
-
-            {/* Section 10 */}
             <section className="border-t border-slate-100 pt-6">
               <h2 className="text-lg sm:text-xl font-bold text-slate-900 mb-3 flex items-center gap-2">
                 <span className="w-7 h-7 rounded-lg bg-purple-100 text-[#4B164C] text-xs flex items-center justify-center font-bold">10</span>
@@ -209,7 +198,6 @@ export default function TermsOfService() {
                 Pertanyaan atau klarifikasi mengenai Syarat dan Ketentuan Layanan ini dapat disampaikan melalui kontak berikut:
               </p>
               <div className="p-4 bg-slate-100 rounded-xl text-xs sm:text-sm font-mono text-slate-800 space-y-1">
-                <div><strong>Pengelola:</strong> <span className="text-slate-600">[OPERATOR_NAME_PLACEHOLDER]</span></div>
                 <div><strong>Email Kontak:</strong> <span className="text-slate-600">[CONTACT_EMAIL_PLACEHOLDER]</span></div>
               </div>
             </section>

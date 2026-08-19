@@ -62,7 +62,7 @@ export default function PrivacyPolicy() {
                 Pengantar
               </h2>
               <p className="mb-3">
-                Selamat datang di <strong>E-Surat (Sistem Manajemen Surat)</strong>. Kebijakan Privasi ini menjelaskan bagaimana aplikasi E-Surat yang dioperasikan oleh <span className="font-semibold text-slate-800">[OPERATOR_NAME_PLACEHOLDER]</span> mengumpulkan, menggunakan, menyimpan, dan melindungi informasi Anda saat Anda menggunakan aplikasi ini.
+                Selamat datang di <strong>E-Surat (Sistem Manajemen Surat)</strong>. Kebijakan Privasi ini menjelaskan bagaimana aplikasi E-Surat yang memiliki fungsi untuk mengumpulkan, menggunakan, menyimpan, dan melindungi informasi Anda saat Anda menggunakan aplikasi ini.
               </p>
               <p>
                 Aplikasi E-Surat dirancang khusus untuk mempermudah pencatatan, pengorganisasian, pratinjau (preview), pencetakan (print), serta pengarsipan Surat Masuk dan Surat Keluar secara digital dengan memanfaatkan integrasi Google OAuth, Google Drive, dan Google Sheets.
@@ -261,8 +261,8 @@ export default function PrivacyPolicy() {
                 Jika Anda memiliki pertanyaan, saran, atau kendala terkait Kebijakan Privasi ini, silakan hubungi pengelola aplikasi melalui:
               </p>
               <div className="p-4 bg-slate-100 rounded-xl text-xs sm:text-sm font-mono text-slate-800 space-y-1">
-                <div><strong>Pengelola:</strong> <span className="text-slate-600">[OPERATOR_NAME_PLACEHOLDER]</span></div>
-                <div><strong>Email Kontak Privasi:</strong> <span className="text-slate-600">[CONTACT_EMAIL_PLACEHOLDER]</span></div>
+                <div><strong>Email Kontak Privasi:</strong> <span className="text-slate-600">e33965238@gmail.com
+</span></div>
               </div>
             </section>
 

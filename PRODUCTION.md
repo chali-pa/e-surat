@@ -521,17 +521,114 @@ After both projects are deployed and environment variables are configured, test 
 
 ## 13. Troubleshooting
 
-### 🔴 `redirect_uri_mismatch`
+### 🔴 `redirect_uri_mismatch` — Error 400 from Google
 
-**Cause:** The `GOOGLE_REDIRECT_URI` in the backend does not exactly match an Authorized Redirect URI in Google Cloud Console.
+```
+Access blocked: This app's request is invalid
+Error 400: redirect_uri_mismatch
+```
 
-**Fix:**
-1. Open Google Cloud Console → Credentials → your OAuth Client
-2. Ensure `https://your-backend.vercel.app/api/google/callback` is listed exactly
-3. Update `GOOGLE_REDIRECT_URI` in Vercel backend environment variables to match
-4. Redeploy backend
+**What this means:** Google received a `redirect_uri` parameter that is not listed in the OAuth Client's Authorized Redirect URIs. Even one character difference causes this error.
+
+**Root cause in this project:** If `GOOGLE_REDIRECT_URI` is not set in the Vercel Production environment, the backend falls back to:
+```
+http://localhost:3000/api/google/callback
+```
+which will never match a production Google Cloud Console URI.
 
 ---
+
+#### Step-by-step fix
+
+**1. Identify the exact callback URL**
+
+The backend callback route is:
+```
+GET /api/google/callback
+```
+Registered as `app.use('/api/google', googleRoutes)` + `router.get('/callback', callback)`.
+
+The production callback URI is therefore:
+```
+https://esurat-backend.vercel.app/api/google/callback
+```
+
+**2. Set the Vercel environment variable**
+
+In **Vercel → esurat-backend project → Settings → Environment Variables**, set:
+
+| Variable | Value | Environment |
+|---|---|---|
+| `GOOGLE_REDIRECT_URI` | `https://esurat-backend.vercel.app/api/google/callback` | Production |
+
+> ⚠️ Make sure the scope is **Production**, not only Preview or Development.
+
+**3. Register the URI in Google Cloud Console**
+
+Go to **Google Cloud Console → APIs & Services → Credentials → your OAuth 2.0 Client ID → Edit**.
+
+Under **Authorized redirect URIs**, add:
+```
+https://esurat-backend.vercel.app/api/google/callback
+```
+
+Also keep the development URI for local testing:
+```
+http://localhost:3000/api/google/callback
+```
+
+Under **Authorized JavaScript origins**, add:
+```
+https://esurat-frontend.vercel.app
+http://localhost:5173
+```
+
+Click **Save** and wait ~5 minutes for changes to propagate.
+
+**4. Redeploy the backend**
+
+After setting the environment variable, go to **Vercel → esurat-backend → Deployments → Redeploy**.
+
+**5. Confirm with Vercel logs**
+
+After redeploying, visit `https://esurat-backend.vercel.app/api/google/connect`. The Vercel function logs will show:
+```
+[GoogleOAuth] /connect → redirectUri="https://esurat-backend.vercel.app/api/google/callback"
+```
+If it still shows `http://localhost:...`, the environment variable was not applied.
+
+---
+
+#### OAuth Consent Screen — Allow All Users
+
+By default a new Google Cloud project is in **Testing** mode. Only manually-added test users can sign in.
+
+To allow **all Google users** to log in:
+
+1. Go to **Google Cloud Console → APIs & Services → OAuth consent screen**
+2. If **Publishing status** is `Testing`, click **Publish App**
+3. Confirm the dialog
+
+> ⚠️ **Sensitive scopes and verification:** This app requests `drive` (full Drive access) and `spreadsheets` scopes. Google may show users a warning screen ("Google hasn't verified this app") but will still allow login. For production use, you can either:
+> - Accept the warning screen (fine for internal/trusted users)
+> - Submit the app for Google verification (required for public consumer apps)
+> - Switch to `drive.file` scope instead of `drive` to reduce verification requirements (`drive.file` only accesses files created by the app itself)
+
+---
+
+#### Checklist
+
+- [ ] `GOOGLE_REDIRECT_URI=https://esurat-backend.vercel.app/api/google/callback` in Vercel Production
+- [ ] Same URI listed in Google Cloud Console → Authorized redirect URIs
+- [ ] `GOOGLE_CLIENT_ID` set in Vercel Production
+- [ ] `GOOGLE_CLIENT_SECRET` set in Vercel Production
+- [ ] Backend redeployed after env var changes
+- [ ] OAuth Consent Screen publishing status set to **Production** (if all users need access)
+- [ ] Vercel function logs confirm correct redirectUri
+
+---
+
+
 
 ### 🔴 Refresh Token Expired / Revoked
 
@@ -571,7 +668,47 @@ Access to XMLHttpRequest at 'https://your-backend.vercel.app' from origin
 1. Check `VITE_API_BASE_URL` in the frontend Vercel environment variables
 2. Verify it points to the backend deployment URL (not the frontend URL)
 3. Redeploy frontend after correcting the variable
-4. Check the Vercel backend build logs to verify `dist/index.js` was compiled correctly
+4. Check the Vercel backend build logs to verify the function was deployed correctly
+
+---
+
+### 🔴 `404: NOT_FOUND` — Google OAuth `/api/google/connect` Returns Vercel 404
+
+```
+404: NOT_FOUND
+Code: NOT_FOUND
+ID: sin1::...
+```
+
+**Cause:** This is a **Vercel deployment/routing problem**, not a Google OAuth problem. The most common cause in this project is that `backend/dist/` is gitignored, but `vercel.json` was pointing `@vercel/node` at `dist/index.js`. When Vercel clones the repository, `dist/` does not exist, so no serverless function is deployed and every route returns Vercel's own `404: NOT_FOUND`.
+
+**How to diagnose:**
+1. Open `https://your-backend.vercel.app/api/health`
+2. If it also returns `404: NOT_FOUND` → the backend itself is not deployed (Vercel-level issue)
+3. If it returns `{"status":"ok"}` → the backend is deployed but that specific route is missing (application-level issue)
+
+**Fix (already applied):**
+
+The `backend/vercel.json` has been updated to point `@vercel/node` at `src/index.ts` directly:
+
+```json
+{
+  "builds": [{ "src": "src/index.ts", "use": "@vercel/node", "config": { "includeFiles": ["src/**"] } }],
+  "routes": [{ "src": "/(.*)", "dest": "src/index.ts" }]
+}
+```
+
+`@vercel/node` has built-in TypeScript support (uses esbuild internally). The compiled `dist/` directory is no longer needed at all during deployment.
+
+**Checklist if this error recurs:**
+1. Verify the Vercel backend project **Root Directory** is set to `backend` (not the repository root)
+2. Verify `backend/vercel.json` `src` points to `src/index.ts`, not `dist/index.js`
+3. Check **Vercel → Deployments → Build Logs** for build failures
+4. Confirm the route `GET /api/google/connect` exists in `src/routes/google.ts`
+5. Confirm `app.use('/api/google', googleRoutes)` is in `src/index.ts`
+6. Verify `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set in Vercel **Production** environment variables
+7. Verify `GOOGLE_REDIRECT_URI` is set to `https://your-backend.vercel.app/api/google/callback` in Vercel Production
+8. After any `vercel.json` or environment variable change, trigger a new deployment
 
 ---
 

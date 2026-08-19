@@ -10,6 +10,9 @@ export const redirect = async (req: AuthRequest, res: Response) => {
   try {
     const state = (req.query.userId as string) || '';
     const authUrl = generateGoogleAuthUrl(state);
+    // Log the redirect URI used (not the full URL with client secret) to aid debugging
+    const redirectUri = process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3000/api/google/callback';
+    console.log(`[GoogleOAuth] /connect → redirectUri="${redirectUri}" state="${state}"`);
     res.redirect(authUrl);
   } catch (error) {
     console.error('Google redirect error:', error);
@@ -17,10 +20,15 @@ export const redirect = async (req: AuthRequest, res: Response) => {
   }
 };
 
+
 export const callback = async (req: AuthRequest, res: Response) => {
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
   try {
     const { code, state } = req.query;
+
+    // Log redirect URI used in token exchange (for debugging mismatch errors)
+    const redirectUri = process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3000/api/google/callback';
+    console.log(`[GoogleOAuth] /callback received → redirectUri="${redirectUri}" hasCode=${!!code}`);
 
     if (!code) {
       return res.redirect(`${frontendUrl}/login?error=No authorization code received from Google`);
@@ -28,6 +36,7 @@ export const callback = async (req: AuthRequest, res: Response) => {
 
     const oauth2Client = getOAuth2Client();
     const { tokens } = await oauth2Client.getToken(code as string);
+
 
     console.log('OAuth Callback - Tokens received:', {
       has_access_token: !!tokens.access_token,

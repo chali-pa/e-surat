@@ -76,13 +76,11 @@ export const store = async (req: AuthRequest, res: Response) => {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  let filePath = '';
-
   try {
     console.log('=== STORE SURAT MASUK REQUEST START ===');
     console.log('User ID:', userId);
     console.log('Request body:', req.body);
-    console.log('Request file:', req.file ? req.file.filename : 'No file');
+    console.log('Request file:', req.file ? req.file.originalname : 'No file');
 
     const { nomor_surat, nama_pengirim, nama_surat, tanggal_masuk, tanggal_buat } = req.body;
 
@@ -106,7 +104,6 @@ export const store = async (req: AuthRequest, res: Response) => {
     let logicalPath = '';
 
     if (req.file) {
-      filePath = req.file.path;
       const originalName = req.file.originalname || `${nomor_surat}_${Date.now()}`;
       const ext = path.extname(originalName) || '.pdf';
       const cleanFileName = `${nomor_surat.replace(/[\/\\?%*:|"<>]/g, '_')}_${nama_surat.replace(/[\/\\?%*:|"<>]/g, '_')}_${Date.now()}${ext}`;
@@ -116,7 +113,7 @@ export const store = async (req: AuthRequest, res: Response) => {
       try {
         const uploadResult = await uploadUserLetterFile(
           userId,
-          filePath,
+          req.file.buffer,
           cleanFileName,
           'incoming',
           tanggal_masuk,
@@ -126,15 +123,7 @@ export const store = async (req: AuthRequest, res: Response) => {
         googleDriveId = uploadResult.fileId;
         webViewLink = uploadResult.webViewLink;
         logicalPath = uploadResult.logicalPath;
-
-        // Clean up local temp file after upload
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
-        }
       } catch (uploadError: any) {
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
-        }
         console.error('Google Drive upload error:', uploadError);
         if (isGoogleErrorInvalidGrant(uploadError)) {
           return res.status(401).json({
@@ -204,9 +193,6 @@ export const store = async (req: AuthRequest, res: Response) => {
       data: surat,
     });
   } catch (error: any) {
-    if (filePath && fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
     console.error('=== STORE SURAT MASUK FAILED ===', error);
     if (isGoogleErrorInvalidGrant(error)) {
       return res.status(401).json({
@@ -249,7 +235,6 @@ export const update = async (req: AuthRequest, res: Response) => {
     let logicalPath = oldSurat.file_path || '';
 
     if (req.file) {
-      const filePath = req.file.path;
       const originalName = req.file.originalname || `${nomor_surat}_${Date.now()}`;
       const ext = path.extname(originalName) || '.pdf';
       const cleanFileName = `${nomor_surat.replace(/[\/\\?%*:|"<>]/g, '_')}_${nama_surat.replace(/[\/\\?%*:|"<>]/g, '_')}_${Date.now()}${ext}`;
@@ -265,7 +250,7 @@ export const update = async (req: AuthRequest, res: Response) => {
 
         const uploadResult = await uploadUserLetterFile(
           userId,
-          filePath,
+          req.file.buffer,
           cleanFileName,
           'incoming',
           tanggal_masuk,
@@ -275,14 +260,7 @@ export const update = async (req: AuthRequest, res: Response) => {
         googleDriveId = uploadResult.fileId;
         webViewLink = uploadResult.webViewLink;
         logicalPath = uploadResult.logicalPath;
-
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
-        }
       } catch (uploadError: any) {
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
-        }
         if (isGoogleErrorInvalidGrant(uploadError)) {
           return res.status(401).json({
             error_code: 'GOOGLE_RECONNECT_REQUIRED',

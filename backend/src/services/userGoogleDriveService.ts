@@ -1,8 +1,10 @@
 import { google, drive_v3 } from 'googleapis';
 import fs from 'fs';
 import path from 'path';
+import { Readable } from 'stream';
 import { findUserById, updateUserGoogleResourceIds } from '../models/User';
 import { getOAuth2ClientForUser, GoogleReconnectRequiredError, isGoogleErrorInvalidGrant } from './userGoogleAuthService';
+
 
 /**
  * Helper to find an existing folder under parentId by name (to prevent duplicates)
@@ -181,7 +183,7 @@ export async function moveDriveFileToCorrectFolder(
 export async function replaceUserLetterFile(
   userId: number,
   oldFileId: string | undefined | null,
-  filePath: string,
+  fileBuffer: Buffer,
   originalFileName: string,
   letterType: 'incoming' | 'outgoing',
   letterDateStr?: string,
@@ -200,7 +202,7 @@ export async function replaceUserLetterFile(
     }
   }
 
-  return uploadUserLetterFile(userId, filePath, originalFileName, letterType, letterDateStr, mimeType);
+  return uploadUserLetterFile(userId, fileBuffer, originalFileName, letterType, letterDateStr, mimeType);
 }
 
 /**
@@ -308,7 +310,7 @@ export async function initializeUserDriveStructure(userId: number): Promise<{
  */
 export async function uploadUserLetterFile(
   userId: number,
-  filePath: string,
+  fileBuffer: Buffer,
   originalFileName: string,
   letterType: 'incoming' | 'outgoing',
   letterDateStr?: string,
@@ -320,10 +322,6 @@ export async function uploadUserLetterFile(
 }> {
   console.log(`[GoogleDrive] Uploading file for user ${userId}: ${originalFileName} (${letterType})`);
   try {
-    if (!fs.existsSync(filePath)) {
-      throw new Error(`Local file not found at: ${filePath}`);
-    }
-
     const auth = await getOAuth2ClientForUser(userId);
     const drive = google.drive({ version: 'v3', auth });
 
@@ -360,7 +358,7 @@ export async function uploadUserLetterFile(
 
     const media = {
       mimeType: mimeType || 'application/octet-stream',
-      body: fs.createReadStream(filePath),
+      body: Readable.from(fileBuffer),
     };
 
     const response = await drive.files.create({
@@ -427,7 +425,7 @@ export async function deleteUserFile(userId: number, fileId: string): Promise<vo
 export async function updateUserLetterFile(
   userId: number,
   oldDriveId: string | undefined,
-  newFilePath: string | undefined,
+  newFileBuffer: Buffer | undefined,
   originalFileName: string,
   letterType: 'incoming' | 'outgoing',
   letterDateStr: string,
@@ -439,7 +437,7 @@ export async function updateUserLetterFile(
 }> {
   try {
     // If no new file, just return existing info
-    if (!newFilePath) {
+    if (!newFileBuffer) {
       throw new Error('No new file provided for update');
     }
 
@@ -460,7 +458,7 @@ export async function updateUserLetterFile(
     // Upload new file
     const uploadResult = await uploadUserLetterFile(
       userId,
-      newFilePath,
+      newFileBuffer,
       originalFileName,
       letterType,
       letterDateStr,

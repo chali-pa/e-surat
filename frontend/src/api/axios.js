@@ -27,8 +27,10 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401 && error.response?.data?.error_code !== 'GOOGLE_RECONNECT_REQUIRED') {
-      // Unauthorized - remove invalid token and redirect to login
+      // Unauthorized - remove invalid token and user and notify app
       localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.dispatchEvent(new Event('auth-change'));
       window.location.href = '/login';
     }
     return Promise.reject(error);

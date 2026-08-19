@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api/axios'
 import GoogleIntegration from '../components/GoogleIntegration'
+import { useAuth } from '../context/AuthContext'
 
 export default function Profile() {
+  const { logout } = useAuth()
   const navigate = useNavigate()
   const [user, setUser] = useState(null)
   const [formData, setFormData] = useState({ name: '', email: '' })
@@ -47,9 +49,8 @@ export default function Profile() {
     setDeleting(true)
     try {
       await api.delete('/api/profile')
-      localStorage.removeItem('token')
-      localStorage.removeItem('user')
-      navigate('/login')
+      logout()
+      navigate('/login', { replace: true })
     } catch (error) {
       setDeleteError(
         error.response?.data?.error || 'Gagal menghapus akun. Silakan coba lagi.'

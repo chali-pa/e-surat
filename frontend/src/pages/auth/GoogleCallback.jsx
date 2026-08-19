@@ -1,9 +1,11 @@
 import { useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useAuth } from '../../context/AuthContext'
 
 export default function GoogleCallback() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  const { login } = useAuth()
 
   useEffect(() => {
     const handleGoogleCallback = () => {
@@ -25,9 +27,6 @@ export default function GoogleCallback() {
       }
 
       try {
-        // Store token in localStorage
-        localStorage.setItem('token', token)
-        
         // Decode token to get user info (basic JWT decode)
         const base64Url = token.split('.')[1]
         const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
@@ -35,16 +34,18 @@ export default function GoogleCallback() {
           return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
         }).join(''))
         const user = JSON.parse(jsonPayload)
-        
-        localStorage.setItem('user', JSON.stringify({
+
+        const userObj = {
           id: user.id,
           name: user.name,
           email: user.email,
           loginMethod: loginMethod
-        }))
+        }
+        
+        login(token, userObj)
 
         // Redirect to dashboard
-        navigate('/dashboard', { state: { success: success || 'Google login successful' } })
+        navigate('/dashboard', { replace: true, state: { success: success || 'Google login successful' } })
       } catch (error) {
         console.error('Google callback error:', error)
         navigate('/login', { state: { error: 'Gagal memproses token Google' } })
@@ -52,7 +53,7 @@ export default function GoogleCallback() {
     }
 
     handleGoogleCallback()
-  }, [searchParams, navigate])
+  }, [searchParams, navigate, login])
 
   return (
     <div className="min-h-screen flex items-center justify-center" style={{ background: '#0d0015' }}>

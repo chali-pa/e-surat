@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import api from '../api/axios'
+import { useAuth } from '../context/AuthContext'
 
 export default function Sidebar() {
+  const { logout } = useAuth()
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [showLogoutModal, setShowLogoutModal] = useState(false)
@@ -91,10 +93,9 @@ export default function Sidebar() {
       } catch (error) {
         console.error('Logout failed:', error)
       } finally {
-        localStorage.removeItem('token')
-        localStorage.removeItem('user')
+        logout()
         setShowLogoutModal(false)
-        navigate('/login')
+        navigate('/login', { replace: true })
       }
     } catch (error) {
       setVerificationError('Terjadi kesalahan saat verifikasi')

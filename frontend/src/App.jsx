@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
+import { AuthProvider, useAuth } from './context/AuthContext'
 import Landing from './pages/Landing'
 import Login from './pages/auth/Login'
 import Register from './pages/auth/Register'
@@ -16,53 +17,165 @@ import SuratKeluarIndex from './pages/surat-keluar/SuratKeluarIndex'
 import SuratKeluarCreate from './pages/surat-keluar/SuratKeluarCreate'
 import SuratKeluarEdit from './pages/surat-keluar/SuratKeluarEdit'
 
-function App() {
-  const isAuthenticated = !!localStorage.getItem('token')
+function LoadingSpinner() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-[#0d0015]">
+      <div className="text-center text-white">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+        <p className="text-sm font-medium tracking-wide">Memuat...</p>
+      </div>
+    </div>
+  )
+}
 
+function ProtectedRoute({ children }) {
+  const { isAuthenticated, loading } = useAuth()
+
+  if (loading) {
+    return <LoadingSpinner />
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />
+  }
+
+  return <Layout>{children}</Layout>
+}
+
+function PublicOnlyRoute({ children }) {
+  const { isAuthenticated, loading } = useAuth()
+
+  if (loading) {
+    return <LoadingSpinner />
+  }
+
+  if (isAuthenticated) {
+    return <Navigate to="/dashboard" replace />
+  }
+
+  return children
+}
+
+function AppRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<Landing />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
-      <Route path="/forgot-password" element={<ForgotPassword />} />
+      {/* Public-only routes (redirect authenticated users to /dashboard) */}
+      <Route
+        path="/"
+        element={
+          <PublicOnlyRoute>
+            <Landing />
+          </PublicOnlyRoute>
+        }
+      />
+      <Route
+        path="/login"
+        element={
+          <PublicOnlyRoute>
+            <Login />
+          </PublicOnlyRoute>
+        }
+      />
+      <Route
+        path="/register"
+        element={
+          <PublicOnlyRoute>
+            <Register />
+          </PublicOnlyRoute>
+        }
+      />
+      <Route
+        path="/forgot-password"
+        element={
+          <PublicOnlyRoute>
+            <ForgotPassword />
+          </PublicOnlyRoute>
+        }
+      />
+
+      {/* OAuth Callback route */}
       <Route path="/auth/google/callback" element={<GoogleCallback />} />
+
+      {/* Always accessible static legal pages */}
       <Route path="/privacy-policy" element={<PrivacyPolicy />} />
       <Route path="/terms-of-service" element={<TermsOfService />} />
-      <Route 
-        path="/dashboard" 
-        element={isAuthenticated ? <Layout><Dashboard /></Layout> : <Navigate to="/login" replace />} 
+
+      {/* Protected routes (accessible only when authenticated) */}
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        }
       />
-      <Route 
-        path="/surat" 
-        element={isAuthenticated ? <Layout><SuratIndex /></Layout> : <Navigate to="/login" replace />} 
+      <Route
+        path="/surat"
+        element={
+          <ProtectedRoute>
+            <SuratIndex />
+          </ProtectedRoute>
+        }
       />
-      <Route 
-        path="/surat/create" 
-        element={isAuthenticated ? <Layout><SuratCreate /></Layout> : <Navigate to="/login" replace />} 
+      <Route
+        path="/surat/create"
+        element={
+          <ProtectedRoute>
+            <SuratCreate />
+          </ProtectedRoute>
+        }
       />
-      <Route 
-        path="/surat/:id/edit" 
-        element={isAuthenticated ? <Layout><SuratEdit /></Layout> : <Navigate to="/login" replace />} 
+      <Route
+        path="/surat/:id/edit"
+        element={
+          <ProtectedRoute>
+            <SuratEdit />
+          </ProtectedRoute>
+        }
       />
-      <Route 
-        path="/surat-keluar" 
-        element={isAuthenticated ? <Layout><SuratKeluarIndex /></Layout> : <Navigate to="/login" replace />} 
+      <Route
+        path="/surat-keluar"
+        element={
+          <ProtectedRoute>
+            <SuratKeluarIndex />
+          </ProtectedRoute>
+        }
       />
-      <Route 
-        path="/surat-keluar/create" 
-        element={isAuthenticated ? <Layout><SuratKeluarCreate /></Layout> : <Navigate to="/login" replace />} 
+      <Route
+        path="/surat-keluar/create"
+        element={
+          <ProtectedRoute>
+            <SuratKeluarCreate />
+          </ProtectedRoute>
+        }
       />
-      <Route 
-        path="/surat-keluar/:id/edit" 
-        element={isAuthenticated ? <Layout><SuratKeluarEdit /></Layout> : <Navigate to="/login" replace />} 
+      <Route
+        path="/surat-keluar/:id/edit"
+        element={
+          <ProtectedRoute>
+            <SuratKeluarEdit />
+          </ProtectedRoute>
+        }
       />
-      <Route 
-        path="/profile" 
-        element={isAuthenticated ? <Layout><Profile /></Layout> : <Navigate to="/login" replace />} 
+      <Route
+        path="/profile"
+        element={
+          <ProtectedRoute>
+            <Profile />
+          </ProtectedRoute>
+        }
       />
+
+      {/* Fallback route */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
 }
 
-export default App
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppRoutes />
+    </AuthProvider>
+  )
+}

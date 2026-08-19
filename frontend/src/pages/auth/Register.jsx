@@ -1,8 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import api from '../../api/axios'
+import { useAuth } from '../../context/AuthContext'
 
 export default function Register() {
+  const { login } = useAuth()
+  const navigate = useNavigate()
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -65,10 +68,8 @@ export default function Register() {
       })
 
       if (response.data.success || response.data.token) {
-        // Store token and user data
-        localStorage.setItem('token', response.data.token)
-        localStorage.setItem('user', JSON.stringify(response.data.user))
-        window.location.href = '/dashboard'
+        login(response.data.token, response.data.user)
+        navigate('/dashboard', { replace: true })
       }
     } catch (error) {
       if (error.response?.data?.errors) {

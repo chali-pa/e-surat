@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import api from '../../api/axios'
+import FolderSelector from '../../components/drive/FolderSelector'
 
 const MAX_FILE_SIZE = 800 * 1024 * 1024 // 800 MB
 const ALLOWED_TYPES = [
@@ -33,6 +34,7 @@ export default function SuratCreate() {
     nama_surat: '',
     file_surat: null,
   })
+  const [selectedFolder, setSelectedFolder] = useState(null)
   const [errors, setErrors] = useState({})
   const [loading, setLoading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
@@ -103,6 +105,11 @@ export default function SuratCreate() {
     Object.keys(formData).forEach((key) => {
       if (formData[key] !== null) data.append(key, formData[key])
     })
+    
+    // Add folder_id if a folder is selected
+    if (selectedFolder) {
+      data.append('folder_id', selectedFolder.id)
+    }
 
     try {
       const response = await api.post('/api/surat', data, {
@@ -334,6 +341,15 @@ export default function SuratCreate() {
               </p>
             )}
           </div>
+
+          {/* Folder Selection */}
+          <FolderSelector
+            letterDate={formData.tanggal_buat}
+            selectedFolder={selectedFolder}
+            onFolderChange={setSelectedFolder}
+            letterType="incoming"
+            disabled={loading}
+          />
 
           {/* Upload File */}
           <div className="space-y-2">

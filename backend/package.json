@@ -12,6 +12,7 @@
     "start": "node dist/index.js",
     "vercel-build": "tsc",
     "migrate": "tsx src/scripts/migrate.ts",
+    "migrate-folders": "tsx src/scripts/migrateFolders.ts",
     "check-google-config": "tsx src/scripts/checkGoogleConfig.ts",
     "fix-google-key": "tsx src/scripts/fixGoogleKey.ts",
     "test-google-connection": "tsx src/scripts/testGoogleConnection.ts",

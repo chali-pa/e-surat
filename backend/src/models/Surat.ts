@@ -11,6 +11,7 @@ export interface Surat {
   google_drive_id?: string;
   google_sheet_row?: number;
   user_id?: number;
+  folder_id?: number;
   created_at?: string;
   updated_at?: string;
 }
@@ -26,6 +27,7 @@ export interface SuratKeluar {
   google_drive_id?: string;
   google_sheet_row?: number;
   user_id?: number;
+  folder_id?: number;
   created_at?: string;
   updated_at?: string;
 }

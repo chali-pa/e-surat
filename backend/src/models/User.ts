@@ -15,6 +15,7 @@ export interface User {
   drive_keluar_folder_id?: string | null;
   sheet_masuk_id?: string | null;
   sheet_keluar_id?: string | null;
+  documentation_folder_id?: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -140,6 +141,7 @@ export const updateUserGoogleResourceIds = async (
     drive_keluar_folder_id?: string | null;
     sheet_masuk_id?: string | null;
     sheet_keluar_id?: string | null;
+    documentation_folder_id?: string | null;
   }
 ): Promise<User> => {
   const query = `
@@ -148,8 +150,9 @@ export const updateUserGoogleResourceIds = async (
         drive_keluar_folder_id = COALESCE($2, drive_keluar_folder_id),
         sheet_masuk_id = COALESCE($3, sheet_masuk_id),
         sheet_keluar_id = COALESCE($4, sheet_keluar_id),
+        documentation_folder_id = COALESCE($5, documentation_folder_id),
         updated_at = NOW()
-    WHERE id = $5
+    WHERE id = $6
     RETURNING *
   `;
   const values = [
@@ -157,6 +160,7 @@ export const updateUserGoogleResourceIds = async (
     resources.drive_keluar_folder_id || null,
     resources.sheet_masuk_id || null,
     resources.sheet_keluar_id || null,
+    resources.documentation_folder_id || null,
     id,
   ];
   const result = await pool.query(query, values);

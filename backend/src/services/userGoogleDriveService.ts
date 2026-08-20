@@ -4,6 +4,7 @@ import path from 'path';
 import { Readable } from 'stream';
 import { findUserById, updateUserGoogleResourceIds } from '../models/User';
 import { getOAuth2ClientForUser, GoogleReconnectRequiredError, isGoogleErrorInvalidGrant } from './userGoogleAuthService';
+import { createFolder, findFolderByDriveId, findFoldersByUserAndMonth } from '../models/Folder';
 
 
 /**
@@ -89,6 +90,26 @@ export function formatMonthFolderName(letterDateStr?: string): { folderName: str
   // MM-YY format (e.g. 07-27)
   const folderName = `${mm}-${yy}`;
   return { folderName, monthIndex: monthNum, yearYY: yy };
+}
+
+/**
+ * Get month name from date (January, February, etc.)
+ */
+export function getMonthName(letterDateStr?: string): string {
+  let dateObj = new Date();
+  if (letterDateStr) {
+    const parsed = new Date(letterDateStr);
+    if (!isNaN(parsed.getTime())) {
+      dateObj = parsed;
+    }
+  }
+
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+
+  return monthNames[dateObj.getMonth()];
 }
 
 /**
@@ -207,28 +228,36 @@ export async function replaceUserLetterFile(
 
 /**
  * Determine subfolder based on file extension / mime type
+ * Updated to route images to Documentation folder instead of Photos
  */
-export function getSubfolderType(fileName: string, mimeType?: string): 'Excel' | 'Photos' | 'PDF' {
+export function getSubfolderType(fileName: string, mimeType?: string): 'Excel' | 'Documentation' | 'PDF' {
   const ext = path.extname(fileName).toLowerCase();
 
   if (['.xlsx', '.xls', '.csv'].includes(ext) || (mimeType && mimeType.includes('spreadsheet') || mimeType?.includes('excel') || mimeType?.includes('csv'))) {
     return 'Excel';
   }
 
-  if (['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp'].includes(ext) || (mimeType && mimeType.startsWith('image/'))) {
-    return 'Photos';
+  if (['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp', '.tiff', '.svg'].includes(ext) || (mimeType && mimeType.startsWith('image/'))) {
+    return 'Documentation';
   }
 
-  // Default for PDF, DOC, DOCX, and others
+  // Documentation formats
+  if (['.doc', '.docx', '.txt', '.rtf', '.odt', '.pdf'].includes(ext) || 
+      (mimeType && (mimeType.includes('document') || mimeType.includes('text') || mimeType.includes('pdf')))) {
+    return 'Documentation';
+  }
+
+  // Default for PDF and other files
   return 'PDF';
 }
 
 /**
- * Ensure standard user drive structure exists (esurat, esurat-keluar, 12 month folders, subfolders)
+ * Ensure standard user drive structure exists (esurat, esurat-keluar, Documentation, 12 month folders, subfolders)
  */
 export async function initializeUserDriveStructure(userId: number): Promise<{
   incomingRootId: string;
   outgoingRootId: string;
+  documentationFolderId: string;
 }> {
   console.log(`[GoogleDrive] Initializing Drive structure for user ${userId}...`);
   try {
@@ -267,15 +296,31 @@ export async function initializeUserDriveStructure(userId: number): Promise<{
       outgoingRootId = await findOrCreateFolder(drive, 'esurat-keluar');
     }
 
+    // 3. Create Documentation folder at root level
+    let documentationFolderId = user?.documentation_folder_id || null;
+    if (documentationFolderId) {
+      try {
+        await drive.files.get({ fileId: documentationFolderId, fields: 'id, trashed' });
+      } catch (e) {
+        console.warn(`[GoogleDrive] Stored documentation_folder_id ${documentationFolderId} for user ${userId} is inaccessible. Resetting.`);
+        documentationFolderId = null;
+      }
+    }
+
+    if (!documentationFolderId) {
+      documentationFolderId = await findOrCreateFolder(drive, 'Documentation');
+    }
+
     // Save root IDs in DB
     await updateUserGoogleResourceIds(userId, {
       drive_folder_id: incomingRootId,
       drive_keluar_folder_id: outgoingRootId,
+      documentation_folder_id: documentationFolderId,
     });
 
-    // 3. Create 12 month folders and 3 subfolders under each root folder
+    // 4. Create 12 month folders and 3 subfolders under each root folder
     const currentYY = String(new Date().getFullYear()).slice(-2);
-    const subfolders: ('Excel' | 'Photos' | 'PDF')[] = ['Excel', 'Photos', 'PDF'];
+    const subfolders: ('Excel' | 'Documentation' | 'PDF')[] = ['Excel', 'Documentation', 'PDF'];
 
     for (let m = 1; m <= 12; m++) {
       const mm = String(m).padStart(2, '0');
@@ -295,7 +340,7 @@ export async function initializeUserDriveStructure(userId: number): Promise<{
     }
 
     console.log(`[GoogleDrive] Successfully initialized Drive structure for user ${userId}`);
-    return { incomingRootId, outgoingRootId };
+    return { incomingRootId, outgoingRootId, documentationFolderId };
   } catch (error: any) {
     console.error(`[GoogleDrive] Failed to initialize Drive structure for user ${userId}:`, error);
     if (isGoogleErrorInvalidGrant(error)) {
@@ -314,7 +359,8 @@ export async function uploadUserLetterFile(
   originalFileName: string,
   letterType: 'incoming' | 'outgoing',
   letterDateStr?: string,
-  mimeType?: string
+  mimeType?: string,
+  customFolderId?: string
 ): Promise<{
   fileId: string;
   webViewLink: string;
@@ -339,21 +385,45 @@ export async function uploadUserLetterFile(
       }
     }
 
-    // 2. Resolve month folder (MM-MM-YY)
-    const { folderName: monthFolderName } = formatMonthFolderName(letterDateStr);
-    const monthFolderId = await findOrCreateFolder(drive, monthFolderName, rootFolderId);
+    // 2. Determine target folder ID
+    let targetFolderId: string;
+    let logicalPath: string;
 
-    // 3. Resolve subfolder (Excel / Photos / PDF)
-    const subfolderName = getSubfolderType(originalFileName, mimeType);
-    const subfolderId = await findOrCreateFolder(drive, subfolderName, monthFolderId);
+    if (customFolderId) {
+      // Use custom folder if provided
+      targetFolderId = customFolderId;
+      const monthName = getMonthName(letterDateStr);
+      logicalPath = `${rootName}/${monthName}/Custom/${originalFileName}`;
+    } else {
+      // Default routing by file type
+      const subfolderName = getSubfolderType(originalFileName, mimeType);
+      
+      // Check if this is a documentation file that should go to Documentation folder
+      if (subfolderName === 'Documentation') {
+        const documentationFolderId = user?.documentation_folder_id;
+        if (documentationFolderId) {
+          targetFolderId = documentationFolderId;
+          logicalPath = `Documentation/${originalFileName}`;
+        } else {
+          // Fallback to PDF routing if Documentation folder doesn't exist
+          const { folderName: monthFolderName } = formatMonthFolderName(letterDateStr);
+          const monthFolderId = await findOrCreateFolder(drive, monthFolderName, rootFolderId);
+          targetFolderId = await findOrCreateFolder(drive, 'PDF', monthFolderId);
+          logicalPath = `${rootName}/${monthFolderName}/PDF/${originalFileName}`;
+        }
+      } else {
+        // Standard PDF/Excel routing with monthly organization
+        const { folderName: monthFolderName } = formatMonthFolderName(letterDateStr);
+        const monthFolderId = await findOrCreateFolder(drive, monthFolderName, rootFolderId);
+        targetFolderId = await findOrCreateFolder(drive, subfolderName, monthFolderId);
+        logicalPath = `${rootName}/${monthFolderName}/${subfolderName}/${originalFileName}`;
+      }
+    }
 
-    // Logical path string e.g. esurat/07-07-27/PDF/my_file.pdf
-    const logicalPath = `${rootName}/${monthFolderName}/${subfolderName}/${originalFileName}`;
-
-    // 4. Upload file to target subfolder
+    // 3. Upload file to target folder
     const fileMetadata = {
       name: originalFileName,
-      parents: [subfolderId],
+      parents: [targetFolderId],
     };
 
     const media = {
@@ -429,7 +499,8 @@ export async function updateUserLetterFile(
   originalFileName: string,
   letterType: 'incoming' | 'outgoing',
   letterDateStr: string,
-  mimeType?: string
+  mimeType?: string,
+  customFolderId?: string
 ): Promise<{
   fileId: string;
   webViewLink: string;
@@ -462,7 +533,8 @@ export async function updateUserLetterFile(
       originalFileName,
       letterType,
       letterDateStr,
-      mimeType
+      mimeType,
+      customFolderId
     );
 
     return uploadResult;
@@ -472,5 +544,114 @@ export async function updateUserLetterFile(
       throw new GoogleReconnectRequiredError();
     }
     throw error;
+  }
+}
+
+/**
+ * Create a custom folder for user in specific month
+ */
+export async function createCustomFolder(
+  userId: number,
+  monthName: string,
+  folderName: string,
+  letterType: 'incoming' | 'outgoing' = 'incoming'
+): Promise<{
+  folderId: string;
+  googleDriveFolderId: string;
+  message: string;
+}> {
+  try {
+    const auth = await getOAuth2ClientForUser(userId);
+    const drive = google.drive({ version: 'v3', auth });
+
+    const user = await findUserById(userId);
+    const rootFolderId = letterType === 'incoming' ? user?.drive_folder_id : user?.drive_keluar_folder_id;
+
+    if (!rootFolderId) {
+      throw new Error('User Drive structure not initialized. Please connect your Google account.');
+    }
+
+    // Get month folder name from month name
+    const monthNames = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    const monthIndex = monthNames.indexOf(monthName);
+    if (monthIndex === -1) {
+      throw new Error('Invalid month name');
+    }
+
+    const currentYY = String(new Date().getFullYear()).slice(-2);
+    const monthFolderName = `${String(monthIndex + 1).padStart(2, '0')}-${currentYY}`;
+    
+    // Get or create month folder
+    const monthFolderId = await findOrCreateFolder(drive, monthFolderName, rootFolderId);
+
+    // Check if folder already exists in database
+    const existingFolder = await findFolderByDriveId(monthFolderId);
+    if (existingFolder) {
+      // Check if the specific custom folder already exists
+      const customFolders = await findFoldersByUserAndMonth(userId, monthName, letterType);
+      const folderExists = customFolders.find(f => f.name === folderName);
+      
+      if (folderExists) {
+        return {
+          folderId: folderExists.id?.toString() || '',
+          googleDriveFolderId: folderExists.google_drive_folder_id,
+          message: 'Folder already exists in the selected month'
+        };
+      }
+    }
+
+    // Create the custom folder in Google Drive
+    const customFolderDriveId = await findOrCreateFolder(drive, folderName, monthFolderId);
+
+    // Save to database
+    const folder = await createFolder({
+      user_id: userId,
+      google_drive_folder_id: customFolderDriveId,
+      parent_folder_id: monthFolderId,
+      name: folderName,
+      month: monthName,
+      folder_type: 'custom',
+      letter_type: letterType,
+    });
+
+    return {
+      folderId: folder.id?.toString() || '',
+      googleDriveFolderId: customFolderDriveId,
+      message: 'Folder created successfully'
+    };
+  } catch (error: any) {
+    console.error(`[GoogleDrive] Failed to create custom folder:`, error);
+    if (isGoogleErrorInvalidGrant(error)) {
+      throw new GoogleReconnectRequiredError();
+    }
+    throw error;
+  }
+}
+
+/**
+ * Get custom folders for a specific month
+ */
+export async function getMonthlyFolders(
+  userId: number,
+  monthName: string,
+  letterType: 'incoming' | 'outgoing' = 'incoming'
+): Promise<Array<{
+  id: string;
+  name: string;
+  google_drive_folder_id: string;
+}>> {
+  try {
+    const folders = await findFoldersByUserAndMonth(userId, monthName, letterType);
+    return folders.map(folder => ({
+      id: folder.id?.toString() || '',
+      name: folder.name,
+      google_drive_folder_id: folder.google_drive_folder_id,
+    }));
+  } catch (error) {
+    console.error(`[GoogleDrive] Failed to get monthly folders:`, error);
+    return [];
   }
 }

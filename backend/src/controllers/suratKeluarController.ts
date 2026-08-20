@@ -6,6 +6,7 @@ import path from 'path';
 import { google } from 'googleapis';
 import { isGoogleErrorInvalidGrant, GoogleReconnectRequiredError, getOAuth2ClientForUser } from '../services/userGoogleAuthService';
 import { uploadUserLetterFile, deleteUserFile, moveDriveFileToCorrectFolder, formatMonthFolderName } from '../services/userGoogleDriveService';
+import { findFolderById } from '../models/Folder';
 import {
   getAllOutgoingLetters,
   getOutgoingLetterByRow,
@@ -82,7 +83,7 @@ export const store = async (req: AuthRequest, res: Response) => {
     console.log('Request body:', req.body);
     console.log('Request file:', req.file ? req.file.originalname : 'No file');
 
-    const { nomor_surat, nama_penerima, nama_surat, tanggal_keluar, tanggal_buat } = req.body;
+    const { nomor_surat, nama_penerima, nama_surat, tanggal_keluar, tanggal_buat, folder_id } = req.body;
 
     // Validate required fields
     if (!nomor_surat || !nama_penerima || !nama_surat || !tanggal_keluar || !tanggal_buat) {
@@ -102,6 +103,15 @@ export const store = async (req: AuthRequest, res: Response) => {
     let googleDriveId = '';
     let webViewLink = '';
     let logicalPath = '';
+    let customFolderDriveId: string | undefined;
+
+    // Get custom folder Google Drive ID if folder_id is provided
+    if (folder_id) {
+      const folder = await findFolderById(parseInt(folder_id));
+      if (folder && folder.user_id === userId) {
+        customFolderDriveId = folder.google_drive_folder_id;
+      }
+    }
 
     if (req.file) {
       const originalName = req.file.originalname || `${nomor_surat}_${Date.now()}`;
@@ -117,7 +127,8 @@ export const store = async (req: AuthRequest, res: Response) => {
           cleanFileName,
           'outgoing',
           tanggal_keluar,
-          req.file.mimetype
+          req.file.mimetype,
+          customFolderDriveId
         );
 
         googleDriveId = uploadResult.fileId;
@@ -149,6 +160,7 @@ export const store = async (req: AuthRequest, res: Response) => {
       google_drive_id: googleDriveId,
       file_path: logicalPath || webViewLink,
       user_id: userId,
+      folder_id: folder_id ? parseInt(folder_id) : undefined,
       created_at: new Date().toISOString(),
     };
 

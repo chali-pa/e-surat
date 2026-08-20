@@ -14,6 +14,7 @@ import suratRoutes from './routes/surat';
 import suratKeluarRoutes from './routes/suratKeluar';
 import profileRoutes from './routes/profile';
 import googleRoutes from './routes/google';
+import folderRoutes from './routes/folder';
 
 // Import Google configuration
 import { initializeGoogleServices } from './config/google';
@@ -94,6 +95,7 @@ app.use('/api/surat', suratRoutes);
 app.use('/api/surat-keluar', suratKeluarRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/google', googleRoutes);
+app.use('/api/folders', folderRoutes);
 
 // 404 handler
 app.use((req, res) => {

@@ -3,7 +3,7 @@ import path from 'path';
 import { Readable } from 'stream';
 import { findUserById, updateUserGoogleResourceIds } from '../models/User';
 import { getOAuth2ClientForUser, GoogleReconnectRequiredError, isGoogleErrorInvalidGrant } from './userGoogleAuthService';
-import { createFolder, findFolderByDriveId, findFoldersByUserAndMonth } from '../models/Folder';
+import { createFolder, findFolderByDriveId, findFoldersByUserAndMonth, findFolderById } from '../models/Folder';
 
 /**
  * Helper to find an existing folder under parentId by name (to prevent duplicates)
@@ -603,6 +603,102 @@ export async function createCustomFolder(
       throw new GoogleReconnectRequiredError();
     }
     throw error;
+  }
+}
+
+/**
+ * Validate folder ownership by checking both database and Google Drive API
+ * This handles timing issues where a newly created folder might not be in DB yet
+ */
+export async function validateFolderOwnership(
+  userId: number,
+  folderId: string,
+  letterType: 'incoming' | 'outgoing' = 'incoming'
+): Promise<{ valid: boolean; googleDriveFolderId?: string; dbFolderId?: number }> {
+  try {
+    // First, try to find in database (most common case)
+    const dbFolder = await findFolderById(parseInt(folderId));
+    if (dbFolder && dbFolder.user_id === userId) {
+      return {
+        valid: true,
+        googleDriveFolderId: dbFolder.google_drive_folder_id,
+        dbFolderId: dbFolder.id
+      };
+    }
+
+    // If not found in DB or ownership mismatch, validate against Drive API directly
+    // This handles newly created folders that haven't been committed to DB yet
+    const auth = await getOAuth2ClientForUser(userId);
+    const drive = google.drive({ version: 'v3', auth });
+
+    const user = await findUserById(userId);
+    const rootFolderId = letterType === 'incoming' ? user?.drive_folder_id : user?.drive_keluar_folder_id;
+
+    if (!rootFolderId) {
+      console.warn(`[GoogleDrive] User ${userId} has no root folder ID set for ${letterType}`);
+      return { valid: false };
+    }
+
+    // Check if the folder exists in Drive
+    try {
+      const folder = await drive.files.get({
+        fileId: folderId,
+        fields: 'id, name, parents'
+      });
+
+      // Walk up the parent chain to verify it's under the user's root folder
+      let currentParents = folder.data.parents || [];
+      let foundRoot = false;
+      let visitedFolders = new Set<string>();
+
+      while (currentParents.length > 0 && !foundRoot) {
+        for (const parentId of currentParents) {
+          if (visitedFolders.has(parentId)) {
+            continue; // Avoid infinite loops
+          }
+          visitedFolders.add(parentId);
+
+          if (parentId === rootFolderId) {
+            foundRoot = true;
+            break;
+          }
+
+          // Get parent's parents to continue walking up
+          try {
+            const parentFolder = await drive.files.get({
+              fileId: parentId,
+              fields: 'parents'
+            });
+            currentParents = parentFolder.data.parents || [];
+          } catch (e) {
+            // Parent might not be accessible, skip it
+            continue;
+          }
+        }
+
+        if (!foundRoot && currentParents.length > 0) {
+          // Check the next level of parents
+          continue;
+        }
+      }
+
+      if (foundRoot) {
+        console.log(`[GoogleDrive] Validated folder ${folderId} ownership via Drive API for user ${userId}`);
+        return {
+          valid: true,
+          googleDriveFolderId: folderId
+        };
+      } else {
+        console.warn(`[GoogleDrive] Folder ${folderId} not under user's root folder ${rootFolderId}`);
+        return { valid: false };
+      }
+    } catch (driveError: any) {
+      console.error(`[GoogleDrive] Drive API validation failed for folder ${folderId}:`, driveError);
+      return { valid: false };
+    }
+  } catch (error) {
+    console.error(`[GoogleDrive] Folder ownership validation failed:`, error);
+    return { valid: false };
   }
 }
 

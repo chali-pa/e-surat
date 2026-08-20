@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { google } from 'googleapis';
 import { isGoogleErrorInvalidGrant, GoogleReconnectRequiredError, getOAuth2ClientForUser } from '../services/userGoogleAuthService';
-import { uploadUserLetterFile, deleteUserFile, moveDriveFileToCorrectFolder, getMonthName } from '../services/userGoogleDriveService';
+import { uploadUserLetterFile, deleteUserFile, moveDriveFileToCorrectFolder, getMonthName, validateFolderOwnership } from '../services/userGoogleDriveService';
 import { findFolderById } from '../models/Folder';
 import {
   getAllOutgoingLetters,
@@ -104,14 +104,14 @@ export const store = async (req: AuthRequest, res: Response) => {
 
     // Verify folder ownership server-side if folder_id is provided
     if (folder_id) {
-      const folder = await findFolderById(parseInt(folder_id));
-      if (!folder || folder.user_id !== userId) {
+      const validation = await validateFolderOwnership(userId, folder_id, 'outgoing');
+      if (!validation.valid) {
         return res.status(403).json({
           error: 'Forbidden',
           message: 'Folder yang dipilih tidak valid atau tidak dimiliki oleh akun Anda.',
         });
       }
-      customFolderDriveId = folder.google_drive_folder_id;
+      customFolderDriveId = validation.googleDriveFolderId;
     }
 
     if (req.file) {
@@ -254,14 +254,14 @@ export const update = async (req: AuthRequest, res: Response) => {
     let customFolderDriveId: string | undefined;
 
     if (folder_id) {
-      const folder = await findFolderById(parseInt(folder_id));
-      if (!folder || folder.user_id !== userId) {
+      const validation = await validateFolderOwnership(userId, folder_id, 'outgoing');
+      if (!validation.valid) {
         return res.status(403).json({
           error: 'Forbidden',
           message: 'Folder yang dipilih tidak valid atau tidak dimiliki oleh akun Anda.',
         });
       }
-      customFolderDriveId = folder.google_drive_folder_id;
+      customFolderDriveId = validation.googleDriveFolderId;
     }
 
     if (req.file) {

@@ -130,7 +130,14 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
 
     res.json({
       success: true,
-      user: { id: user.id, name: user.name, email: user.email },
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        google_connected: !!user.google_connected && (!!user.google_refresh_token || !!user.google_access_token),
+        google_name: user.google_name || null,
+        google_email: user.google_email || null,
+      },
     });
   } catch (error) {
     console.error('Get profile error:', error);

@@ -5,18 +5,25 @@ import { useAuth } from '../../context/AuthContext'
 export default function GoogleCallback() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const { login } = useAuth()
+  const { login, token: currentToken } = useAuth()
 
   useEffect(() => {
     const handleGoogleCallback = () => {
       const token = searchParams.get('token')
       const error = searchParams.get('error')
       const success = searchParams.get('success')
+      const linked = searchParams.get('linked')
+      const googleEmail = searchParams.get('googleEmail')
+      const googleName = searchParams.get('googleName')
       const loginMethod = searchParams.get('loginMethod') || 'google'
 
       if (error) {
         console.error('Google OAuth error:', error)
-        navigate('/login', { state: { error: error } })
+        if (linked === '1' || currentToken) {
+          navigate('/profile', { state: { error: error } })
+        } else {
+          navigate('/login', { state: { error: error } })
+        }
         return
       }
 
@@ -39,9 +46,31 @@ export default function GoogleCallback() {
           id: user.id,
           name: user.name,
           email: user.email,
-          loginMethod: loginMethod
+          loginMethod: loginMethod,
+          google_connected: true,
+          google_email: googleEmail || user.email,
+          google_name: googleName || user.name
         }
-        
+
+        // Check if this was a linking flow from Profile
+        if (linked === '1') {
+          // Update local session credentials
+          localStorage.setItem('token', token)
+          localStorage.setItem('user', JSON.stringify(userObj))
+          window.dispatchEvent(new Event('auth-change'))
+          window.dispatchEvent(new CustomEvent('google-linked', { 
+            detail: { googleEmail, googleName, success } 
+          }))
+
+          // Redirect back to profile page
+          navigate('/profile?google_linked=1', { 
+            replace: true, 
+            state: { success: success || 'Akun Google berhasil dihubungkan.' } 
+          })
+          return
+        }
+
+        // Direct Google Sign In (Flow A)
         login(token, userObj)
 
         // Redirect to dashboard
@@ -53,7 +82,7 @@ export default function GoogleCallback() {
     }
 
     handleGoogleCallback()
-  }, [searchParams, navigate, login])
+  }, [searchParams, navigate, login, currentToken])
 
   return (
     <div className="min-h-screen flex items-center justify-center" style={{ background: '#0d0015' }}>

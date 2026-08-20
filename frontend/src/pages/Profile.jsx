@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import api from '../api/axios'
 import GoogleIntegration from '../components/GoogleIntegration'
 import { useAuth } from '../context/AuthContext'
@@ -7,11 +7,13 @@ import { useAuth } from '../context/AuthContext'
 export default function Profile() {
   const { logout } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [user, setUser] = useState(null)
   const [formData, setFormData] = useState({ name: '', email: '' })
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [googleBanner, setGoogleBanner] = useState(null)
 
   // Delete account state
   const [showDeleteModal, setShowDeleteModal] = useState(false)
@@ -20,10 +22,37 @@ export default function Profile() {
   const [deleteError, setDeleteError] = useState('')
 
   useEffect(() => {
+    // Load local storage user
     const userData = JSON.parse(localStorage.getItem('user') || '{}')
     setUser(userData)
     setFormData({ name: userData.name || '', email: userData.email || '' })
-  }, [])
+
+    // Check for google_linked query param or navigation state
+    const params = new URLSearchParams(location.search)
+    if (params.get('google_linked') === '1' || location.state?.success) {
+      setGoogleBanner({
+        type: 'success',
+        text: location.state?.success || 'Akun Google berhasil dihubungkan! Folder Drive dan Google Sheets pribadi Anda telah disiapkan.'
+      })
+      // Clean up url
+      window.history.replaceState({}, document.title, window.location.pathname)
+    }
+
+    // Fetch latest user profile from API
+    const fetchLatestProfile = async () => {
+      try {
+        const res = await api.get('/api/profile')
+        if (res.data.success && res.data.user) {
+          const fresh = res.data.user
+          setUser(prev => ({ ...prev, ...fresh }))
+          setFormData({ name: fresh.name || '', email: fresh.email || '' })
+        }
+      } catch (err) {
+        console.error('Failed to refresh profile:', err)
+      }
+    }
+    fetchLatestProfile()
+  }, [location])
 
   const handleUpdate = async (e) => {
     e.preventDefault()
@@ -32,13 +61,17 @@ export default function Profile() {
     setSaved(false)
 
     try {
-      const updatedUser = { ...user, name: formData.name, email: formData.email }
-      localStorage.setItem('user', JSON.stringify(updatedUser))
-      setUser(updatedUser)
-      setSaved(true)
-      setTimeout(() => setSaved(false), 3000)
-    } catch {
-      setErrors({ general: 'Gagal memperbarui profil. Silakan coba lagi.' })
+      const res = await api.put('/api/profile', formData)
+      if (res.data.success) {
+        const updatedUser = { ...user, name: formData.name, email: formData.email }
+        localStorage.setItem('user', JSON.stringify(updatedUser))
+        setUser(updatedUser)
+        setSaved(true)
+        window.dispatchEvent(new Event('auth-change'))
+        setTimeout(() => setSaved(false), 3000)
+      }
+    } catch (err) {
+      setErrors({ general: err.response?.data?.error || 'Gagal memperbarui profil. Silakan coba lagi.' })
     } finally {
       setSaving(false)
     }
@@ -72,6 +105,20 @@ export default function Profile() {
         <h1 className="text-2xl font-bold text-[#4B164C]">Profil Saya</h1>
         <p className="mt-1 text-sm text-slate-500">Kelola informasi akun dan integrasi Anda.</p>
       </div>
+
+      {googleBanner && (
+        <div className={`p-4 rounded-xl flex items-center justify-between text-sm shadow-sm border ${
+          googleBanner.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-200 text-red-800'
+        }`}>
+          <div className="flex items-center gap-3">
+            <i className={`bi ${googleBanner.type === 'success' ? 'bi-check-circle-fill text-emerald-500' : 'bi-exclamation-triangle-fill text-red-500'} text-lg`} />
+            <span className="font-medium">{googleBanner.text}</span>
+          </div>
+          <button onClick={() => setGoogleBanner(null)} className="text-slate-400 hover:text-slate-600">
+            <i className="bi bi-x-lg" />
+          </button>
+        </div>
+      )}
 
       {/* Profile Hero Card — compact */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">

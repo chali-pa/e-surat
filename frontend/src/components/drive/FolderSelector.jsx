@@ -11,6 +11,7 @@ export default function FolderSelector({
   selectedFolder, 
   onFolderChange, 
   letterType = 'incoming',
+  fileType = 'pdf',
   disabled = false 
 }) {
   const [folders, setFolders] = useState([])
@@ -99,7 +100,11 @@ export default function FolderSelector({
         {!disabled && currentMonth && (
           <button
             type="button"
-            onClick={() => setShowCreateFolder(!showCreateFolder)}
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setShowCreateFolder(!showCreateFolder)
+            }}
             className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#4B164C] transition-colors"
             title="Buat folder baru"
           >
@@ -128,9 +133,10 @@ export default function FolderSelector({
       )}
 
       {showCreateFolder && (
-        <CreateFolderForm
+        <CreateFolderPanel
           month={currentMonth}
           letterType={letterType}
+          fileType={fileType}
           onFolderCreated={(newFolder) => {
             setFolders(prev => [...prev, newFolder])
             onFolderChange(newFolder)
@@ -143,13 +149,16 @@ export default function FolderSelector({
   )
 }
 
-function CreateFolderForm({ month, letterType, onFolderCreated, onCancel }) {
+function CreateFolderPanel({ month, letterType, fileType, onFolderCreated, onCancel }) {
   const [folderName, setFolderName] = useState('')
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState('')
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
+  const handleCreate = async (e) => {
+    if (e) {
+      e.preventDefault()
+      e.stopPropagation()
+    }
     setError('')
 
     if (!folderName.trim()) {
@@ -162,7 +171,8 @@ function CreateFolderForm({ month, letterType, onFolderCreated, onCancel }) {
       const response = await api.post('/api/folders', {
         month,
         name: folderName.trim(),
-        letter_type: letterType
+        letter_type: letterType,
+        file_type: fileType
       })
 
       if (response.data.success) {
@@ -189,12 +199,16 @@ function CreateFolderForm({ month, letterType, onFolderCreated, onCancel }) {
   }
 
   return (
-    <div className="mt-3 p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+    <div className="mt-3 p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3" onClick={(e) => e.stopPropagation()}>
       <div className="flex items-center justify-between">
         <p className="text-sm font-semibold text-slate-700">Buat Folder Baru</p>
         <button
           type="button"
-          onClick={onCancel}
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            onCancel()
+          }}
           className="text-slate-400 hover:text-slate-600 transition-colors"
         >
           <i className="bi bi-x-lg" />
@@ -208,7 +222,8 @@ function CreateFolderForm({ month, letterType, onFolderCreated, onCancel }) {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-3">
+      {/* Non-form div container to prevent triggering outer form submission/reset */}
+      <div className="space-y-3">
         <div>
           <label className="block text-xs font-medium text-slate-600 mb-1">
             Nama Folder
@@ -217,6 +232,13 @@ function CreateFolderForm({ month, letterType, onFolderCreated, onCancel }) {
             type="text"
             value={folderName}
             onChange={(e) => setFolderName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                e.stopPropagation()
+                handleCreate(e)
+              }
+            }}
             placeholder="Contoh: Surat Penting"
             disabled={creating}
             className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4B164C]/20 focus:border-[#4B164C] disabled:opacity-50 disabled:cursor-not-allowed"
@@ -225,7 +247,8 @@ function CreateFolderForm({ month, letterType, onFolderCreated, onCancel }) {
 
         <div className="flex items-center gap-2">
           <button
-            type="submit"
+            type="button"
+            onClick={handleCreate}
             disabled={creating || !folderName.trim()}
             className="flex-1 py-2 px-4 rounded-lg bg-[#4B164C] hover:bg-[#3a123a] text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
@@ -245,7 +268,7 @@ function CreateFolderForm({ month, letterType, onFolderCreated, onCancel }) {
           <i className="bi bi-info-circle mr-1" />
           Folder akan dibuat di: <span className="font-medium">{month}</span>
         </p>
-      </form>
+      </div>
     </div>
   )
 }

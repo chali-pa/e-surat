@@ -1,30 +1,35 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import api from '../api/axios'
 
 export default function GoogleIntegration() {
   const [status, setStatus] = useState({
     connected: false,
+    provisioned: false,
     email: '',
+    googleName: '',
+    googleEmail: '',
     driveFolderId: null,
+    driveKeluarFolderId: null,
     sheetMasukId: null,
     sheetKeluarId: null,
   })
   const [loading, setLoading] = useState(true)
   const [connecting, setConnecting] = useState(false)
+  const [provisioning, setProvisioning] = useState(false)
   const [message, setMessage] = useState(null)
 
-  useEffect(() => {
-    checkConnection()
-  }, [])
-
-  const checkConnection = async () => {
+  const checkConnection = useCallback(async () => {
     try {
       const response = await api.get('/api/google/status')
       if (response.data.success) {
         setStatus({
           connected: !!response.data.connected,
+          provisioned: !!response.data.provisioned,
           email: response.data.email || '',
+          googleName: response.data.googleName || '',
+          googleEmail: response.data.googleEmail || '',
           driveFolderId: response.data.driveFolderId,
+          driveKeluarFolderId: response.data.driveKeluarFolderId,
           sheetMasukId: response.data.sheetMasukId,
           sheetKeluarId: response.data.sheetKeluarId,
         })
@@ -34,7 +39,21 @@ export default function GoogleIntegration() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    checkConnection()
+
+    const handleGoogleLinked = (e) => {
+      checkConnection()
+      if (e?.detail?.success) {
+        setMessage({ type: 'success', text: e.detail.success })
+      }
+    }
+
+    window.addEventListener('google-linked', handleGoogleLinked)
+    return () => window.removeEventListener('google-linked', handleGoogleLinked)
+  }, [checkConnection])
 
   const handleConnect = () => {
     setConnecting(true)
@@ -44,12 +63,42 @@ export default function GoogleIntegration() {
     window.location.href = `${apiBaseUrl}/api/google/connect${userId}`
   }
 
+  const handleProvision = async () => {
+    setProvisioning(true)
+    setMessage(null)
+    try {
+      const response = await api.post('/api/google/provision')
+      if (response.data.success) {
+        setMessage({ type: 'success', text: response.data.message || 'Drive & Sheets berhasil disiapkan!' })
+        await checkConnection()
+      }
+    } catch (error) {
+      console.error('Provision error:', error)
+      const errorMsg = error.response?.data?.error || error.response?.data?.details || 'Gagal menyiapkan Drive & Sheets. Silakan coba hubungkan ulang Google.'
+      setMessage({ type: 'error', text: errorMsg })
+    } finally {
+      setProvisioning(false)
+    }
+  }
+
   const handleDisconnect = async () => {
     try {
       const response = await api.post('/api/google/disconnect')
       if (response.data.success) {
-        setStatus((prev) => ({ ...prev, connected: false }))
-        setMessage({ type: 'success', text: response.data.message })
+        setStatus((prev) => ({ 
+          ...prev, 
+          connected: false,
+          provisioned: false,
+          googleName: '',
+          googleEmail: ''
+        }))
+        setMessage({ type: 'success', text: response.data.message || 'Koneksi Google berhasil diputus.' })
+        
+        // Update localStorage user object
+        const user = JSON.parse(localStorage.getItem('user') || '{}')
+        user.google_connected = false
+        localStorage.setItem('user', JSON.stringify(user))
+        window.dispatchEvent(new Event('auth-change'))
       }
     } catch (error) {
       setMessage({ type: 'error', text: 'Gagal memutus koneksi Google' })
@@ -73,13 +122,20 @@ export default function GoogleIntegration() {
 
       {message && (
         <div
-          className={`p-3.5 rounded-xl text-xs font-medium ${
+          className={`p-3.5 rounded-xl text-xs font-medium flex items-center justify-between ${
             message.type === 'success'
               ? 'bg-green-50 text-green-700 border border-green-200'
               : 'bg-red-50 text-red-600 border border-red-100'
           }`}
         >
-          {message.text}
+          <span>{message.text}</span>
+          <button 
+            type="button" 
+            onClick={() => setMessage(null)} 
+            className="text-slate-400 hover:text-slate-600 ml-2"
+          >
+            <i className="bi bi-x-lg text-xs" />
+          </button>
         </div>
       )}
 
@@ -90,21 +146,64 @@ export default function GoogleIntegration() {
               <i className="bi bi-check-circle-fill" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-semibold text-emerald-900 text-sm">Akun Google Terhubung</p>
-              <p className="text-xs text-emerald-700 mt-0.5 truncate">{status.email}</p>
+              <div className="flex items-center gap-2">
+                <p className="font-semibold text-emerald-900 text-sm">Akun Google Terhubung</p>
+                {status.provisioned ? (
+                  <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full">
+                    Drive & Sheets Siap
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-bold px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full">
+                    Setup Tertunda
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-emerald-700 mt-0.5 truncate">
+                {status.googleName ? `${status.googleName} (${status.googleEmail || status.email})` : (status.googleEmail || status.email)}
+              </p>
+              
               <div className="mt-2 text-[11px] text-emerald-800 space-y-0.5 font-mono">
-                <p>• Folder Incoming: esurat</p>
-                <p>• Folder Outgoing: esurat-keluar</p>
-                <p>• Spreadsheet Masuk: E-Surat Masuk</p>
-                <p>• Spreadsheet Keluar: E-Surat Keluar</p>
+                <p className="flex items-center gap-1.5">
+                  <i className={`bi ${status.driveFolderId ? 'bi-check-lg text-emerald-600' : 'bi-dash-circle text-amber-500'}`} />
+                  Folder Incoming: <span className="font-semibold">esurat</span>
+                </p>
+                <p className="flex items-center gap-1.5">
+                  <i className={`bi ${status.driveKeluarFolderId ? 'bi-check-lg text-emerald-600' : 'bi-dash-circle text-amber-500'}`} />
+                  Folder Outgoing: <span className="font-semibold">esurat-keluar</span>
+                </p>
+                <p className="flex items-center gap-1.5">
+                  <i className={`bi ${status.sheetMasukId ? 'bi-check-lg text-emerald-600' : 'bi-dash-circle text-amber-500'}`} />
+                  Spreadsheet Masuk: <span className="font-semibold">E-Surat Masuk</span>
+                </p>
+                <p className="flex items-center gap-1.5">
+                  <i className={`bi ${status.sheetKeluarId ? 'bi-check-lg text-emerald-600' : 'bi-dash-circle text-amber-500'}`} />
+                  Spreadsheet Keluar: <span className="font-semibold">E-Surat Keluar</span>
+                </p>
               </div>
             </div>
           </div>
 
+          {!status.provisioned && (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between gap-3 text-amber-900 text-xs">
+              <div className="flex items-center gap-2">
+                <i className="bi bi-info-circle-fill text-amber-500 text-sm" />
+                <span>Folder Drive atau Spreadsheet belum lengkap dibuat.</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleProvision}
+                disabled={provisioning}
+                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold transition disabled:opacity-50 whitespace-nowrap"
+              >
+                {provisioning ? 'Menyiapkan...' : 'Siapkan Ulang Drive & Sheets'}
+              </button>
+            </div>
+          )}
+
           <div className="flex items-center gap-3">
             <button
               onClick={handleConnect}
-              disabled={connecting}
+              disabled={connecting || provisioning}
               className="flex-1 py-2.5 px-4 rounded-xl border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition flex items-center justify-center gap-2"
             >
               <i className="bi bi-arrow-repeat text-slate-500" /> Hubungkan Ulang / Ganti Akun Google
@@ -112,6 +211,7 @@ export default function GoogleIntegration() {
 
             <button
               onClick={handleDisconnect}
+              disabled={connecting || provisioning}
               className="py-2.5 px-4 rounded-xl border border-red-200 bg-red-50 text-red-600 text-xs font-semibold hover:bg-red-100 transition"
             >
               Putus Koneksi

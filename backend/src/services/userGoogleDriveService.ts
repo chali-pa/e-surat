@@ -296,7 +296,8 @@ export async function initializeUserDriveStructure(userId: number): Promise<{
 }
 
 /**
- * Upload file to user's Google Drive with strict folder routing
+ * Upload file to user's Google Drive with strict folder routing.
+ * Fails explicitly if a customFolderId is invalid/unresolvable.
  */
 export async function uploadUserLetterFile(
   userId: number,
@@ -341,13 +342,11 @@ export async function uploadUserLetterFile(
         targetFolderId = customFolderId;
         const monthName = getMonthName(letterDateStr);
         logicalPath = `${rootName}/${monthName}/Custom/${originalFileName}`;
-      } catch (e) {
-        console.warn(`[GoogleDrive] Custom folder ID ${customFolderId} not accessible, falling back to default routing.`);
-        customFolderId = undefined;
+      } catch (e: any) {
+        console.error(`[GoogleDrive] Custom folder ID ${customFolderId} not accessible or missing:`, e);
+        throw new Error(`Folder Google Drive '${customFolderId}' tidak ditemukan atau tidak dapat diakses.`);
       }
-    }
-
-    if (!customFolderId) {
+    } else {
       const subfolderName = getSubfolderType(originalFileName, mimeType);
 
       if (subfolderName === 'PDF') {
@@ -367,7 +366,7 @@ export async function uploadUserLetterFile(
     // 3. Upload file to target folder
     const fileMetadata = {
       name: originalFileName,
-      parents: [targetFolderId!],
+      parents: [targetFolderId],
     };
 
     const media = {
@@ -536,7 +535,8 @@ export async function createCustomFolder(
   userId: number,
   monthName: string,
   folderName: string,
-  letterType: 'incoming' | 'outgoing' = 'incoming'
+  letterType: 'incoming' | 'outgoing' = 'incoming',
+  fileType: 'pdf' | 'excel' | 'documentation' = 'pdf'
 ): Promise<{
   folderId: string;
   googleDriveFolderId: string;
@@ -565,18 +565,26 @@ export async function createCustomFolder(
       };
     }
 
-    // Build parent hierarchy under esurat/PDF/<MonthName>/
-    const pdfFolderId = await findOrCreateFolder(drive, 'PDF', rootFolderId);
-    const monthFolderId = await findOrCreateFolder(drive, monthName, pdfFolderId);
+    // Build parent hierarchy based on fileType
+    let parentFolderId: string;
+    if (fileType === 'excel') {
+      parentFolderId = await findOrCreateFolder(drive, 'Excel', rootFolderId);
+    } else if (fileType === 'documentation') {
+      parentFolderId = await findOrCreateFolder(drive, 'Documentation', rootFolderId);
+    } else {
+      // PDF (default): esurat/PDF/<MonthName>/
+      const pdfFolderId = await findOrCreateFolder(drive, 'PDF', rootFolderId);
+      parentFolderId = await findOrCreateFolder(drive, monthName, pdfFolderId);
+    }
 
-    // Create custom folder under month folder in Drive
-    const customFolderDriveId = await findOrCreateFolder(drive, folderName.trim(), monthFolderId);
+    // Create custom folder under parent folder in Drive
+    const customFolderDriveId = await findOrCreateFolder(drive, folderName.trim(), parentFolderId);
 
     // Save to database
     const folder = await createFolder({
       user_id: userId,
       google_drive_folder_id: customFolderDriveId,
-      parent_folder_id: monthFolderId,
+      parent_folder_id: parentFolderId,
       name: folderName.trim(),
       month: monthName,
       folder_type: 'custom',

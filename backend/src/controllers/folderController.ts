@@ -43,7 +43,7 @@ export const createFolder = async (req: AuthRequest, res: Response) => {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const { month, name, letter_type } = req.body;
+    const { month, name, letter_type, file_type } = req.body;
 
     if (!month || !name || !name.trim()) {
       return res.status(400).json({ 
@@ -56,8 +56,9 @@ export const createFolder = async (req: AuthRequest, res: Response) => {
     }
 
     const letterType = (letter_type as 'incoming' | 'outgoing') || 'incoming';
+    const fileType = (file_type as 'pdf' | 'excel' | 'documentation') || 'pdf';
     
-    const result = await createCustomFolder(userId, month, name.trim(), letterType);
+    const result = await createCustomFolder(userId, month, name.trim(), letterType, fileType);
 
     if (result.message === 'Folder already exists in the selected month') {
       return res.status(409).json({ 

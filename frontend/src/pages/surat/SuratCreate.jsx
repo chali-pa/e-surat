@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import api from '../../api/axios'
 import FolderSelector from '../../components/drive/FolderSelector'
@@ -39,6 +39,21 @@ export default function SuratCreate() {
   const [loading, setLoading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [dragActive, setDragActive] = useState(false)
+  const [googleConnected, setGoogleConnected] = useState(true)
+
+  useEffect(() => {
+    const checkGoogleStatus = async () => {
+      try {
+        const res = await api.get('/api/google/status')
+        if (res.data.success) {
+          setGoogleConnected(!!res.data.connected)
+        }
+      } catch (err) {
+        console.warn('Failed to check Google status:', err)
+      }
+    }
+    checkGoogleStatus()
+  }, [])
 
   const validateFile = (file) => {
     if (!file) return null
@@ -189,6 +204,27 @@ export default function SuratCreate() {
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          {/* Google Not Connected Banner */}
+          {!googleConnected && !errors.googleReconnect && (
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-900">
+              <div className="flex items-start gap-3 text-sm">
+                <i className="bi bi-exclamation-triangle-fill text-amber-500 text-lg flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-amber-900">Akun Google Belum Terhubung</p>
+                  <p className="text-xs text-amber-700 mt-0.5">
+                    Hubungkan akun Google Anda dari profil agar surat tersimpan otomatis ke Google Drive dan Google Sheets pribadi Anda.
+                  </p>
+                </div>
+              </div>
+              <Link
+                to="/profile"
+                className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold shadow-sm transition whitespace-nowrap"
+              >
+                <i className="bi bi-google" /> Hubungkan di Profil
+              </Link>
+            </div>
+          )}
+
           {/* Google Reconnect Banner */}
           {errors.googleReconnect ? (
             <div className="p-5 bg-amber-50 border border-amber-200 rounded-xl space-y-3">
@@ -344,7 +380,7 @@ export default function SuratCreate() {
 
           {/* Folder Selection */}
           <FolderSelector
-            letterDate={formData.tanggal_buat}
+            letterDate={formData.tanggal_masuk || formData.tanggal_buat}
             selectedFolder={selectedFolder}
             onFolderChange={setSelectedFolder}
             letterType="incoming"

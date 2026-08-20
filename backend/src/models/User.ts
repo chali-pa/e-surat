@@ -7,6 +7,8 @@ export interface User {
   password: string;
   email_verified_at?: Date;
   google_sub?: string | null;
+  google_name?: string | null;
+  google_email?: string | null;
   google_access_token?: string | null;
   google_refresh_token?: string | null;
   google_token_expires_at?: number | string | null;
@@ -20,13 +22,47 @@ export interface User {
   updated_at: Date;
 }
 
-export const createUser = async (name: string, email: string, password: string, googleSub?: string | null): Promise<User> => {
+// Ensure optional columns exist in users table safely
+let columnsEnsured = false;
+async function ensureUserGoogleColumns() {
+  if (columnsEnsured) return;
+  try {
+    await pool.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS google_sub TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS google_name VARCHAR(255);
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS google_email VARCHAR(255);
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS google_access_token TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS google_refresh_token TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS google_token_expires_at BIGINT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS google_connected BOOLEAN DEFAULT FALSE;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS drive_folder_id TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS drive_keluar_folder_id TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS sheet_masuk_id TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS sheet_keluar_id TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS documentation_folder_id TEXT;
+    `);
+    columnsEnsured = true;
+  } catch (err) {
+    console.warn('[User] Auto-ensuring columns warning:', err);
+  }
+}
+ensureUserGoogleColumns();
+
+export const createUser = async (
+  name: string,
+  email: string,
+  password: string,
+  googleSub?: string | null,
+  googleName?: string | null,
+  googleEmail?: string | null
+): Promise<User> => {
+  await ensureUserGoogleColumns();
   const query = `
-    INSERT INTO users (name, email, password, google_sub, created_at, updated_at)
-    VALUES ($1, $2, $3, $4, NOW(), NOW())
+    INSERT INTO users (name, email, password, google_sub, google_name, google_email, created_at, updated_at)
+    VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
     RETURNING *
   `;
-  const values = [name, email, password, googleSub || null];
+  const values = [name, email, password, googleSub || null, googleName || null, googleEmail || null];
   const result = await pool.query(query, values);
   return result.rows[0];
 };
@@ -83,8 +119,11 @@ export const updateUserGoogleTokens = async (
   accessToken: string,
   refreshToken?: string | null,
   expiresAt?: number | null,
-  googleSub?: string | null
+  googleSub?: string | null,
+  googleName?: string | null,
+  googleEmail?: string | null
 ): Promise<User> => {
+  await ensureUserGoogleColumns();
   let query: string;
   let values: any[];
 
@@ -96,11 +135,13 @@ export const updateUserGoogleTokens = async (
           google_token_expires_at = $3,
           google_connected = TRUE,
           google_sub = COALESCE($4, google_sub),
+          google_name = COALESCE($5, google_name),
+          google_email = COALESCE($6, google_email),
           updated_at = NOW()
-      WHERE id = $5
+      WHERE id = $7
       RETURNING *
     `;
-    values = [accessToken, refreshToken, expiresAt || null, googleSub || null, id];
+    values = [accessToken, refreshToken, expiresAt || null, googleSub || null, googleName || null, googleEmail || null, id];
   } else {
     query = `
       UPDATE users
@@ -108,11 +149,13 @@ export const updateUserGoogleTokens = async (
           google_token_expires_at = COALESCE($2, google_token_expires_at),
           google_connected = TRUE,
           google_sub = COALESCE($3, google_sub),
+          google_name = COALESCE($4, google_name),
+          google_email = COALESCE($5, google_email),
           updated_at = NOW()
-      WHERE id = $4
+      WHERE id = $6
       RETURNING *
     `;
-    values = [accessToken, expiresAt || null, googleSub || null, id];
+    values = [accessToken, expiresAt || null, googleSub || null, googleName || null, googleEmail || null, id];
   }
 
   const result = await pool.query(query, values);
@@ -126,6 +169,8 @@ export const clearUserGoogleTokens = async (id: number): Promise<User> => {
         google_refresh_token = NULL,
         google_token_expires_at = NULL,
         google_connected = FALSE,
+        google_name = NULL,
+        google_email = NULL,
         updated_at = NOW()
     WHERE id = $1
     RETURNING *
@@ -166,4 +211,3 @@ export const updateUserGoogleResourceIds = async (
   const result = await pool.query(query, values);
   return result.rows[0];
 };
-

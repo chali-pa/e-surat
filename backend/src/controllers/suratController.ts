@@ -82,6 +82,8 @@ export const store = async (req: AuthRequest, res: Response) => {
     console.log('User ID:', userId);
 
     const { nomor_surat, nama_pengirim, nama_surat, tanggal_masuk, tanggal_buat, folder_id } = req.body;
+    
+    console.log('Folder ID received:', folder_id, 'Type:', typeof folder_id);
 
     if (!nomor_surat || !nama_pengirim || !nama_surat || !tanggal_masuk || !tanggal_buat) {
       return res.status(400).json({
@@ -104,7 +106,9 @@ export const store = async (req: AuthRequest, res: Response) => {
 
     // Verify folder ownership server-side if folder_id is provided
     if (folder_id) {
+      console.log(`[SuratController] Validating folder ownership - userId: ${userId}, folder_id: ${folder_id}`);
       const validation = await validateFolderOwnership(userId, folder_id, 'incoming');
+      console.log(`[SuratController] Validation result:`, validation);
       if (!validation.valid) {
         return res.status(403).json({
           error: 'Forbidden',

@@ -607,8 +607,11 @@ export async function createCustomFolder(
 }
 
 /**
- * Validate folder ownership by checking both database and Google Drive API
- * This handles timing issues where a newly created folder might not be in DB yet
+ * Validate folder ownership by checking database and verifying Drive folder exists
+ * 
+ * ROOT CAUSE FIX: The folderId parameter is the DATABASE ID, not the Google Drive ID.
+ * This function looks up the Drive ID from the database and validates that the folder
+ * actually exists in Drive. This prevents the false rejection caused by using DB ID as Drive ID.
  */
 export async function validateFolderOwnership(
   userId: number,
@@ -616,84 +619,79 @@ export async function validateFolderOwnership(
   letterType: 'incoming' | 'outgoing' = 'incoming'
 ): Promise<{ valid: boolean; googleDriveFolderId?: string; dbFolderId?: number }> {
   try {
-    // First, try to find in database (most common case)
-    const dbFolder = await findFolderById(parseInt(folderId));
-    if (dbFolder && dbFolder.user_id === userId) {
+    // DIAGNOSTIC: Log input parameters
+    console.log(`[GoogleDrive] validateFolderOwnership - userId: ${userId}, folderId: ${folderId}, letterType: ${letterType}`);
+    
+    // Parse folderId safely - handle string/number conversion
+    const parsedFolderId = parseInt(folderId, 10);
+    if (isNaN(parsedFolderId)) {
+      console.warn(`[GoogleDrive] Invalid folder ID format: ${folderId} (parsed as NaN)`);
+      return { valid: false };
+    }
+    
+    // Look up folder in database using the database ID
+    const dbFolder = await findFolderById(parsedFolderId);
+    
+    console.log(`[GoogleDrive] DB lookup result:`, dbFolder ? {
+      id: dbFolder.id,
+      user_id: dbFolder.user_id,
+      google_drive_folder_id: dbFolder.google_drive_folder_id,
+      name: dbFolder.name,
+      month: dbFolder.month,
+      letter_type: dbFolder.letter_type
+    } : 'null');
+    
+    if (!dbFolder) {
+      console.warn(`[GoogleDrive] Folder ID ${parsedFolderId} not found in database`);
+      return { valid: false };
+    }
+
+    if (dbFolder.user_id !== userId) {
+      console.warn(`[GoogleDrive] Folder ID ${parsedFolderId} belongs to user ${dbFolder.user_id}, not ${userId}`);
+      return { valid: false };
+    }
+
+    // Check if letter_type matches (incoming vs outgoing)
+    if (dbFolder.letter_type !== letterType) {
+      console.warn(`[GoogleDrive] Folder ID ${parsedFolderId} has letter_type '${dbFolder.letter_type}' but request expects '${letterType}'`);
+      return { valid: false };
+    }
+
+    // Check if google_drive_folder_id exists and is valid
+    if (!dbFolder.google_drive_folder_id || dbFolder.google_drive_folder_id.trim() === '') {
+      console.warn(`[GoogleDrive] Folder ${parsedFolderId} has invalid google_drive_folder_id: ${dbFolder.google_drive_folder_id}`);
+      return { valid: false };
+    }
+
+    // Verify the folder actually exists in Drive using the correct Drive ID from database
+    const auth = await getOAuth2ClientForUser(userId);
+    const drive = google.drive({ version: 'v3', auth });
+
+    try {
+      console.log(`[GoogleDrive] Checking Drive folder existence for ID: ${dbFolder.google_drive_folder_id}`);
+      const driveFile = await drive.files.get({
+        fileId: dbFolder.google_drive_folder_id,
+        fields: 'id, name, trashed'
+      });
+      
+      console.log(`[GoogleDrive] Drive folder found:`, {
+        id: driveFile.data.id,
+        name: driveFile.data.name,
+        trashed: driveFile.data.trashed
+      });
+
       return {
         valid: true,
         googleDriveFolderId: dbFolder.google_drive_folder_id,
         dbFolderId: dbFolder.id
       };
-    }
-
-    // If not found in DB or ownership mismatch, validate against Drive API directly
-    // This handles newly created folders that haven't been committed to DB yet
-    const auth = await getOAuth2ClientForUser(userId);
-    const drive = google.drive({ version: 'v3', auth });
-
-    const user = await findUserById(userId);
-    const rootFolderId = letterType === 'incoming' ? user?.drive_folder_id : user?.drive_keluar_folder_id;
-
-    if (!rootFolderId) {
-      console.warn(`[GoogleDrive] User ${userId} has no root folder ID set for ${letterType}`);
-      return { valid: false };
-    }
-
-    // Check if the folder exists in Drive
-    try {
-      const folder = await drive.files.get({
-        fileId: folderId,
-        fields: 'id, name, parents'
-      });
-
-      // Walk up the parent chain to verify it's under the user's root folder
-      let currentParents = folder.data.parents || [];
-      let foundRoot = false;
-      let visitedFolders = new Set<string>();
-
-      while (currentParents.length > 0 && !foundRoot) {
-        for (const parentId of currentParents) {
-          if (visitedFolders.has(parentId)) {
-            continue; // Avoid infinite loops
-          }
-          visitedFolders.add(parentId);
-
-          if (parentId === rootFolderId) {
-            foundRoot = true;
-            break;
-          }
-
-          // Get parent's parents to continue walking up
-          try {
-            const parentFolder = await drive.files.get({
-              fileId: parentId,
-              fields: 'parents'
-            });
-            currentParents = parentFolder.data.parents || [];
-          } catch (e) {
-            // Parent might not be accessible, skip it
-            continue;
-          }
-        }
-
-        if (!foundRoot && currentParents.length > 0) {
-          // Check the next level of parents
-          continue;
-        }
-      }
-
-      if (foundRoot) {
-        console.log(`[GoogleDrive] Validated folder ${folderId} ownership via Drive API for user ${userId}`);
-        return {
-          valid: true,
-          googleDriveFolderId: folderId
-        };
-      } else {
-        console.warn(`[GoogleDrive] Folder ${folderId} not under user's root folder ${rootFolderId}`);
-        return { valid: false };
-      }
     } catch (driveError: any) {
-      console.error(`[GoogleDrive] Drive API validation failed for folder ${folderId}:`, driveError);
+      console.warn(`[GoogleDrive] Folder exists in DB but not accessible in Drive: ${dbFolder.google_drive_folder_id}`, driveError);
+      console.warn(`[GoogleDrive] Drive error details:`, {
+        code: driveError.code,
+        status: driveError.status,
+        message: driveError.message
+      });
       return { valid: false };
     }
   } catch (error) {

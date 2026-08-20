@@ -619,47 +619,30 @@ export async function validateFolderOwnership(
   letterType: 'incoming' | 'outgoing' = 'incoming'
 ): Promise<{ valid: boolean; googleDriveFolderId?: string; dbFolderId?: number }> {
   try {
-    // DIAGNOSTIC: Log input parameters
-    console.log(`[GoogleDrive] validateFolderOwnership - userId: ${userId}, folderId: ${folderId}, letterType: ${letterType}`);
-    
     // Parse folderId safely - handle string/number conversion
     const parsedFolderId = parseInt(folderId, 10);
     if (isNaN(parsedFolderId)) {
-      console.warn(`[GoogleDrive] Invalid folder ID format: ${folderId} (parsed as NaN)`);
       return { valid: false };
     }
     
     // Look up folder in database using the database ID
     const dbFolder = await findFolderById(parsedFolderId);
     
-    console.log(`[GoogleDrive] DB lookup result:`, dbFolder ? {
-      id: dbFolder.id,
-      user_id: dbFolder.user_id,
-      google_drive_folder_id: dbFolder.google_drive_folder_id,
-      name: dbFolder.name,
-      month: dbFolder.month,
-      letter_type: dbFolder.letter_type
-    } : 'null');
-    
     if (!dbFolder) {
-      console.warn(`[GoogleDrive] Folder ID ${parsedFolderId} not found in database`);
       return { valid: false };
     }
 
     if (dbFolder.user_id !== userId) {
-      console.warn(`[GoogleDrive] Folder ID ${parsedFolderId} belongs to user ${dbFolder.user_id}, not ${userId}`);
       return { valid: false };
     }
 
     // Check if letter_type matches (incoming vs outgoing)
     if (dbFolder.letter_type !== letterType) {
-      console.warn(`[GoogleDrive] Folder ID ${parsedFolderId} has letter_type '${dbFolder.letter_type}' but request expects '${letterType}'`);
       return { valid: false };
     }
 
     // Check if google_drive_folder_id exists and is valid
     if (!dbFolder.google_drive_folder_id || dbFolder.google_drive_folder_id.trim() === '') {
-      console.warn(`[GoogleDrive] Folder ${parsedFolderId} has invalid google_drive_folder_id: ${dbFolder.google_drive_folder_id}`);
       return { valid: false };
     }
 
@@ -668,16 +651,9 @@ export async function validateFolderOwnership(
     const drive = google.drive({ version: 'v3', auth });
 
     try {
-      console.log(`[GoogleDrive] Checking Drive folder existence for ID: ${dbFolder.google_drive_folder_id}`);
-      const driveFile = await drive.files.get({
+      await drive.files.get({
         fileId: dbFolder.google_drive_folder_id,
         fields: 'id, name, trashed'
-      });
-      
-      console.log(`[GoogleDrive] Drive folder found:`, {
-        id: driveFile.data.id,
-        name: driveFile.data.name,
-        trashed: driveFile.data.trashed
       });
 
       return {
@@ -686,16 +662,9 @@ export async function validateFolderOwnership(
         dbFolderId: dbFolder.id
       };
     } catch (driveError: any) {
-      console.warn(`[GoogleDrive] Folder exists in DB but not accessible in Drive: ${dbFolder.google_drive_folder_id}`, driveError);
-      console.warn(`[GoogleDrive] Drive error details:`, {
-        code: driveError.code,
-        status: driveError.status,
-        message: driveError.message
-      });
       return { valid: false };
     }
   } catch (error) {
-    console.error(`[GoogleDrive] Folder ownership validation failed:`, error);
     return { valid: false };
   }
 }

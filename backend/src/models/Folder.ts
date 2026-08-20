@@ -48,6 +48,12 @@ export const findFoldersByUserAndMonth = async (userId: number, month: string, l
   return result.rows;
 };
 
+export const findFoldersByUser = async (userId: number): Promise<Folder[]> => {
+  const query = 'SELECT * FROM folders WHERE user_id = $1 ORDER BY letter_type, month, name ASC';
+  const result = await pool.query(query, [userId]);
+  return result.rows;
+};
+
 export const findFolderById = async (id: number): Promise<Folder | null> => {
   const query = 'SELECT * FROM folders WHERE id = $1';
   const result = await pool.query(query, [id]);

@@ -241,6 +241,7 @@ export default function SuratIndex() {
                   <th className="py-3 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-left">Nomor Surat</th>
                   <th className="py-3 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-left">Perihal</th>
                   <th className="py-3 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-left">Pengirim</th>
+                  <th className="py-3 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-left">Folder</th>
                   <th className="py-3 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-left">Tgl Buat</th>
                   <th className="py-3 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-left">Tgl Masuk</th>
                   <th className="py-3 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Aksi</th>
@@ -249,7 +250,7 @@ export default function SuratIndex() {
               <tbody className="divide-y divide-gray-50">
                 {filteredSurats.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="text-center py-16 text-slate-400">
+                    <td colSpan="8" className="text-center py-16 text-slate-400">
                       <i className="bi bi-inbox text-4xl block mb-3 text-slate-300" />
                       <p className="text-sm">Tidak ada data surat masuk</p>
                     </td>
@@ -269,6 +270,16 @@ export default function SuratIndex() {
                       </td>
                       <td className="py-3 px-4 text-sm text-slate-700">{surat.nama_surat}</td>
                       <td className="py-3 px-4 text-sm text-slate-700">{surat.nama_pengirim}</td>
+                      <td className="py-3 px-4 text-sm">
+                        {surat.folder_name ? (
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium bg-purple-50 text-[#4B164C] border border-purple-100">
+                            <i className="bi bi-folder mr-1.5" />
+                            {surat.folder_name}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 text-xs italic">Default</span>
+                        )}
+                      </td>
                       <td className="py-3 px-4 text-sm text-slate-500">
                         {new Date(surat.tanggal_buat).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
                       </td>

@@ -68,6 +68,7 @@ export const getAllIncomingLetterRecords = async (userId: number): Promise<Surat
     google_drive_id: row.google_drive_id || '',
     google_sheet_row: row.google_sheet_row ?? undefined,
     user_id: row.user_id,
+    folder_id: row.folder_id ?? undefined,
     created_at: row.created_at ? new Date(row.created_at).toISOString() : undefined,
     updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
   }));
@@ -88,6 +89,7 @@ export const getIncomingLetterRecordById = async (userId: number, id: number): P
     google_drive_id: row.google_drive_id || '',
     google_sheet_row: row.google_sheet_row ?? undefined,
     user_id: row.user_id,
+    folder_id: row.folder_id ?? undefined,
     created_at: row.created_at ? new Date(row.created_at).toISOString() : undefined,
     updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
   };
@@ -95,8 +97,8 @@ export const getIncomingLetterRecordById = async (userId: number, id: number): P
 
 export const createIncomingLetterRecord = async (surat: Surat): Promise<Surat> => {
   const result = await pool.query(
-    `INSERT INTO surats (nomor_surat, nama_pengirim, nama_surat, tanggal_masuk, tanggal_buat, file_path, google_drive_id, google_sheet_row, user_id, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+    `INSERT INTO surats (nomor_surat, nama_pengirim, nama_surat, tanggal_masuk, tanggal_buat, file_path, google_drive_id, google_sheet_row, user_id, folder_id, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
      RETURNING *`,
     [
       surat.nomor_surat,
@@ -108,6 +110,7 @@ export const createIncomingLetterRecord = async (surat: Surat): Promise<Surat> =
       surat.google_drive_id || null,
       surat.google_sheet_row ?? null,
       surat.user_id ?? null,
+      surat.folder_id ?? null,
     ]
   );
   const row = result.rows[0];
@@ -122,6 +125,7 @@ export const createIncomingLetterRecord = async (surat: Surat): Promise<Surat> =
     google_drive_id: row.google_drive_id,
     google_sheet_row: row.google_sheet_row,
     user_id: row.user_id,
+    folder_id: row.folder_id ?? undefined,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -201,6 +205,7 @@ export const getAllOutgoingLetterRecords = async (userId: number): Promise<Surat
     google_drive_id: row.google_drive_id || '',
     google_sheet_row: row.google_sheet_row ?? undefined,
     user_id: row.user_id,
+    folder_id: row.folder_id ?? undefined,
     created_at: row.created_at ? new Date(row.created_at).toISOString() : undefined,
     updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
   }));
@@ -222,6 +227,7 @@ export const getOutgoingLetterRecordById = async (userId: number, id: number): P
     google_drive_id: row.google_drive_id || '',
     google_sheet_row: row.google_sheet_row ?? undefined,
     user_id: row.user_id,
+    folder_id: row.folder_id ?? undefined,
     created_at: row.created_at ? new Date(row.created_at).toISOString() : undefined,
     updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
   };
@@ -230,8 +236,8 @@ export const getOutgoingLetterRecordById = async (userId: number, id: number): P
 export const createOutgoingLetterRecord = async (surat: SuratKeluar): Promise<SuratKeluar> => {
   await ensureSuratKeluarColumns();
   const result = await pool.query(
-    `INSERT INTO surat_keluars (nomor_surat, nama_penerima, nama_surat, tanggal_keluar, tanggal_buat, file_path, google_drive_id, google_sheet_row, user_id, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+    `INSERT INTO surat_keluars (nomor_surat, nama_penerima, nama_surat, tanggal_keluar, tanggal_buat, file_path, google_drive_id, google_sheet_row, user_id, folder_id, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
      RETURNING *`,
     [
       surat.nomor_surat,
@@ -243,6 +249,7 @@ export const createOutgoingLetterRecord = async (surat: SuratKeluar): Promise<Su
       surat.google_drive_id || null,
       surat.google_sheet_row ?? null,
       surat.user_id ?? null,
+      surat.folder_id ?? null,
     ]
   );
   const row = result.rows[0];
@@ -257,6 +264,7 @@ export const createOutgoingLetterRecord = async (surat: SuratKeluar): Promise<Su
     google_drive_id: row.google_drive_id,
     google_sheet_row: row.google_sheet_row,
     user_id: row.user_id,
+    folder_id: row.folder_id ?? undefined,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };

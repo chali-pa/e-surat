@@ -1,14 +1,13 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
-import { SuratKeluar, deleteOutgoingLetterRecord, createOutgoingLetterRecord, updateOutgoingLetterRecord } from '../models/Surat';
+import { SuratKeluar, deleteOutgoingLetterRecord, createOutgoingLetterRecord, updateOutgoingLetterRecord, getAllOutgoingLetterRecords } from '../models/Surat';
 import fs from 'fs';
 import path from 'path';
 import { google } from 'googleapis';
 import { isGoogleErrorInvalidGrant, GoogleReconnectRequiredError, getOAuth2ClientForUser } from '../services/userGoogleAuthService';
 import { uploadUserLetterFile, deleteUserFile, moveDriveFileToCorrectFolder, getMonthName, validateFolderOwnership } from '../services/userGoogleDriveService';
-import { findFolderById } from '../models/Folder';
+import { findFolderById, findFoldersByUser } from '../models/Folder';
 import {
-  getAllOutgoingLetters,
   getOutgoingLetterByRow,
   appendOutgoingLetterToSheet,
   updateOutgoingLetterInSheet,
@@ -22,8 +21,28 @@ export const index = async (req: AuthRequest, res: Response) => {
   }
 
   try {
-    const surats = await getAllOutgoingLetters(userId);
-    res.json({ success: true, data: surats, surats });
+    // Read from local DB (has folder_id) instead of Google Sheets (no folder info)
+    const surats = await getAllOutgoingLetterRecords(userId);
+
+    // Build folder id → name map in one query to avoid N+1
+    const folderMap: Record<number, string> = {};
+    try {
+      const folders = await findFoldersByUser(userId);
+      for (const f of folders) {
+        if (f.id !== undefined) folderMap[f.id] = f.name;
+      }
+    } catch (folderErr) {
+      // Non-fatal: folder names simply won't appear if this fails
+      console.warn('[SuratKeluarIndex] Could not load folder names:', folderErr);
+    }
+
+    // Enrich records with folder_name
+    const enriched = surats.map((s) => ({
+      ...s,
+      folder_name: s.folder_id ? (folderMap[s.folder_id] ?? null) : null,
+    }));
+
+    res.json({ success: true, data: enriched, surats: enriched });
   } catch (error: any) {
     console.error('Get surat keluars error:', error);
     if (isGoogleErrorInvalidGrant(error)) {
@@ -78,12 +97,7 @@ export const store = async (req: AuthRequest, res: Response) => {
   }
 
   try {
-    console.log('=== STORE SURAT KELUAR REQUEST START ===');
-    console.log('User ID:', userId);
-
     const { nomor_surat, nama_penerima, nama_surat, tanggal_keluar, tanggal_buat, folder_id } = req.body;
-    
-    console.log('Folder ID received:', folder_id, 'Type:', typeof folder_id);
 
     if (!nomor_surat || !nama_penerima || !nama_surat || !tanggal_keluar || !tanggal_buat) {
       return res.status(400).json({
@@ -106,9 +120,7 @@ export const store = async (req: AuthRequest, res: Response) => {
 
     // Verify folder ownership server-side if folder_id is provided
     if (folder_id) {
-      console.log(`[SuratKeluarController] Validating folder ownership - userId: ${userId}, folder_id: ${folder_id}`);
       const validation = await validateFolderOwnership(userId, folder_id, 'outgoing');
-      console.log(`[SuratKeluarController] Validation result:`, validation);
       if (!validation.valid) {
         return res.status(403).json({
           error: 'Forbidden',

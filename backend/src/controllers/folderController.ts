@@ -4,7 +4,7 @@ import {
   createCustomFolder, 
   getMonthlyFolders 
 } from '../services/userGoogleDriveService';
-import { isGoogleErrorInvalidGrant, GoogleReconnectRequiredError } from '../services/userGoogleAuthService';
+import { isGoogleErrorInvalidGrant } from '../services/userGoogleAuthService';
 
 export const getFolders = async (req: AuthRequest, res: Response) => {
   try {
@@ -45,31 +45,36 @@ export const createFolder = async (req: AuthRequest, res: Response) => {
 
     const { month, name, letter_type } = req.body;
 
-    if (!month || !name) {
+    if (!month || !name || !name.trim()) {
       return res.status(400).json({ 
         error: 'Month and name are required',
         missing_fields: {
           month: !month,
-          name: !name,
+          name: !name || !name.trim(),
         }
       });
     }
 
     const letterType = (letter_type as 'incoming' | 'outgoing') || 'incoming';
     
-    const result = await createCustomFolder(userId, month, name, letterType);
+    const result = await createCustomFolder(userId, month, name.trim(), letterType);
 
     if (result.message === 'Folder already exists in the selected month') {
       return res.status(409).json({ 
         success: false, 
         message: result.message,
-        error: 'Folder already exists'
+        error: 'Folder with the same name already exists in this month'
       });
     }
 
     res.status(201).json({ 
       success: true, 
-      message: result.message,
+      message: 'Folder created successfully in Google Drive.',
+      folder: {
+        id: result.folderId,
+        name: name.trim(),
+        googleDriveFolderId: result.googleDriveFolderId,
+      },
       data: result 
     });
   } catch (error: any) {

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import api from '../../api/axios'
+import FolderSelector from '../../components/drive/FolderSelector'
 
 export default function SuratKeluarEdit() {
   const { id } = useParams()
@@ -13,6 +14,7 @@ export default function SuratKeluarEdit() {
     nama_surat: '',
     file_surat: null
   })
+  const [selectedFolder, setSelectedFolder] = useState(null)
   const [errors, setErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
   const [reconnectNeeded, setReconnectNeeded] = useState(false)
@@ -34,6 +36,9 @@ export default function SuratKeluarEdit() {
         nama_surat: surat.nama_surat || '',
         file_surat: null
       })
+      if (surat.folder_id) {
+        setSelectedFolder({ id: surat.folder_id })
+      }
     } catch (error) {
       console.error('Failed to fetch surat keluar:', error)
       navigate('/surat-keluar')
@@ -52,6 +57,10 @@ export default function SuratKeluarEdit() {
       }
     })
 
+    if (selectedFolder?.id) {
+      data.append('folder_id', selectedFolder.id)
+    }
+
     try {
       const response = await api.post(`/api/surat-keluar/${id}`, data, {
         headers: {
@@ -63,7 +72,7 @@ export default function SuratKeluarEdit() {
         setSuccessMessage('Data berhasil diperbarui. Perubahan telah disinkronisasi dengan Google Sheet dan Google Drive.')
         setTimeout(() => {
           navigate('/surat-keluar')
-        }, 2000)
+        }, 1500)
       }
     } catch (error) {
       if (error.response?.data?.error_code === 'GOOGLE_RECONNECT_REQUIRED') {
@@ -191,6 +200,14 @@ export default function SuratKeluarEdit() {
               />
               {errors.nama_surat && <p className="text-red-500 text-xs mt-1">{errors.nama_surat}</p>}
             </div>
+
+            <FolderSelector
+              letterDate={formData.tanggal_keluar}
+              selectedFolder={selectedFolder}
+              onFolderChange={setSelectedFolder}
+              letterType="outgoing"
+              disabled={submitting}
+            />
 
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">Upload File Surat (Opsional)</label>

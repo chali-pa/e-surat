@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
-import { Surat } from '../models/Surat';
+import { Surat, deleteIncomingLetterRecord, createIncomingLetterRecord, updateIncomingLetterRecord } from '../models/Surat';
 import fs from 'fs';
 import path from 'path';
 import { google } from 'googleapis';
@@ -80,12 +80,9 @@ export const store = async (req: AuthRequest, res: Response) => {
   try {
     console.log('=== STORE SURAT MASUK REQUEST START ===');
     console.log('User ID:', userId);
-    console.log('Request body:', req.body);
-    console.log('Request file:', req.file ? req.file.originalname : 'No file');
 
     const { nomor_surat, nama_pengirim, nama_surat, tanggal_masuk, tanggal_buat, folder_id } = req.body;
 
-    // Validate required fields
     if (!nomor_surat || !nama_pengirim || !nama_surat || !tanggal_masuk || !tanggal_buat) {
       return res.status(400).json({
         error: 'Semua field wajib diisi',
@@ -105,12 +102,16 @@ export const store = async (req: AuthRequest, res: Response) => {
     let logicalPath = '';
     let customFolderDriveId: string | undefined;
 
-    // Get custom folder Google Drive ID if folder_id is provided
+    // Verify folder ownership server-side if folder_id is provided
     if (folder_id) {
       const folder = await findFolderById(parseInt(folder_id));
-      if (folder && folder.user_id === userId) {
-        customFolderDriveId = folder.google_drive_folder_id;
+      if (!folder || folder.user_id !== userId) {
+        return res.status(403).json({
+          error: 'Forbidden',
+          message: 'Folder yang dipilih tidak valid atau tidak dimiliki oleh akun Anda.',
+        });
       }
+      customFolderDriveId = folder.google_drive_folder_id;
     }
 
     if (req.file) {
@@ -169,10 +170,16 @@ export const store = async (req: AuthRequest, res: Response) => {
       const uniqueRowId = await appendIncomingLetterToSheet(userId, surat);
       surat.id = uniqueRowId;
       console.log('Google Sheet append successful with ID:', uniqueRowId);
+
+      // Save to local DB record as well
+      try {
+        await createIncomingLetterRecord(surat);
+      } catch (dbErr) {
+        console.warn('DB record sync warning:', dbErr);
+      }
     } catch (sheetError: any) {
       console.error('Google Sheet append failed:', sheetError);
 
-      // Rollback uploaded file if sheet append fails
       if (googleDriveId) {
         try {
           await deleteUserFile(userId, googleDriveId);
@@ -200,7 +207,7 @@ export const store = async (req: AuthRequest, res: Response) => {
     console.log('=== STORE SURAT MASUK SUCCESS ===');
     res.status(201).json({
       success: true,
-      message: 'Surat created successfully',
+      message: 'File created and uploaded to Google Drive successfully.',
       surat,
       data: surat,
     });
@@ -247,12 +254,15 @@ export const update = async (req: AuthRequest, res: Response) => {
     let logicalPath = oldSurat.file_path || '';
     let customFolderDriveId: string | undefined;
 
-    // Get custom folder Google Drive ID if folder_id is provided
     if (folder_id) {
       const folder = await findFolderById(parseInt(folder_id));
-      if (folder && folder.user_id === userId) {
-        customFolderDriveId = folder.google_drive_folder_id;
+      if (!folder || folder.user_id !== userId) {
+        return res.status(403).json({
+          error: 'Forbidden',
+          message: 'Folder yang dipilih tidak valid atau tidak dimiliki oleh akun Anda.',
+        });
       }
+      customFolderDriveId = folder.google_drive_folder_id;
     }
 
     if (req.file) {
@@ -265,7 +275,7 @@ export const update = async (req: AuthRequest, res: Response) => {
           try {
             await deleteUserFile(userId, oldSurat.google_drive_id);
           } catch (deleteErr) {
-            console.warn(`[GoogleDrive] Failed to delete old file:`, deleteErr);
+            console.warn(`[GoogleDrive] Failed to delete old file during update:`, deleteErr);
           }
         }
 
@@ -293,8 +303,8 @@ export const update = async (req: AuthRequest, res: Response) => {
         throw uploadError;
       }
     } else if (oldSurat.google_drive_id) {
-      const oldMonth = formatMonthFolderName(oldSurat.tanggal_masuk).folderName;
-      const newMonth = formatMonthFolderName(tanggal_masuk).folderName;
+      const oldMonth = getMonthName(oldSurat.tanggal_masuk);
+      const newMonth = getMonthName(tanggal_masuk);
 
       if (oldMonth !== newMonth) {
         console.log(`[GoogleDrive] Date changed from ${oldSurat.tanggal_masuk} to ${tanggal_masuk}. Moving file...`);
@@ -337,6 +347,12 @@ export const update = async (req: AuthRequest, res: Response) => {
 
     await updateIncomingLetterInSheet(userId, rowNumber, surat);
 
+    try {
+      await updateIncomingLetterRecord(rowNumber, userId, surat);
+    } catch (dbErr) {
+      console.warn('DB record update sync warning:', dbErr);
+    }
+
     res.json({ success: true, message: 'Surat updated successfully', surat, data: surat });
   } catch (error: any) {
     console.error('Update surat error:', error);
@@ -351,6 +367,10 @@ export const update = async (req: AuthRequest, res: Response) => {
   }
 };
 
+/**
+ * Delete a letter: Drive file first -> then Sheets & local DB record.
+ * If Drive deletion fails due to real error, abort and inform user.
+ */
 export const destroy = async (req: AuthRequest, res: Response) => {
   const userId = req.user?.id;
   if (!userId) {
@@ -370,24 +390,61 @@ export const destroy = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Surat not found' });
     }
 
-    await deleteIncomingLetterRow(userId, rowNumber, surat.google_drive_id);
-    res.json({ success: true, message: 'Surat deleted successfully' });
+    const driveFileId = extractDriveFileId(surat);
+
+    // 1. Delete file from Google Drive first
+    if (driveFileId) {
+      try {
+        await deleteUserFile(userId, driveFileId);
+      } catch (driveErr: any) {
+        console.error('Google Drive file deletion failed:', driveErr);
+
+        if (isGoogleErrorInvalidGrant(driveErr)) {
+          return res.status(401).json({
+            error_code: 'GOOGLE_RECONNECT_REQUIRED',
+            error: 'Koneksi Google perlu diperbarui',
+            message: 'Google Drive authentication has expired. Please reconnect your Google account.',
+          });
+        }
+
+        return res.status(500).json({
+          success: false,
+          error: 'The record could not be fully deleted because the Google Drive file could not be removed.',
+          details: driveErr.message || driveErr.toString(),
+        });
+      }
+    }
+
+    // 2. Drive deletion succeeded or file was already missing (404) -> Clean up Sheets & local DB
+    await deleteIncomingLetterRow(userId, rowNumber, undefined);
+
+    try {
+      await deleteIncomingLetterRecord(userId, rowNumber);
+    } catch (dbErr) {
+      console.warn('Local DB record deletion warning:', dbErr);
+    }
+
+    res.json({
+      success: true,
+      message: 'File deleted successfully from the application and Google Drive.',
+    });
   } catch (error: any) {
     console.error('Delete surat error:', error);
     if (isGoogleErrorInvalidGrant(error)) {
       return res.status(401).json({
         error_code: 'GOOGLE_RECONNECT_REQUIRED',
         error: 'Koneksi Google perlu diperbarui',
-        message: 'Your Google connection needs to be renewed. Please reconnect your Google account to continue.',
+        message: 'Google Drive authentication has expired. Please reconnect your Google account.',
       });
     }
-    res.status(500).json({ error: 'Failed to delete surat' });
+    res.status(500).json({
+      success: false,
+      error: 'The record could not be fully deleted because the Google Drive file could not be removed.',
+      details: error.message || error.toString(),
+    });
   }
 };
 
-/**
- * Helper to extract Google Drive File ID from surat record
- */
 export function extractDriveFileId(surat: { google_drive_id?: string; file_path?: string }): string {
   if (surat.google_drive_id && surat.google_drive_id.trim()) {
     return surat.google_drive_id.trim();
@@ -451,10 +508,6 @@ export const preview = async (req: AuthRequest, res: Response) => {
   }
 };
 
-/**
- * Serve the actual file from Google Drive (or local storage fallback) for this letter.
- * Supports ?disposition=attachment (download) or default inline (view/preview/print).
- */
 export const serveFile = async (req: AuthRequest, res: Response) => {
   const userId = req.user?.id;
   if (!userId) {
@@ -469,7 +522,6 @@ export const serveFile = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'Invalid surat ID' });
     }
 
-    // Verify ownership — letter must belong to authenticated user
     const surat = await getIncomingLetterByRow(userId, suratId);
     if (!surat) {
       return res.status(404).json({ 
@@ -480,7 +532,6 @@ export const serveFile = async (req: AuthRequest, res: Response) => {
 
     let fileId = extractDriveFileId(surat);
 
-    // Get authenticated Google Drive client for this user
     let drive: any = null;
     try {
       const auth = await getOAuth2ClientForUser(userId);
@@ -496,7 +547,6 @@ export const serveFile = async (req: AuthRequest, res: Response) => {
       }
     }
 
-    // If fileId is missing, attempt Google Drive search by name before checking local
     if (!fileId && drive && surat.nama_surat) {
       try {
         const safeName = surat.nama_surat.replace(/'/g, "\\'");
@@ -507,14 +557,12 @@ export const serveFile = async (req: AuthRequest, res: Response) => {
         });
         if (searchRes.data.files && searchRes.data.files.length > 0) {
           fileId = searchRes.data.files[0].id;
-          console.log(`[serveFile] Located missing fileId in Drive via name search: ${fileId}`);
         }
       } catch (searchErr) {
         console.warn('[serveFile] Drive search fallback failed:', searchErr);
       }
     }
 
-    // Check local storage fallback if no Drive ID exists
     if (!fileId) {
       const rawPath = surat.file_path || '';
       const possibleLocalPaths: string[] = [];
@@ -523,7 +571,6 @@ export const serveFile = async (req: AuthRequest, res: Response) => {
 
       for (const localP of possibleLocalPaths) {
         if (fs.existsSync(localP)) {
-          console.log(`[serveFile] Serving file from local disk fallback: ${localP}`);
           return res.sendFile(path.resolve(localP));
         }
       }
@@ -534,7 +581,6 @@ export const serveFile = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // Retrieve file metadata to get name and mimeType
     let metaRes;
     try {
       metaRes = await drive.files.get({
@@ -544,9 +590,7 @@ export const serveFile = async (req: AuthRequest, res: Response) => {
     } catch (driveError: any) {
       console.error('Drive file metadata fetch error:', driveError);
       
-      // Handle specific Drive API errors
-      if (driveError.code === 404) {
-        // Local disk check if Drive returns 404
+      if (driveError.code === 404 || driveError.status === 404) {
         const rawPath = surat.file_path || '';
         const possibleLocalPaths: string[] = [];
         if (rawPath) possibleLocalPaths.push(rawPath);
@@ -554,7 +598,6 @@ export const serveFile = async (req: AuthRequest, res: Response) => {
 
         for (const localP of possibleLocalPaths) {
           if (fs.existsSync(localP)) {
-            console.log(`[serveFile] Drive file 404, serving from local disk: ${localP}`);
             return res.sendFile(path.resolve(localP));
           }
         }
@@ -580,7 +623,6 @@ export const serveFile = async (req: AuthRequest, res: Response) => {
         });
       }
       
-      // Generic Drive API error
       return res.status(502).json({ 
         error: 'Gagal mengambil file dari Google Drive. Silakan coba lagi.',
         error_code: 'DRIVE_API_ERROR'
@@ -604,7 +646,6 @@ export const serveFile = async (req: AuthRequest, res: Response) => {
       else if (ext === '.webp') responseMimeType = 'image/webp';
     }
 
-    // Google Docs / Sheets / Slides are Google native formats — export them
     const googleMimeExportMap: Record<string, { mime: string; ext: string }> = {
       'application/vnd.google-apps.document': { mime: 'application/pdf', ext: '.pdf' },
       'application/vnd.google-apps.spreadsheet': { mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', ext: '.xlsx' },
@@ -614,13 +655,11 @@ export const serveFile = async (req: AuthRequest, res: Response) => {
     const isDispositionAttachment = req.query.disposition === 'attachment';
     const dispositionType = isDispositionAttachment ? 'attachment' : 'inline';
 
-    // Allow iframe embedding from same origin only & expose headers
     res.setHeader('X-Frame-Options', 'SAMEORIGIN');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, Content-Type, X-File-Name');
     res.setHeader('X-File-Name', encodeURIComponent(fileName));
 
-    // Helper: RFC 5987 filename encoding for Content-Disposition
     const buildContentDisposition = (disposition: string, name: string) => {
       const safeName = name.replace(/["\\]/g, '_');
       return `${disposition}; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(name)}`;
@@ -628,7 +667,6 @@ export const serveFile = async (req: AuthRequest, res: Response) => {
 
     try {
       if (googleMimeExportMap[mimeType]) {
-        // Export Google native file
         const exportInfo = googleMimeExportMap[mimeType];
         const exportName = fileName.endsWith(exportInfo.ext) ? fileName : `${fileName}${exportInfo.ext}`;
 
@@ -642,7 +680,6 @@ export const serveFile = async (req: AuthRequest, res: Response) => {
         res.setHeader('Cache-Control', 'private, no-cache');
         (exportRes.data as any).pipe(res);
       } else {
-        // Download binary file
         const fileRes = await drive.files.get(
           { fileId, alt: 'media' },
           { responseType: 'stream' }
@@ -672,7 +709,7 @@ export const serveFile = async (req: AuthRequest, res: Response) => {
       }
     }
   } catch (error: any) {
-    console.error('Serve file (incoming) error:', error);
+    console.error('Serve file error:', error);
     if (isGoogleErrorInvalidGrant(error)) {
       return res.status(401).json({
         error_code: 'GOOGLE_RECONNECT_REQUIRED',

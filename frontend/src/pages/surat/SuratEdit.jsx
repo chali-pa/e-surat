@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import api from '../../api/axios'
+import FolderSelector from '../../components/drive/FolderSelector'
 
 export default function SuratEdit() {
   const { id } = useParams()
@@ -13,6 +14,7 @@ export default function SuratEdit() {
     nama_surat: '',
     file_surat: null
   })
+  const [selectedFolder, setSelectedFolder] = useState(null)
   const [errors, setErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
   const [reconnectNeeded, setReconnectNeeded] = useState(false)
@@ -34,6 +36,9 @@ export default function SuratEdit() {
         nama_surat: surat.nama_surat || '',
         file_surat: null
       })
+      if (surat.folder_id) {
+        setSelectedFolder({ id: surat.folder_id })
+      }
     } catch (error) {
       console.error('Failed to fetch surat:', error)
       navigate('/surat')
@@ -52,6 +57,10 @@ export default function SuratEdit() {
       }
     })
 
+    if (selectedFolder?.id) {
+      data.append('folder_id', selectedFolder.id)
+    }
+
     try {
       const response = await api.post(`/api/surat/${id}`, data, {
         headers: {
@@ -63,7 +72,7 @@ export default function SuratEdit() {
         setSuccessMessage('Data berhasil diperbarui. Perubahan telah disinkronisasi dengan Google Sheet dan Google Drive.')
         setTimeout(() => {
           navigate('/surat')
-        }, 2000)
+        }, 1500)
       }
     } catch (error) {
       if (error.response?.data?.error_code === 'GOOGLE_RECONNECT_REQUIRED') {
@@ -85,7 +94,7 @@ export default function SuratEdit() {
       <div className="max-w-3xl mx-auto">
         {/* Header */}
         <header className="bg-gradient-to-r from-[#4B164C] to-[#DD88CF] shadow-md p-5 flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center rounded-2xl mb-8">
-          <h2 className="text-xl font-bold text-white">Edit Surat</h2>
+          <h2 className="text-xl font-bold text-white">Edit Surat Masuk</h2>
           <Link to="/surat" className="text-white hover:text-gray-200 transition flex items-center gap-2 font-medium">
             <i className="bi bi-arrow-left"></i> Kembali
           </Link>
@@ -191,6 +200,14 @@ export default function SuratEdit() {
               />
               {errors.nama_surat && <p className="text-red-500 text-xs mt-1">{errors.nama_surat}</p>}
             </div>
+
+            <FolderSelector
+              letterDate={formData.tanggal_masuk}
+              selectedFolder={selectedFolder}
+              onFolderChange={setSelectedFolder}
+              letterType="incoming"
+              disabled={submitting}
+            />
 
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">Upload File Surat (Opsional)</label>

@@ -24,6 +24,7 @@ export default function SuratKeluarIndex() {
   const [previewModal, setPreviewModal] = useState({ show: false, surat: null, autoPrint: false })
   const [reconnectNeeded, setReconnectNeeded] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [toast, setToast] = useState({ show: false, type: 'success', message: '' })
 
   useEffect(() => {
     fetchSurats()
@@ -36,6 +37,15 @@ export default function SuratKeluarIndex() {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
+
+  useEffect(() => {
+    if (toast.show) {
+      const timer = setTimeout(() => {
+        setToast({ show: false, type: 'success', message: '' })
+      }, 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [toast.show])
 
   const fetchSurats = async () => {
     try {
@@ -58,20 +68,32 @@ export default function SuratKeluarIndex() {
 
   const handleDelete = async (id) => {
     try {
-      await api.delete(`/api/surat-keluar/${id}`)
+      const response = await api.delete(`/api/surat-keluar/${id}`)
+      if (response.data.success) {
+        setSurats(prev => prev.filter(s => s.id !== id))
+        setToast({
+          show: true,
+          type: 'success',
+          message: response.data.message || 'File deleted successfully from the application and Google Drive.'
+        })
+      }
     } catch (error) {
       console.error('Failed to delete surat keluar:', error)
       if (error.response?.data?.error_code === 'GOOGLE_RECONNECT_REQUIRED') {
         setReconnectNeeded(true)
+      } else {
+        const errorMsg = error.response?.data?.error || 'The record could not be fully deleted because the Google Drive file could not be removed.'
+        setToast({
+          show: true,
+          type: 'error',
+          message: errorMsg
+        })
       }
+    } finally {
+      setDeleteModal({ show: false, id: null, name: '' })
     }
-    setSurats(surats.filter(s => s.id !== id))
-    setDeleteModal({ show: false, id: null, name: '' })
   }
 
-  /**
-   * PREVIEW — open the document preview modal with full file type rendering.
-   */
   const handlePreview = (surat) => {
     if (!surat.google_drive_id && !surat.file_path) {
       alert('File tidak tersedia untuk preview')
@@ -86,9 +108,6 @@ export default function SuratKeluarIndex() {
     window.dispatchEvent(new CustomEvent('expandSidebar'))
   }
 
-  /**
-   * VIEW — open the actual file in a new browser tab.
-   */
   const handleView = (surat) => {
     if (!surat.google_drive_id && !surat.file_path) {
       alert('File tidak tersedia')
@@ -102,9 +121,6 @@ export default function SuratKeluarIndex() {
     }
   }
 
-  /**
-   * DOWNLOAD — triggers backend attachment download.
-   */
   const handleDownload = (surat) => {
     if (!surat.google_drive_id) {
       alert('File tidak tersedia untuk diunduh')
@@ -120,9 +136,6 @@ export default function SuratKeluarIndex() {
     document.body.removeChild(a)
   }
 
-  /**
-   * PRINT — opens document viewer and triggers clean print.
-   */
   const handlePrint = (surat) => {
     if (!surat.google_drive_id && !surat.file_path) {
       alert('File tidak tersedia untuk print')
@@ -155,6 +168,21 @@ export default function SuratKeluarIndex() {
           Tambah Surat Keluar
         </Link>
       </div>
+
+      {/* Toast Alert */}
+      {toast.show && (
+        <div className={`p-4 rounded-xl flex items-center justify-between text-sm shadow-md transition-all ${
+          toast.type === 'error' ? 'bg-red-50 border border-red-200 text-red-800' : 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+        }`}>
+          <div className="flex items-center gap-3">
+            <i className={`bi ${toast.type === 'error' ? 'bi-exclamation-triangle-fill text-red-500' : 'bi-check-circle-fill text-emerald-500'} text-lg`} />
+            <span className="font-medium">{toast.message}</span>
+          </div>
+          <button onClick={() => setToast({ ...toast, show: false })} className="text-slate-400 hover:text-slate-600">
+            <i className="bi bi-x-lg" />
+          </button>
+        </div>
+      )}
 
       {/* Reconnect Google Banner */}
       {reconnectNeeded && (
@@ -249,7 +277,6 @@ export default function SuratKeluarIndex() {
                       </td>
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          {/* View (Direct File Access in New Tab) */}
                           <button
                             onClick={() => handleView(surat)}
                             title="Lihat file langsung"
@@ -258,7 +285,6 @@ export default function SuratKeluarIndex() {
                           >
                             <i className="bi bi-box-arrow-up-right text-xs" />
                           </button>
-                          {/* Preview */}
                           <button
                             onClick={() => handlePreview(surat)}
                             title="Preview file"
@@ -267,7 +293,6 @@ export default function SuratKeluarIndex() {
                           >
                             <i className="bi bi-eye text-xs" />
                           </button>
-                          {/* Download */}
                           <button
                             onClick={() => handleDownload(surat)}
                             title="Unduh file"
@@ -276,7 +301,6 @@ export default function SuratKeluarIndex() {
                           >
                             <i className="bi bi-download text-xs" />
                           </button>
-                          {/* Print */}
                           <button
                             onClick={() => handlePrint(surat)}
                             title="Print dokumen"
@@ -285,7 +309,6 @@ export default function SuratKeluarIndex() {
                           >
                             <i className="bi bi-printer text-xs" />
                           </button>
-                          {/* Edit */}
                           <Link
                             to={`/surat-keluar/${surat.id}/edit`}
                             title="Edit surat"
@@ -294,7 +317,6 @@ export default function SuratKeluarIndex() {
                           >
                             <i className="bi bi-pencil text-xs" />
                           </Link>
-                          {/* Delete */}
                           <button
                             onClick={() => setDeleteModal({ show: true, id: surat.id, name: surat.nama_surat })}
                             title="Hapus surat"

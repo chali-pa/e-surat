@@ -63,7 +63,7 @@ export default function FolderSelector({
 
   const handleFolderChange = (e) => {
     const folderId = e.target.value
-    const selected = folders.find(f => f.id === folderId)
+    const selected = folders.find(f => String(f.id) === String(folderId))
     onFolderChange(selected || null)
   }
 
@@ -88,7 +88,7 @@ export default function FolderSelector({
               : 'border-slate-200 hover:border-[#DD88CF]/60 focus:border-[#4B164C] focus:ring-[#4B164C]/10'
           }`}
         >
-          <option value="">Tidak ada folder dipilih</option>
+          <option value="">Tidak ada folder dipilih (Gunakan folder default)</option>
           {folders.map((folder) => (
             <option key={folder.id} value={folder.id}>
               {folder.name}
@@ -132,7 +132,7 @@ export default function FolderSelector({
           month={currentMonth}
           letterType={letterType}
           onFolderCreated={(newFolder) => {
-            setFolders([...folders, newFolder])
+            setFolders(prev => [...prev, newFolder])
             onFolderChange(newFolder)
             setShowCreateFolder(false)
           }}
@@ -166,21 +166,22 @@ function CreateFolderForm({ month, letterType, onFolderCreated, onCancel }) {
       })
 
       if (response.data.success) {
+        const folderId = response.data.folder?.id || response.data.data?.folderId
+        const googleDriveFolderId = response.data.folder?.googleDriveFolderId || response.data.data?.googleDriveFolderId
+
         onFolderCreated({
-          id: response.data.data.folderId,
+          id: folderId,
           name: folderName.trim(),
-          google_drive_folder_id: response.data.data.googleDriveFolderId
+          google_drive_folder_id: googleDriveFolderId
         })
         setFolderName('')
-      } else if (response.status === 409) {
-        setError('Folder dengan nama yang sama sudah ada')
       }
     } catch (err) {
       console.error('Failed to create folder:', err)
       if (err.response?.status === 409) {
-        setError('Folder dengan nama yang sama sudah ada')
+        setError('Folder dengan nama yang sama sudah ada di bulan ini')
       } else {
-        setError('Gagal membuat folder. Silakan coba lagi.')
+        setError(err.response?.data?.error || 'Gagal membuat folder. Silakan coba lagi.')
       }
     } finally {
       setCreating(false)

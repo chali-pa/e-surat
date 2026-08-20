@@ -2,7 +2,8 @@ import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { 
   createCustomFolder, 
-  getMonthlyFolders 
+  getMonthlyFolders,
+  formatMonthYear 
 } from '../services/userGoogleDriveService';
 import { isGoogleErrorInvalidGrant } from '../services/userGoogleAuthService';
 
@@ -13,14 +14,33 @@ export const getFolders = async (req: AuthRequest, res: Response) => {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const { month, letter_type } = req.query;
+    const { month, monthYear, date, letter_type } = req.query;
     
-    if (!month || typeof month !== 'string') {
-      return res.status(400).json({ error: 'Month parameter is required' });
+    // Determine monthYear from various params with backward compatibility
+    let resolvedMonthYear: string;
+    
+    if (monthYear && typeof monthYear === 'string') {
+      // New format: MM-YY
+      resolvedMonthYear = monthYear;
+    } else if (date && typeof date === 'string') {
+      // Infer from date string
+      resolvedMonthYear = formatMonthYear(date);
+    } else if (month && typeof month === 'string') {
+      // Legacy format: month name (e.g., "January") - keep for backward compatibility
+      // Try to parse as MM-YY first, if fails assume it's a legacy month name
+      if (month.match(/^\d{2}-\d{2}$/)) {
+        resolvedMonthYear = month;
+      } else {
+        // Legacy month name - this won't work with new structure but we accept it
+        // The frontend should send MM-YY or date going forward
+        resolvedMonthYear = month;
+      }
+    } else {
+      return res.status(400).json({ error: 'Month parameter (monthYear, date, or month) is required' });
     }
 
     const letterType = (letter_type as 'incoming' | 'outgoing') || 'incoming';
-    const folders = await getMonthlyFolders(userId, month, letterType);
+    const folders = await getMonthlyFolders(userId, resolvedMonthYear, letterType);
 
     res.json({ success: true, data: folders });
   } catch (error: any) {
@@ -43,13 +63,41 @@ export const createFolder = async (req: AuthRequest, res: Response) => {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const { month, name, letter_type, file_type } = req.body;
+    const { month, monthYear, date, name, letter_type, file_type } = req.body;
 
-    if (!month || !name || !name.trim()) {
+    // Determine monthYear from various params with backward compatibility
+    let resolvedMonthYear: string;
+    
+    if (monthYear) {
+      // New format: MM-YY
+      resolvedMonthYear = monthYear;
+    } else if (date) {
+      // Infer from date string
+      resolvedMonthYear = formatMonthYear(date);
+    } else if (month) {
+      // Legacy format: month name (e.g., "January") - keep for backward compatibility
+      // Try to parse as MM-YY first, if fails assume it's a legacy month name
+      if (month.match(/^\d{2}-\d{2}$/)) {
+        resolvedMonthYear = month;
+      } else {
+        // Legacy month name - this won't work with new structure but we accept it
+        resolvedMonthYear = month;
+      }
+    } else {
       return res.status(400).json({ 
-        error: 'Month and name are required',
+        error: 'Month parameter (monthYear, date, or month) is required',
         missing_fields: {
+          monthYear: !monthYear,
+          date: !date,
           month: !month,
+        }
+      });
+    }
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ 
+        error: 'Name is required',
+        missing_fields: {
           name: !name || !name.trim(),
         }
       });
@@ -58,7 +106,7 @@ export const createFolder = async (req: AuthRequest, res: Response) => {
     const letterType = (letter_type as 'incoming' | 'outgoing') || 'incoming';
     const fileType = (file_type as 'pdf' | 'excel' | 'documentation') || 'pdf';
     
-    const result = await createCustomFolder(userId, month, name.trim(), letterType, fileType);
+    const result = await createCustomFolder(userId, resolvedMonthYear, name.trim(), letterType, fileType);
 
     if (result.message === 'Folder already exists in the selected month') {
       return res.status(409).json({ 

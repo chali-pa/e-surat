@@ -1,11 +1,6 @@
 import { useState, useEffect } from 'react'
 import api from '../../api/axios'
 
-const MONTHS = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December'
-]
-
 export default function FolderSelector({ 
   letterDate, 
   selectedFolder, 
@@ -18,21 +13,24 @@ export default function FolderSelector({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [showCreateFolder, setShowCreateFolder] = useState(false)
+  const [previousMonthYear, setPreviousMonthYear] = useState('')
 
-  // Get month name from letter date
-  const getMonthFromDate = (dateString) => {
+  // Get MM-YY format from letter date
+  const getMonthYearFromDate = (dateString) => {
     if (!dateString) return ''
-    const date = new Date(dateString)
-    if (isNaN(date.getTime())) return ''
-    return MONTHS[date.getMonth()]
+    const d = new Date(dateString)
+    if (isNaN(d.getTime())) return ''
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const yy = String(d.getFullYear()).slice(-2)
+    return `${mm}-${yy}`
   }
 
-  const currentMonth = getMonthFromDate(letterDate)
+  const currentMonthYear = getMonthYearFromDate(letterDate)
 
-  // Fetch folders when month changes
+  // Fetch folders when monthYear changes
   useEffect(() => {
     const fetchFolders = async () => {
-      if (!currentMonth) {
+      if (!currentMonthYear) {
         setFolders([])
         return
       }
@@ -42,7 +40,7 @@ export default function FolderSelector({
       try {
         const response = await api.get('/api/folders', {
           params: { 
-            month: currentMonth,
+            monthYear: currentMonthYear,
             letter_type: letterType
           }
         })
@@ -60,7 +58,16 @@ export default function FolderSelector({
     }
 
     fetchFolders()
-  }, [currentMonth, letterType])
+  }, [currentMonthYear, letterType])
+
+  // Auto-clear selectedFolder when monthYear changes
+  useEffect(() => {
+    if (previousMonthYear && currentMonthYear && previousMonthYear !== currentMonthYear) {
+      // Month changed, reset selected folder
+      onFolderChange(null)
+    }
+    setPreviousMonthYear(currentMonthYear)
+  }, [currentMonthYear, previousMonthYear, onFolderChange])
 
   const handleFolderChange = (e) => {
     const folderId = e.target.value
@@ -82,9 +89,9 @@ export default function FolderSelector({
         <select
           value={selectedFolder?.id || ''}
           onChange={handleFolderChange}
-          disabled={disabled || loading || !currentMonth}
+          disabled={disabled || loading || !currentMonthYear}
           className={`w-full border-2 rounded-xl px-4 py-3 text-sm outline-none transition-all duration-200 bg-white pl-9 pr-10 ${
-            disabled || loading || !currentMonth
+            disabled || loading || !currentMonthYear
               ? 'border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed'
               : 'border-slate-200 hover:border-[#DD88CF]/60 focus:border-[#4B164C] focus:ring-[#4B164C]/10'
           }`}
@@ -97,7 +104,7 @@ export default function FolderSelector({
           ))}
         </select>
 
-        {!disabled && currentMonth && (
+        {!disabled && currentMonthYear && (
           <button
             type="button"
             onClick={(e) => {
@@ -125,7 +132,7 @@ export default function FolderSelector({
         </p>
       )}
 
-      {!currentMonth && !disabled && (
+      {!currentMonthYear && !disabled && (
         <p className="text-xs text-slate-400">
           <i className="bi bi-info-circle mr-1" />
           Pilih tanggal surat untuk melihat folder yang tersedia
@@ -134,7 +141,7 @@ export default function FolderSelector({
 
       {showCreateFolder && (
         <CreateFolderPanel
-          month={currentMonth}
+          monthYear={currentMonthYear}
           letterType={letterType}
           fileType={fileType}
           onFolderCreated={(newFolder) => {
@@ -149,7 +156,7 @@ export default function FolderSelector({
   )
 }
 
-function CreateFolderPanel({ month, letterType, fileType, onFolderCreated, onCancel }) {
+function CreateFolderPanel({ monthYear, letterType, fileType, onFolderCreated, onCancel }) {
   const [folderName, setFolderName] = useState('')
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState('')
@@ -169,7 +176,7 @@ function CreateFolderPanel({ month, letterType, fileType, onFolderCreated, onCan
     setCreating(true)
     try {
       const response = await api.post('/api/folders', {
-        month,
+        monthYear,
         name: folderName.trim(),
         letter_type: letterType,
         file_type: fileType
@@ -266,7 +273,7 @@ function CreateFolderPanel({ month, letterType, fileType, onFolderCreated, onCan
 
         <p className="text-xs text-slate-500">
           <i className="bi bi-info-circle mr-1" />
-          Folder akan dibuat di: <span className="font-medium">{month}</span>
+          Folder akan dibuat di: <span className="font-medium">{monthYear}</span>
         </p>
       </div>
     </div>

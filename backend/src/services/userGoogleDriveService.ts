@@ -68,11 +68,9 @@ export async function findOrCreateFolder(
 }
 
 /**
- * Format month folder name.
- * Returns full month name (e.g. "January", "March") derived from date.
+ * Format month folder name to MM-YY (e.g. "01-26") derived from date.
  */
-export function formatMonthFolderName(letterDateStr?: string): { folderName: string; monthIndex: number; yearYY: string } {
-  const monthName = getMonthName(letterDateStr);
+export function formatMonthYear(letterDateStr?: string): string {
   let dateObj = new Date();
   if (letterDateStr) {
     const parsed = new Date(letterDateStr);
@@ -80,18 +78,23 @@ export function formatMonthFolderName(letterDateStr?: string): { folderName: str
       dateObj = parsed;
     }
   }
-
-  const monthNum = dateObj.getMonth() + 1;
-  const fullYear = dateObj.getFullYear();
-  const yy = String(fullYear).slice(-2);
-
-  return { folderName: monthName, monthIndex: monthNum, yearYY: yy };
+  const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const yy = String(dateObj.getFullYear()).slice(-2);
+  return `${mm}-${yy}`;
 }
 
 /**
- * Get month name from date (January, February, etc.)
+ * Get month name from date - maps to formatMonthYear to ensure MM-YY is used globally.
  */
 export function getMonthName(letterDateStr?: string): string {
+  return formatMonthYear(letterDateStr);
+}
+
+/**
+ * Format month folder name object for legacy support if needed.
+ */
+export function formatMonthFolderName(letterDateStr?: string): { folderName: string; monthIndex: number; yearYY: string } {
+  const formatted = formatMonthYear(letterDateStr);
   let dateObj = new Date();
   if (letterDateStr) {
     const parsed = new Date(letterDateStr);
@@ -99,13 +102,41 @@ export function getMonthName(letterDateStr?: string): string {
       dateObj = parsed;
     }
   }
+  return {
+    folderName: formatted,
+    monthIndex: dateObj.getMonth() + 1,
+    yearYY: String(dateObj.getFullYear()).slice(-2)
+  };
+}
 
+/**
+ * Helper to parse/convert month string to MM-YY if needed
+ */
+export function cleanMonthYear(monthStr: string): string {
+  if (!monthStr) return formatMonthYear();
+  if (/^\d{2}-\d{2}$/.test(monthStr)) {
+    return monthStr;
+  }
+  // Try parsing as date
+  const parsed = new Date(monthStr);
+  if (!isNaN(parsed.getTime())) {
+    const mm = String(parsed.getMonth() + 1).padStart(2, '0');
+    const yy = String(parsed.getFullYear()).slice(-2);
+    return `${mm}-${yy}`;
+  }
+  // Map month name
   const monthNames = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
+    'january', 'february', 'march', 'april', 'may', 'june',
+    'july', 'august', 'september', 'october', 'november', 'december'
   ];
-
-  return monthNames[dateObj.getMonth()];
+  const lower = monthStr.toLowerCase();
+  const idx = monthNames.indexOf(lower);
+  if (idx !== -1) {
+    const mm = String(idx + 1).padStart(2, '0');
+    const yy = String(new Date().getFullYear()).slice(-2);
+    return `${mm}-${yy}`;
+  }
+  return monthStr;
 }
 
 /**
@@ -174,7 +205,8 @@ export async function moveDriveFileToCorrectFolder(
   originalFileName: string,
   letterType: 'incoming' | 'outgoing',
   letterDateStr?: string,
-  mimeType?: string
+  mimeType?: string,
+  customFolderDriveId?: string
 ): Promise<{
   logicalPath: string;
 }> {
@@ -195,18 +227,17 @@ export async function moveDriveFileToCorrectFolder(
       }
     }
 
-    const subfolderName = getSubfolderType(originalFileName, mimeType);
     let targetFolderId: string;
     let logicalPath: string;
 
-    if (subfolderName === 'PDF') {
-      const pdfFolderId = await findOrCreateFolder(drive, 'PDF', rootFolderId);
-      const monthName = getMonthName(letterDateStr);
-      targetFolderId = await findOrCreateFolder(drive, monthName, pdfFolderId);
-      logicalPath = `${rootName}/PDF/${monthName}/${originalFileName}`;
+    const monthYear = formatMonthYear(letterDateStr);
+
+    if (customFolderDriveId) {
+      targetFolderId = customFolderDriveId;
+      logicalPath = `${rootName}/${monthYear}/${originalFileName}`;
     } else {
-      targetFolderId = await findOrCreateFolder(drive, subfolderName, rootFolderId);
-      logicalPath = `${rootName}/${subfolderName}/${originalFileName}`;
+      targetFolderId = await findOrCreateFolder(drive, monthYear, rootFolderId);
+      logicalPath = `${rootName}/${monthYear}/${originalFileName}`;
     }
 
     await moveUserFile(userId, fileId, targetFolderId);
@@ -222,8 +253,7 @@ export async function moveDriveFileToCorrectFolder(
 }
 
 /**
- * Ensure standard user drive structure exists (esurat / esurat-keluar, PDF, Excel, Documentation)
- * Lazily creates root folders and top-level type folders.
+ * Ensure standard user drive structure exists (esurat / esurat-keluar root folders)
  */
 export async function initializeUserDriveStructure(userId: number): Promise<{
   incomingRootId: string;
@@ -237,7 +267,7 @@ export async function initializeUserDriveStructure(userId: number): Promise<{
 
     const user = await findUserById(userId);
 
-    // 1. Root folder for incoming: esurat
+    // Root folder for incoming: esurat
     let incomingRootId = user?.drive_folder_id || null;
     if (incomingRootId) {
       try {
@@ -252,7 +282,7 @@ export async function initializeUserDriveStructure(userId: number): Promise<{
       incomingRootId = await findOrCreateFolder(drive, 'esurat');
     }
 
-    // 2. Root folder for outgoing: esurat-keluar
+    // Root folder for outgoing: esurat-keluar
     let outgoingRootId = user?.drive_keluar_folder_id || null;
     if (outgoingRootId) {
       try {
@@ -267,25 +297,14 @@ export async function initializeUserDriveStructure(userId: number): Promise<{
       outgoingRootId = await findOrCreateFolder(drive, 'esurat-keluar');
     }
 
-    // 3. Create top-level type folders under esurat
-    await findOrCreateFolder(drive, 'PDF', incomingRootId);
-    await findOrCreateFolder(drive, 'Excel', incomingRootId);
-    const documentationFolderId = await findOrCreateFolder(drive, 'Documentation', incomingRootId);
-
-    // Create top-level type folders under esurat-keluar
-    await findOrCreateFolder(drive, 'PDF', outgoingRootId);
-    await findOrCreateFolder(drive, 'Excel', outgoingRootId);
-    await findOrCreateFolder(drive, 'Documentation', outgoingRootId);
-
     // Save root IDs in DB
     await updateUserGoogleResourceIds(userId, {
       drive_folder_id: incomingRootId,
       drive_keluar_folder_id: outgoingRootId,
-      documentation_folder_id: documentationFolderId,
     });
 
     console.log(`[GoogleDrive] Successfully initialized Drive structure for user ${userId}`);
-    return { incomingRootId, outgoingRootId, documentationFolderId };
+    return { incomingRootId, outgoingRootId, documentationFolderId: '' };
   } catch (error: any) {
     console.error(`[GoogleDrive] Failed to initialize Drive structure for user ${userId}:`, error);
     if (isGoogleErrorInvalidGrant(error)) {
@@ -296,7 +315,7 @@ export async function initializeUserDriveStructure(userId: number): Promise<{
 }
 
 /**
- * Upload file to user's Google Drive with strict folder routing.
+ * Upload file to user's Google Drive with strict MM-YY folder routing.
  * Fails explicitly if a customFolderId is invalid/unresolvable.
  */
 export async function uploadUserLetterFile(
@@ -335,32 +354,21 @@ export async function uploadUserLetterFile(
     let targetFolderId: string = '';
     let logicalPath: string = '';
 
+    const monthYear = formatMonthYear(letterDateStr);
+
     if (customFolderId) {
       // Validate custom folder ID exists and is accessible
       try {
         await drive.files.get({ fileId: customFolderId, fields: 'id, trashed' });
         targetFolderId = customFolderId;
-        const monthName = getMonthName(letterDateStr);
-        logicalPath = `${rootName}/${monthName}/Custom/${originalFileName}`;
+        logicalPath = `${rootName}/${monthYear}/${originalFileName}`;
       } catch (e: any) {
         console.error(`[GoogleDrive] Custom folder ID ${customFolderId} not accessible or missing:`, e);
         throw new Error(`Folder Google Drive '${customFolderId}' tidak ditemukan atau tidak dapat diakses.`);
       }
     } else {
-      const subfolderName = getSubfolderType(originalFileName, mimeType);
-
-      if (subfolderName === 'PDF') {
-        const pdfFolderId = await findOrCreateFolder(drive, 'PDF', rootFolderId);
-        const monthName = getMonthName(letterDateStr);
-        targetFolderId = await findOrCreateFolder(drive, monthName, pdfFolderId);
-        logicalPath = `${rootName}/PDF/${monthName}/${originalFileName}`;
-      } else if (subfolderName === 'Excel') {
-        targetFolderId = await findOrCreateFolder(drive, 'Excel', rootFolderId);
-        logicalPath = `${rootName}/Excel/${originalFileName}`;
-      } else {
-        targetFolderId = await findOrCreateFolder(drive, 'Documentation', rootFolderId);
-        logicalPath = `${rootName}/Documentation/${originalFileName}`;
-      }
+      targetFolderId = await findOrCreateFolder(drive, monthYear, rootFolderId);
+      logicalPath = `${rootName}/${monthYear}/${originalFileName}`;
     }
 
     // 3. Upload file to target folder
@@ -543,6 +551,7 @@ export async function createCustomFolder(
   message: string;
 }> {
   try {
+    const cleanedMonth = cleanMonthYear(monthName);
     const auth = await getOAuth2ClientForUser(userId);
     const drive = google.drive({ version: 'v3', auth });
 
@@ -554,7 +563,7 @@ export async function createCustomFolder(
     }
 
     // Check if folder already exists in DB for this user, month & letterType
-    const customFolders = await findFoldersByUserAndMonth(userId, monthName, letterType);
+    const customFolders = await findFoldersByUserAndMonth(userId, cleanedMonth, letterType);
     const folderExistsInDb = customFolders.find(f => f.name.toLowerCase() === folderName.trim().toLowerCase());
 
     if (folderExistsInDb) {
@@ -565,17 +574,9 @@ export async function createCustomFolder(
       };
     }
 
-    // Build parent hierarchy based on fileType
-    let parentFolderId: string;
-    if (fileType === 'excel') {
-      parentFolderId = await findOrCreateFolder(drive, 'Excel', rootFolderId);
-    } else if (fileType === 'documentation') {
-      parentFolderId = await findOrCreateFolder(drive, 'Documentation', rootFolderId);
-    } else {
-      // PDF (default): esurat/PDF/<MonthName>/
-      const pdfFolderId = await findOrCreateFolder(drive, 'PDF', rootFolderId);
-      parentFolderId = await findOrCreateFolder(drive, monthName, pdfFolderId);
-    }
+    // Build parent hierarchy
+    // Under MM-YY format, custom folders are nested inside their MM-YY folder directly: esurat/<MM-YY>/<FolderName>
+    const parentFolderId = await findOrCreateFolder(drive, cleanedMonth, rootFolderId);
 
     // Create custom folder under parent folder in Drive
     const customFolderDriveId = await findOrCreateFolder(drive, folderName.trim(), parentFolderId);
@@ -586,7 +587,7 @@ export async function createCustomFolder(
       google_drive_folder_id: customFolderDriveId,
       parent_folder_id: parentFolderId,
       name: folderName.trim(),
-      month: monthName,
+      month: cleanedMonth,
       folder_type: 'custom',
       letter_type: letterType,
     });
@@ -618,7 +619,8 @@ export async function getMonthlyFolders(
   google_drive_folder_id: string;
 }>> {
   try {
-    const folders = await findFoldersByUserAndMonth(userId, monthName, letterType);
+    const cleanedMonth = cleanMonthYear(monthName);
+    const folders = await findFoldersByUserAndMonth(userId, cleanedMonth, letterType);
     return folders.map(folder => ({
       id: folder.id?.toString() || '',
       name: folder.name,

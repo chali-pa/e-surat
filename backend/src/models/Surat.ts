@@ -128,6 +128,9 @@ export const createIncomingLetterRecord = async (surat: Surat): Promise<Surat> =
 };
 
 export const updateIncomingLetterRecord = async (id: number, userId: number, surat: Partial<Surat>): Promise<Surat | null> => {
+  const hasFolderId = surat.folder_id !== undefined;
+  const folderIdValue = surat.folder_id === null ? null : surat.folder_id;
+
   const result = await pool.query(
     `UPDATE surats
      SET nomor_surat = COALESCE($1, nomor_surat),
@@ -138,8 +141,9 @@ export const updateIncomingLetterRecord = async (id: number, userId: number, sur
          file_path = COALESCE($6, file_path),
          google_drive_id = COALESCE($7, google_drive_id),
          google_sheet_row = COALESCE($8, google_sheet_row),
+         folder_id = CASE WHEN $9::boolean THEN $10::integer ELSE folder_id END,
          updated_at = NOW()
-     WHERE id = $9 AND user_id = $10
+     WHERE id = $11 AND user_id = $12
      RETURNING *`,
     [
       surat.nomor_surat ?? null,
@@ -150,6 +154,8 @@ export const updateIncomingLetterRecord = async (id: number, userId: number, sur
       surat.file_path ?? null,
       surat.google_drive_id ?? null,
       surat.google_sheet_row ?? null,
+      hasFolderId,
+      folderIdValue,
       id,
       userId,
     ]
@@ -167,6 +173,7 @@ export const updateIncomingLetterRecord = async (id: number, userId: number, sur
     google_drive_id: row.google_drive_id,
     google_sheet_row: row.google_sheet_row,
     user_id: row.user_id,
+    folder_id: row.folder_id,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -257,6 +264,9 @@ export const createOutgoingLetterRecord = async (surat: SuratKeluar): Promise<Su
 
 export const updateOutgoingLetterRecord = async (id: number, userId: number, surat: Partial<SuratKeluar>): Promise<SuratKeluar | null> => {
   await ensureSuratKeluarColumns();
+  const hasFolderId = surat.folder_id !== undefined;
+  const folderIdValue = surat.folder_id === null ? null : surat.folder_id;
+
   const result = await pool.query(
     `UPDATE surat_keluars
      SET nomor_surat = COALESCE($1, nomor_surat),
@@ -267,8 +277,9 @@ export const updateOutgoingLetterRecord = async (id: number, userId: number, sur
          file_path = COALESCE($6, file_path),
          google_drive_id = COALESCE($7, google_drive_id),
          google_sheet_row = COALESCE($8, google_sheet_row),
+         folder_id = CASE WHEN $9::boolean THEN $10::integer ELSE folder_id END,
          updated_at = NOW()
-     WHERE id = $9 AND user_id = $10
+     WHERE id = $11 AND user_id = $12
      RETURNING *`,
     [
       surat.nomor_surat ?? null,
@@ -279,6 +290,8 @@ export const updateOutgoingLetterRecord = async (id: number, userId: number, sur
       surat.file_path ?? null,
       surat.google_drive_id ?? null,
       surat.google_sheet_row ?? null,
+      hasFolderId,
+      folderIdValue,
       id,
       userId,
     ]
@@ -296,6 +309,7 @@ export const updateOutgoingLetterRecord = async (id: number, userId: number, sur
     google_drive_id: row.google_drive_id,
     google_sheet_row: row.google_sheet_row,
     user_id: row.user_id,
+    folder_id: row.folder_id,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };

@@ -177,7 +177,6 @@ export const status = async (req: AuthRequest, res: Response) => {
       driveKeluarFolderId: user.drive_keluar_folder_id || null,
       sheetMasukId: user.sheet_masuk_id || null,
       sheetKeluarId: user.sheet_keluar_id || null,
-      documentationFolderId: user.documentation_folder_id || null,
     });
   } catch (error) {
     console.error('Google status error:', error);
@@ -204,7 +203,6 @@ export const provision = async (req: AuthRequest, res: Response) => {
       message: 'Google Drive folders and Sheets provisioned successfully.',
       driveFolderId: driveResult.incomingRootId,
       driveKeluarFolderId: driveResult.outgoingRootId,
-      documentationFolderId: driveResult.documentationFolderId,
       sheetMasukId,
       sheetKeluarId,
     });

@@ -304,9 +304,10 @@ export const update = async (req: AuthRequest, res: Response) => {
     } else if (oldSurat.google_drive_id) {
       const oldMonth = getMonthName(oldSurat.tanggal_keluar);
       const newMonth = getMonthName(tanggal_keluar);
+      const folderChanged = String(oldSurat.folder_id || '') !== String(folder_id || '');
 
-      if (oldMonth !== newMonth) {
-        console.log(`[GoogleDrive] Date changed from ${oldSurat.tanggal_keluar} to ${tanggal_keluar}. Moving file...`);
+      if (oldMonth !== newMonth || folderChanged) {
+        console.log(`[GoogleDrive] Date or folder changed. Moving file in Google Drive...`);
         try {
           const fileName = oldSurat.file_path ? path.basename(oldSurat.file_path) : `${nomor_surat}_file.pdf`;
           const moveResult = await moveDriveFileToCorrectFolder(
@@ -314,7 +315,9 @@ export const update = async (req: AuthRequest, res: Response) => {
             oldSurat.google_drive_id,
             fileName,
             'outgoing',
-            tanggal_keluar
+            tanggal_keluar,
+            undefined,
+            customFolderDriveId
           );
           logicalPath = moveResult.logicalPath;
         } catch (moveError: any) {

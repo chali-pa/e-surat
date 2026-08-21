@@ -13,11 +13,21 @@ export interface User {
   google_refresh_token?: string | null;
   google_token_expires_at?: number | string | null;
   google_connected?: boolean;
-  drive_folder_id?: string | null;
-  drive_keluar_folder_id?: string | null;
+  // Drive root folders
+  drive_folder_id?: string | null;                    // esurat/ (incoming root)
+  drive_keluar_folder_id?: string | null;             // esurat-keluar/ (outgoing root)
+  // Drive subfolders — incoming
+  pdf_folder_id?: string | null;                      // esurat/PDF/
+  excel_folder_id?: string | null;                    // esurat/Excel/
+  documentation_folder_id?: string | null;            // esurat/Documentation/
+  photos_folder_id?: string | null;                   // esurat/Photos/ (legacy)
+  // Drive subfolders — outgoing
+  pdf_keluar_folder_id?: string | null;               // esurat-keluar/PDF/
+  excel_keluar_folder_id?: string | null;             // esurat-keluar/Excel/
+  documentation_keluar_folder_id?: string | null;     // esurat-keluar/Documentation/
+  // Sheets
   sheet_masuk_id?: string | null;
   sheet_keluar_id?: string | null;
-  documentation_folder_id?: string | null;
   created_at: Date;
   updated_at: Date;
 }

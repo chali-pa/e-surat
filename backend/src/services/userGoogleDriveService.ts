@@ -574,14 +574,14 @@ export async function createCustomFolder(
       };
     }
 
-    // Build parent hierarchy
-    // Under MM-YY format, custom folders are nested inside their MM-YY folder directly: esurat/<MM-YY>/<FolderName>
+    // Build parent hierarchy — custom folders live directly under their MM-YY folder:
+    // esurat/<MM-YY>/<FolderName>
     const parentFolderId = await findOrCreateFolder(drive, cleanedMonth, rootFolderId);
 
-    // Create custom folder under parent folder in Drive
+    // Create the custom folder under the month folder in Drive
     const customFolderDriveId = await findOrCreateFolder(drive, folderName.trim(), parentFolderId);
 
-    // Save to database
+    // Persist to database
     const folder = await createFolder({
       user_id: userId,
       google_drive_folder_id: customFolderDriveId,
@@ -591,6 +591,8 @@ export async function createCustomFolder(
       folder_type: 'custom',
       letter_type: letterType,
     });
+
+    console.log(`[GoogleDrive] Created folder '${folderName.trim()}' in DB with id ${folder.id}`);
 
     return {
       folderId: folder.id?.toString() || '',
@@ -607,11 +609,24 @@ export async function createCustomFolder(
 }
 
 /**
- * Validate folder ownership by checking database and verifying Drive folder exists
- * 
- * ROOT CAUSE FIX: The folderId parameter is the DATABASE ID, not the Google Drive ID.
- * This function looks up the Drive ID from the database and validates that the folder
- * actually exists in Drive. This prevents the false rejection caused by using DB ID as Drive ID.
+ * Validate folder ownership by checking the local database.
+ *
+ * Accepts the folder's database integer ID (as a string, the value sent by the
+ * frontend via FormData).  Looks up the row in the `folders` table and confirms:
+ *   1. The row exists.
+ *   2. It belongs to `userId`.
+ *   3. Its `letter_type` matches the form being submitted.
+ *   4. It has a non-empty `google_drive_folder_id`.
+ *
+ * A DB row that passes all four checks is authoritative proof of ownership — no
+ * extra Drive API round-trip is needed here.  The Drive folder ID returned by
+ * this function is later passed to `uploadUserLetterFile`, which already calls
+ * `drive.files.get` before uploading and will surface a clear error if the
+ * folder has been trashed or is otherwise inaccessible.
+ *
+ * This approach prevents false rejections that occurred when the Drive
+ * verification call failed transiently (e.g. immediately after folder creation
+ * while Drive was still indexing the new folder).
  */
 export async function validateFolderOwnership(
   userId: number,
@@ -619,15 +634,13 @@ export async function validateFolderOwnership(
   letterType: 'incoming' | 'outgoing' = 'incoming'
 ): Promise<{ valid: boolean; googleDriveFolderId?: string; dbFolderId?: number }> {
   try {
-    // Parse folderId safely - handle string/number conversion
     const parsedFolderId = parseInt(folderId, 10);
     if (isNaN(parsedFolderId)) {
       return { valid: false };
     }
-    
-    // Look up folder in database using the database ID
+
     const dbFolder = await findFolderById(parsedFolderId);
-    
+
     if (!dbFolder) {
       return { valid: false };
     }
@@ -636,35 +649,21 @@ export async function validateFolderOwnership(
       return { valid: false };
     }
 
-    // Check if letter_type matches (incoming vs outgoing)
     if (dbFolder.letter_type !== letterType) {
       return { valid: false };
     }
 
-    // Check if google_drive_folder_id exists and is valid
     if (!dbFolder.google_drive_folder_id || dbFolder.google_drive_folder_id.trim() === '') {
       return { valid: false };
     }
 
-    // Verify the folder actually exists in Drive using the correct Drive ID from database
-    const auth = await getOAuth2ClientForUser(userId);
-    const drive = google.drive({ version: 'v3', auth });
-
-    try {
-      await drive.files.get({
-        fileId: dbFolder.google_drive_folder_id,
-        fields: 'id, name, trashed'
-      });
-
-      return {
-        valid: true,
-        googleDriveFolderId: dbFolder.google_drive_folder_id,
-        dbFolderId: dbFolder.id
-      };
-    } catch (driveError: any) {
-      return { valid: false };
-    }
-  } catch (error) {
+    return {
+      valid: true,
+      googleDriveFolderId: dbFolder.google_drive_folder_id,
+      dbFolderId: dbFolder.id,
+    };
+  } catch (error: any) {
+    console.error('[validateFolderOwnership] Unexpected error:', error.message);
     return { valid: false };
   }
 }

@@ -57,7 +57,7 @@ export default function GoogleIntegration() {
 
   const handleConnect = () => {
     setConnecting(true)
-    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://esurat-backend.vercel.app/'
     const user = JSON.parse(localStorage.getItem('user') || '{}')
     const userId = user.id ? `?userId=${user.id}` : ''
     window.location.href = `${apiBaseUrl}/api/google/connect${userId}`

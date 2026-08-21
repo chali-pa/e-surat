@@ -105,11 +105,8 @@ export const createFolder = async (req: AuthRequest, res: Response) => {
 
     const letterType = (letter_type as 'incoming' | 'outgoing') || 'incoming';
     const fileType = (file_type as 'pdf' | 'excel' | 'documentation') || 'pdf';
-    
-    console.log(`[DEBUG-FOLDER-CREATE-1] Request body:`, req.body);
-    console.log(`[DEBUG-FOLDER-CREATE-2] calling createCustomFolder with userId=${userId}, resolvedMonthYear=${resolvedMonthYear}, name=${name.trim()}, letterType=${letterType}`);
+
     const result = await createCustomFolder(userId, resolvedMonthYear, name.trim(), letterType, fileType);
-    console.log(`[DEBUG-FOLDER-CREATE-3] createCustomFolder returned:`, result);
 
     if (result.message === 'Folder already exists in the selected month') {
       return res.status(409).json({ 

@@ -633,37 +633,74 @@ export async function validateFolderOwnership(
   folderId: string,
   letterType: 'incoming' | 'outgoing' = 'incoming'
 ): Promise<{ valid: boolean; googleDriveFolderId?: string; dbFolderId?: number }> {
+  console.log('=== DIAGNOSTIC: VALIDATE FOLDER OWNERSHIP ===');
+  console.log('[ValidateFolder] Input - userId:', userId, 'folderId:', folderId, 'letterType:', letterType);
+  
   try {
+    // Parse folderId safely - handle string/number conversion
     const parsedFolderId = parseInt(folderId, 10);
+    console.log('[ValidateFolder] Parsed folderId:', parsedFolderId, 'isNaN:', isNaN(parsedFolderId));
+    
     if (isNaN(parsedFolderId)) {
+      console.log('[ValidateFolder] REJECTED: folderId is NaN');
       return { valid: false };
     }
-
+    
+    // Look up folder in database using the database ID
     const dbFolder = await findFolderById(parsedFolderId);
-
+    console.log('[ValidateFolder] DB lookup result:', dbFolder ? {
+      id: dbFolder.id,
+      user_id: dbFolder.user_id,
+      google_drive_folder_id: dbFolder.google_drive_folder_id,
+      name: dbFolder.name,
+      letter_type: dbFolder.letter_type
+    } :null);
+    
     if (!dbFolder) {
+      console.log('[ValidateFolder] REJECTED: Folder not found in DB');
       return { valid: false };
     }
 
     if (dbFolder.user_id !== userId) {
+      console.log('[ValidateFolder] REJECTED: User mismatch - dbFolder.user_id:', dbFolder.user_id, '!= userId:', userId);
       return { valid: false };
     }
 
+    // Check if letter_type matches (incoming vs outgoing)
     if (dbFolder.letter_type !== letterType) {
+      console.log('[ValidateFolder] REJECTED: letter_type mismatch - dbFolder.letter_type:', dbFolder.letter_type, '!= letterType:', letterType);
       return { valid: false };
     }
 
+    // Check if google_drive_folder_id exists and is valid
     if (!dbFolder.google_drive_folder_id || dbFolder.google_drive_folder_id.trim() === '') {
+      console.log('[ValidateFolder] REJECTED: Invalid google_drive_folder_id');
       return { valid: false };
     }
 
-    return {
-      valid: true,
-      googleDriveFolderId: dbFolder.google_drive_folder_id,
-      dbFolderId: dbFolder.id,
-    };
-  } catch (error: any) {
-    console.error('[validateFolderOwnership] Unexpected error:', error.message);
+    // Verify the folder actually exists in Drive using the correct Drive ID from database
+    const auth = await getOAuth2ClientForUser(userId);
+    const drive = google.drive({ version: 'v3', auth });
+
+    try {
+      console.log('[ValidateFolder] Checking Drive folder existence for google_drive_folder_id:', dbFolder.google_drive_folder_id);
+      await drive.files.get({
+        fileId: dbFolder.google_drive_folder_id,
+        fields: 'id, name, trashed'
+      });
+      console.log('[ValidateFolder] Drive folder found - ACCEPTED');
+
+      return {
+        valid: true,
+        googleDriveFolderId: dbFolder.google_drive_folder_id,
+        dbFolderId: dbFolder.id
+      };
+    } catch (driveError: any) {
+      console.log('[ValidateFolder] REJECTED: Drive folder not accessible - error:', driveError.message);
+      return { valid: false };
+    }
+  } catch (error) {
+    console.log('[ValidateFolder] REJECTED: Exception -', error);
     return { valid: false };
   }
 }

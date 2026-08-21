@@ -57,56 +57,62 @@ export const getFolders = async (req: AuthRequest, res: Response) => {
 };
 
 export const createFolder = async (req: AuthRequest, res: Response) => {
-  try {
-    const userId = req.user?.id;
-    if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
+  const userId = req.user?.id;
+  if (!userId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
 
-    const { month, monthYear, date, name, letter_type, file_type } = req.body;
+  const { month, monthYear, date, name, letter_type, file_type } = req.body;
 
-    // Determine monthYear from various params with backward compatibility
-    let resolvedMonthYear: string;
-    
-    if (monthYear) {
-      // New format: MM-YY
-      resolvedMonthYear = monthYear;
-    } else if (date) {
-      // Infer from date string
-      resolvedMonthYear = formatMonthYear(date);
-    } else if (month) {
-      // Legacy format: month name (e.g., "January") - keep for backward compatibility
-      // Try to parse as MM-YY first, if fails assume it's a legacy month name
-      if (month.match(/^\d{2}-\d{2}$/)) {
-        resolvedMonthYear = month;
-      } else {
-        // Legacy month name - this won't work with new structure but we accept it
-        resolvedMonthYear = month;
-      }
+  // Determine monthYear from various params with backward compatibility
+  let resolvedMonthYear: string;
+  
+  if (monthYear) {
+    // New format: MM-YY
+    resolvedMonthYear = monthYear;
+  } else if (date) {
+    // Infer from date string
+    resolvedMonthYear = formatMonthYear(date);
+  } else if (month) {
+    // Legacy format: month name (e.g., "January") - keep for backward compatibility
+    // Try to parse as MM-YY first, if fails assume it's a legacy month name
+    if (month.match(/^\d{2}-\d{2}$/)) {
+      resolvedMonthYear = month;
     } else {
-      return res.status(400).json({ 
-        error: 'Month parameter (monthYear, date, or month) is required',
-        missing_fields: {
-          monthYear: !monthYear,
-          date: !date,
-          month: !month,
-        }
-      });
+      // Legacy month name - this won't work with new structure but we accept it
+      resolvedMonthYear = month;
     }
+  } else {
+    return res.status(400).json({ 
+      error: 'Month parameter (monthYear, date, or month) is required',
+      missing_fields: {
+        monthYear: !monthYear,
+        date: !date,
+        month: !month,
+      }
+    });
+  }
 
-    if (!name || !name.trim()) {
-      return res.status(400).json({ 
-        error: 'Name is required',
-        missing_fields: {
-          name: !name || !name.trim(),
-        }
-      });
-    }
+  if (!name || !name.trim()) {
+    return res.status(400).json({ 
+      error: 'Name is required',
+      missing_fields: {
+        name: !name || !name.trim(),
+      }
+    });
+  }
 
-    const letterType = (letter_type as 'incoming' | 'outgoing') || 'incoming';
-    const fileType = (file_type as 'pdf' | 'excel' | 'documentation') || 'pdf';
+  const letterType = (letter_type as 'incoming' | 'outgoing') || 'incoming';
+  const fileType = (file_type as 'pdf' | 'excel' | 'documentation') || 'pdf';
 
+  try {
     const result = await createCustomFolder(userId, resolvedMonthYear, name.trim(), letterType, fileType);
+
+    console.log('=== DIAGNOSTIC: FOLDER CREATION API RESPONSE ===');
+    console.log('[FolderCreate] Response payload:', result);
+    console.log('[FolderCreate] folderId (DB ID):', result.folderId);
+    console.log('[FolderCreate] googleDriveFolderId:', result.googleDriveFolderId);
+    console.log('=== END DIAGNOSTIC ===');
 
     if (result.message === 'Folder already exists in the selected month') {
       return res.status(409).json({ 

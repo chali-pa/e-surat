@@ -96,6 +96,10 @@ export const getIncomingLetterRecordById = async (userId: number, id: number): P
 };
 
 export const createIncomingLetterRecord = async (surat: Surat): Promise<Surat> => {
+  console.log('=== DIAGNOSTIC: DB WRITE (INCOMING LETTER) ===');
+  console.log('[DBWrite] Input surat object:', { ...surat, file_path: surat.file_path ? '[FILE]' : null });
+  console.log('[DBWrite] folder_id to be written:', surat.folder_id, 'Type:', typeof surat.folder_id);
+  
   const result = await pool.query(
     `INSERT INTO surats (nomor_surat, nama_pengirim, nama_surat, tanggal_masuk, tanggal_buat, file_path, google_drive_id, google_sheet_row, user_id, folder_id, created_at, updated_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
@@ -114,6 +118,10 @@ export const createIncomingLetterRecord = async (surat: Surat): Promise<Surat> =
     ]
   );
   const row = result.rows[0];
+  
+  console.log('[DBWrite] Written to DB - id:', row.id, 'folder_id:', row.folder_id);
+  console.log('=== END DIAGNOSTIC ===');
+  
   return {
     id: row.id,
     nomor_surat: row.nomor_surat,
@@ -235,6 +243,11 @@ export const getOutgoingLetterRecordById = async (userId: number, id: number): P
 
 export const createOutgoingLetterRecord = async (surat: SuratKeluar): Promise<SuratKeluar> => {
   await ensureSuratKeluarColumns();
+  
+  console.log('=== DIAGNOSTIC: DB WRITE (OUTGOING LETTER) ===');
+  console.log('[DBWrite] Input surat object:', { ...surat, file_path: surat.file_path ? '[FILE]' : null });
+  console.log('[DBWrite] folder_id to be written:', surat.folder_id, 'Type:', typeof surat.folder_id);
+  
   const result = await pool.query(
     `INSERT INTO surat_keluars (nomor_surat, nama_penerima, nama_surat, tanggal_keluar, tanggal_buat, file_path, google_drive_id, google_sheet_row, user_id, folder_id, created_at, updated_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
@@ -253,6 +266,10 @@ export const createOutgoingLetterRecord = async (surat: SuratKeluar): Promise<Su
     ]
   );
   const row = result.rows[0];
+  
+  console.log('[DBWrite] Written to DB - id:', row.id, 'folder_id:', row.folder_id);
+  console.log('=== END DIAGNOSTIC ===');
+  
   return {
     id: row.id,
     nomor_surat: row.nomor_surat,

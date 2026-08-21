@@ -670,7 +670,17 @@ export async function validateFolderOwnership(
 }
 
 /**
- * Get custom folders for a specific month
+ * Get custom folders for a specific month.
+ *
+ * Lists folder children of the <root>/<MM-YY>/ path directly from Google Drive
+ * so that folders created in Drive outside the app are visible in the dropdown.
+ * Any newly discovered Drive folders are upserted into the local DB so that
+ * validateFolderOwnership can find them on first submit (fixes Issue A for
+ * Drive-created folders).
+ *
+ * Falls back to DB-only listing if Drive is unreachable (non-auth error).
+ * Re-throws GoogleReconnectRequiredError so the controller can send a proper
+ * reconnect response.
  */
 export async function getMonthlyFolders(
   userId: number,
@@ -681,16 +691,101 @@ export async function getMonthlyFolders(
   name: string;
   google_drive_folder_id: string;
 }>> {
+  const cleanedMonth = cleanMonthYear(monthName);
+
   try {
-    const cleanedMonth = cleanMonthYear(monthName);
-    const folders = await findFoldersByUserAndMonth(userId, cleanedMonth, letterType);
-    return folders.map(folder => ({
-      id: folder.id?.toString() || '',
-      name: folder.name,
-      google_drive_folder_id: folder.google_drive_folder_id,
-    }));
-  } catch (error) {
+    const auth = await getOAuth2ClientForUser(userId);
+    const drive = google.drive({ version: 'v3', auth });
+
+    // 1. Resolve the user's root folder for this letter type
+    const user = await findUserById(userId);
+    const rootFolderId = letterType === 'incoming'
+      ? user?.drive_folder_id
+      : user?.drive_keluar_folder_id;
+
+    if (!rootFolderId) {
+      // Drive not set up yet — fall back to DB only
+      const dbFolders = await findFoldersByUserAndMonth(userId, cleanedMonth, letterType);
+      return dbFolders.map((f) => ({
+        id: f.id?.toString() || '',
+        name: f.name,
+        google_drive_folder_id: f.google_drive_folder_id,
+      }));
+    }
+
+    // 2. Find the month sub-folder (list only — do NOT create it here)
+    const monthFolderId = await findFolderByName(drive, cleanedMonth, rootFolderId);
+    if (!monthFolderId) {
+      // Month folder doesn't exist yet — nothing to list
+      return [];
+    }
+
+    // 3. List all folder children of the month folder from Drive
+    const driveRes = await drive.files.list({
+      q: `'${monthFolderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+      fields: 'files(id, name)',
+      spaces: 'drive',
+      pageSize: 100,
+    });
+
+    const driveFolders = driveRes.data.files || [];
+
+    // 4. Upsert each Drive folder into the local DB and build the result list
+    const results: Array<{ id: string; name: string; google_drive_folder_id: string }> = [];
+
+    for (const driveFolder of driveFolders) {
+      if (!driveFolder.id || !driveFolder.name) continue;
+
+      let dbRow = await findFolderByDriveId(driveFolder.id);
+
+      if (!dbRow) {
+        // Drive-created folder not yet in DB — register it so validateFolderOwnership can find it
+        try {
+          dbRow = await createFolder({
+            user_id: userId,
+            google_drive_folder_id: driveFolder.id,
+            parent_folder_id: monthFolderId,
+            name: driveFolder.name,
+            month: cleanedMonth,
+            folder_type: 'custom',
+            letter_type: letterType,
+          });
+        } catch (upsertErr: any) {
+          // Concurrent request may have inserted it between our check and insert — retry lookup
+          dbRow = await findFolderByDriveId(driveFolder.id);
+          if (!dbRow) {
+            console.warn(`[GoogleDrive] Could not upsert folder '${driveFolder.name}' (${driveFolder.id}):`, upsertErr);
+            continue;
+          }
+        }
+      }
+
+      results.push({
+        id: dbRow.id?.toString() || '',
+        name: dbRow.name,
+        google_drive_folder_id: dbRow.google_drive_folder_id,
+      });
+    }
+
+    return results;
+  } catch (error: any) {
     console.error(`[GoogleDrive] Failed to get monthly folders:`, error);
-    return [];
+
+    // Auth errors must propagate so the controller can send the reconnect response
+    if (isGoogleErrorInvalidGrant(error)) {
+      throw new GoogleReconnectRequiredError();
+    }
+
+    // For other transient errors fall back to DB-only listing so the UI stays usable
+    try {
+      const dbFolders = await findFoldersByUserAndMonth(userId, cleanedMonth, letterType);
+      return dbFolders.map((f) => ({
+        id: f.id?.toString() || '',
+        name: f.name,
+        google_drive_folder_id: f.google_drive_folder_id,
+      }));
+    } catch {
+      return [];
+    }
   }
 }

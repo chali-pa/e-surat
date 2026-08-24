@@ -33,21 +33,19 @@ export async function findFolderByName(
   }
 }
 
-/**
- * Helper to find or create a folder idempotently
- */
 export async function findOrCreateFolder(
   drive: drive_v3.Drive,
   folderName: string,
-  parentId?: string
+  parentId?: string,
+  excludeId?: string | null
 ): Promise<string> {
   const existingId = await findFolderByName(drive, folderName, parentId);
-  if (existingId) {
+  if (existingId && existingId !== excludeId) {
     console.log(`[GoogleDrive] Found existing folder '${folderName}' with ID: ${existingId}`);
     return existingId;
   }
 
-  console.log(`[GoogleDrive] Folder '${folderName}' not found under parent '${parentId || 'root'}'. Creating new folder...`);
+  console.log(`[GoogleDrive] Folder '${folderName}' not found or excluded under parent '${parentId || 'root'}'. Creating new folder...`);
   const fileMetadata: any = {
     name: folderName,
     mimeType: 'application/vnd.google-apps.folder',
@@ -217,9 +215,15 @@ export async function moveDriveFileToCorrectFolder(
     const rootName = letterType === 'incoming' ? 'esurat' : 'esurat-keluar';
     const user = await findUserById(userId);
     let rootFolderId = letterType === 'incoming' ? user?.drive_folder_id : user?.drive_keluar_folder_id;
+    const otherFolderId = letterType === 'incoming' ? user?.drive_keluar_folder_id : user?.drive_folder_id;
+
+    if (rootFolderId && otherFolderId && rootFolderId === otherFolderId) {
+      console.warn(`[GoogleDrive] Identical folder ID detected. Resetting rootFolderId for ${letterType}.`);
+      rootFolderId = null;
+    }
 
     if (!rootFolderId) {
-      rootFolderId = await findOrCreateFolder(drive, rootName);
+      rootFolderId = await findOrCreateFolder(drive, rootName, undefined, otherFolderId);
       if (letterType === 'incoming') {
         await updateUserGoogleResourceIds(userId, { drive_folder_id: rootFolderId });
       } else {
@@ -278,10 +282,6 @@ export async function initializeUserDriveStructure(userId: number): Promise<{
       }
     }
 
-    if (!incomingRootId) {
-      incomingRootId = await findOrCreateFolder(drive, 'esurat');
-    }
-
     // Root folder for outgoing: esurat-keluar
     let outgoingRootId = user?.drive_keluar_folder_id || null;
     if (outgoingRootId) {
@@ -293,8 +293,18 @@ export async function initializeUserDriveStructure(userId: number): Promise<{
       }
     }
 
+    // Avoid sharing the same root folder ID
+    if (incomingRootId && outgoingRootId && incomingRootId === outgoingRootId) {
+      console.warn(`[GoogleDrive] Identical folder ID detected for incoming and outgoing roots. Resetting outgoing.`);
+      outgoingRootId = null;
+    }
+
+    if (!incomingRootId) {
+      incomingRootId = await findOrCreateFolder(drive, 'esurat', undefined, outgoingRootId);
+    }
+
     if (!outgoingRootId) {
-      outgoingRootId = await findOrCreateFolder(drive, 'esurat-keluar');
+      outgoingRootId = await findOrCreateFolder(drive, 'esurat-keluar', undefined, incomingRootId);
     }
 
     // Save root IDs in DB
@@ -340,9 +350,15 @@ export async function uploadUserLetterFile(
     const rootName = letterType === 'incoming' ? 'esurat' : 'esurat-keluar';
     const user = await findUserById(userId);
     let rootFolderId = letterType === 'incoming' ? user?.drive_folder_id : user?.drive_keluar_folder_id;
+    const otherFolderId = letterType === 'incoming' ? user?.drive_keluar_folder_id : user?.drive_folder_id;
+
+    if (rootFolderId && otherFolderId && rootFolderId === otherFolderId) {
+      console.warn(`[GoogleDrive] Identical folder ID detected for incoming and outgoing. Resetting rootFolderId for ${letterType}.`);
+      rootFolderId = null;
+    }
 
     if (!rootFolderId) {
-      rootFolderId = await findOrCreateFolder(drive, rootName);
+      rootFolderId = await findOrCreateFolder(drive, rootName, undefined, otherFolderId);
       if (letterType === 'incoming') {
         await updateUserGoogleResourceIds(userId, { drive_folder_id: rootFolderId });
       } else {
@@ -556,7 +572,14 @@ export async function createCustomFolder(
     const drive = google.drive({ version: 'v3', auth });
 
     const user = await findUserById(userId);
-    const rootFolderId = letterType === 'incoming' ? user?.drive_folder_id : user?.drive_keluar_folder_id;
+    let rootFolderId = letterType === 'incoming' ? user?.drive_folder_id : user?.drive_keluar_folder_id;
+    const otherFolderId = letterType === 'incoming' ? user?.drive_keluar_folder_id : user?.drive_folder_id;
+
+    if (!rootFolderId || (rootFolderId && otherFolderId && rootFolderId === otherFolderId)) {
+      console.warn(`[GoogleDrive] Root folder ID invalid or identical in createCustomFolder. Initializing drive structure.`);
+      const provision = await initializeUserDriveStructure(userId);
+      rootFolderId = letterType === 'incoming' ? provision.incomingRootId : provision.outgoingRootId;
+    }
 
     if (!rootFolderId) {
       throw new Error('User Drive structure not initialized. Please connect your Google account.');
@@ -719,9 +742,18 @@ export async function getMonthlyFolders(
 
     // 1. Resolve the user's root folder for this letter type
     const user = await findUserById(userId);
-    const rootFolderId = letterType === 'incoming'
+    let rootFolderId = letterType === 'incoming'
       ? user?.drive_folder_id
       : user?.drive_keluar_folder_id;
+    const otherFolderId = letterType === 'incoming'
+      ? user?.drive_keluar_folder_id
+      : user?.drive_folder_id;
+
+    if (rootFolderId && otherFolderId && rootFolderId === otherFolderId) {
+      console.warn(`[GoogleDrive] Identical folder ID detected in getMonthlyFolders. Initializing Drive structure.`);
+      const provision = await initializeUserDriveStructure(userId);
+      rootFolderId = letterType === 'incoming' ? provision.incomingRootId : provision.outgoingRootId;
+    }
 
     if (!rootFolderId) {
       // Drive not set up yet — fall back to DB only

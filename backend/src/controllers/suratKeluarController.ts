@@ -99,11 +99,6 @@ export const store = async (req: AuthRequest, res: Response) => {
   try {
     const { nomor_surat, nama_penerima, nama_surat, tanggal_keluar, tanggal_buat, folder_id } = req.body;
 
-    console.log('=== DIAGNOSTIC: LETTER SUBMIT REQUEST (OUTGOING) ===');
-    console.log('[SuratKeluarSubmit] folder_id received:', folder_id);
-    console.log('[SuratKeluarSubmit] folder_id type:', typeof folder_id);
-    console.log('=== END DIAGNOSTIC ===');
-
     if (!nomor_surat || !nama_penerima || !nama_surat || !tanggal_keluar || !tanggal_buat) {
       return res.status(400).json({
         error: 'Semua field wajib diisi',

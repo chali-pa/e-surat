@@ -108,12 +108,6 @@ export const createFolder = async (req: AuthRequest, res: Response) => {
   try {
     const result = await createCustomFolder(userId, resolvedMonthYear, name.trim(), letterType, fileType);
 
-    console.log('=== DIAGNOSTIC: FOLDER CREATION API RESPONSE ===');
-    console.log('[FolderCreate] Response payload:', result);
-    console.log('[FolderCreate] folderId (DB ID):', result.folderId);
-    console.log('[FolderCreate] googleDriveFolderId:', result.googleDriveFolderId);
-    console.log('=== END DIAGNOSTIC ===');
-
     if (result.message === 'Folder already exists in the selected month') {
       return res.status(409).json({ 
         success: false, 

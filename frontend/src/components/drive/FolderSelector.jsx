@@ -186,11 +186,13 @@ function CreateFolderPanel({ monthYear, letterType, fileType, onFolderCreated, o
         const folderId = response.data.folder?.id || response.data.data?.folderId
         const googleDriveFolderId = response.data.folder?.googleDriveFolderId || response.data.data?.googleDriveFolderId
 
-        onFolderCreated({
+        const newFolder = {
           id: folderId,
           name: folderName.trim(),
           google_drive_folder_id: googleDriveFolderId
-        })
+        };
+
+        onFolderCreated(newFolder)
         setFolderName('')
       }
     } catch (err) {

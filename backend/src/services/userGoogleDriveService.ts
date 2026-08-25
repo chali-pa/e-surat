@@ -632,24 +632,25 @@ export async function createCustomFolder(
 }
 
 /**
- * Validate folder ownership by checking the local database.
+ * Validate folder ownership using the local database only.
  *
- * Accepts the folder's database integer ID (as a string, the value sent by the
- * frontend via FormData).  Looks up the row in the `folders` table and confirms:
- *   1. The row exists.
+ * Accepts the folder's database integer ID (as a string — the value sent by the
+ * frontend via FormData) and confirms:
+ *   1. The row exists in the `folders` table.
  *   2. It belongs to `userId`.
  *   3. Its `letter_type` matches the form being submitted.
  *   4. It has a non-empty `google_drive_folder_id`.
  *
- * A DB row that passes all four checks is authoritative proof of ownership — no
- * extra Drive API round-trip is needed here.  The Drive folder ID returned by
- * this function is later passed to `uploadUserLetterFile`, which already calls
- * `drive.files.get` before uploading and will surface a clear error if the
- * folder has been trashed or is otherwise inaccessible.
+ * No Drive API round-trip is performed here.  The DB row is authoritative proof
+ * of ownership — `getMonthlyFolders` already upserts every Drive folder into the
+ * DB before it appears in the dropdown, so by the time the user submits the form
+ * the row is guaranteed to exist.  Calling `drive.files.get` at this point
+ * caused false rejections immediately after folder creation while Drive was still
+ * indexing the new item (the original Issue A bug).
  *
- * This approach prevents false rejections that occurred when the Drive
- * verification call failed transiently (e.g. immediately after folder creation
- * while Drive was still indexing the new folder).
+ * The `googleDriveFolderId` returned here is passed to `uploadUserLetterFile`,
+ * which already calls `drive.files.get` before uploading and will surface a
+ * clear error if the folder is trashed or inaccessible.
  */
 export async function validateFolderOwnership(
   userId: number,
@@ -657,16 +658,12 @@ export async function validateFolderOwnership(
   letterType: 'incoming' | 'outgoing' = 'incoming'
 ): Promise<{ valid: boolean; googleDriveFolderId?: string; dbFolderId?: number }> {
   try {
-    // Parse folderId safely - handle string/number conversion
     const parsedFolderId = parseInt(String(folderId), 10);
-    
     if (isNaN(parsedFolderId)) {
       return { valid: false };
     }
-    
-    // Look up folder in database using the database ID
+
     const dbFolder = await findFolderById(parsedFolderId);
-    
     if (!dbFolder) {
       return { valid: false };
     }
@@ -675,38 +672,19 @@ export async function validateFolderOwnership(
       return { valid: false };
     }
 
-    // Check if letter_type matches (incoming vs outgoing)
     if (dbFolder.letter_type !== letterType) {
       return { valid: false };
     }
 
-    // Check if google_drive_folder_id exists and is valid
     if (!dbFolder.google_drive_folder_id || dbFolder.google_drive_folder_id.trim() === '') {
       return { valid: false };
     }
 
-    // Verify the folder actually exists in Drive using the correct Drive ID from database
-    const auth = await getOAuth2ClientForUser(Number(userId));
-    const drive = google.drive({ version: 'v3', auth });
-
-    try {
-      const fileRes = await drive.files.get({
-        fileId: dbFolder.google_drive_folder_id,
-        fields: 'id, name, trashed'
-      });
-
-      if (fileRes.data.trashed) {
-        return { valid: false };
-      }
-
-      return {
-        valid: true,
-        googleDriveFolderId: dbFolder.google_drive_folder_id,
-        dbFolderId: dbFolder.id
-      };
-    } catch (driveError: any) {
-      return { valid: false };
-    }
+    return {
+      valid: true,
+      googleDriveFolderId: dbFolder.google_drive_folder_id,
+      dbFolderId: dbFolder.id,
+    };
   } catch (error) {
     return { valid: false };
   }

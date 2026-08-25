@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
-import { SuratKeluar, deleteOutgoingLetterRecord, createOutgoingLetterRecord, updateOutgoingLetterRecord, getAllOutgoingLetterRecords } from '../models/Surat';
+import { SuratKeluar, deleteOutgoingLetterRecord, createOutgoingLetterRecord, updateOutgoingLetterRecord, getAllOutgoingLetterRecords, getOutgoingLetterRecordById } from '../models/Surat';
 import fs from 'fs';
 import path from 'path';
 import { google } from 'googleapis';
@@ -64,19 +64,33 @@ export const show = async (req: AuthRequest, res: Response) => {
 
   try {
     const { id } = req.params;
-    const rowNumber = parseInt(id);
+    const suratId = parseInt(id);
 
-    if (isNaN(rowNumber) || rowNumber < 1) {
+    if (isNaN(suratId) || suratId < 1) {
       return res.status(400).json({ error: 'Invalid surat keluar ID' });
     }
 
-    const surat = await getOutgoingLetterByRow(userId, rowNumber);
+    // Use DB lookup so folder_id is always present (Sheets rows have no folder_id column)
+    const surat = await getOutgoingLetterRecordById(userId, suratId);
 
     if (!surat) {
       return res.status(404).json({ error: 'Surat keluar not found' });
     }
 
-    res.json({ success: true, data: surat, surat });
+    // Enrich with folder_name if folder_id is set
+    let folder_name: string | null = null;
+    if (surat.folder_id) {
+      try {
+        const folder = await findFolderById(surat.folder_id);
+        if (folder && folder.user_id === userId) {
+          folder_name = folder.name;
+        }
+      } catch {
+        // Non-fatal
+      }
+    }
+
+    res.json({ success: true, data: { ...surat, folder_name }, surat: { ...surat, folder_name } });
   } catch (error: any) {
     console.error('Get surat keluar error:', error);
     if (isGoogleErrorInvalidGrant(error)) {
@@ -259,7 +273,7 @@ export const update = async (req: AuthRequest, res: Response) => {
 
     const { nomor_surat, nama_penerima, nama_surat, tanggal_keluar, tanggal_buat, folder_id } = req.body;
 
-    const oldSurat = await getOutgoingLetterByRow(userId, rowNumber);
+    const oldSurat = await getOutgoingLetterRecordById(userId, rowNumber);
     if (!oldSurat) {
       return res.status(404).json({ error: 'Surat keluar not found' });
     }
@@ -403,7 +417,7 @@ export const destroy = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'Invalid surat keluar ID' });
     }
 
-    const surat = await getOutgoingLetterByRow(userId, rowNumber);
+    const surat = await getOutgoingLetterRecordById(userId, rowNumber);
     if (!surat) {
       return res.status(404).json({ error: 'Surat keluar not found' });
     }
@@ -498,7 +512,7 @@ export const preview = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'Invalid surat keluar ID' });
     }
 
-    const surat = await getOutgoingLetterByRow(userId, suratId);
+    const surat = await getOutgoingLetterRecordById(userId, suratId);
     if (!surat) {
       return res.status(404).json({ error: 'Surat keluar not found' });
     }
@@ -540,7 +554,7 @@ export const serveFile = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'Invalid surat keluar ID' });
     }
 
-    const surat = await getOutgoingLetterByRow(userId, suratId);
+    const surat = await getOutgoingLetterRecordById(userId, suratId);
     if (!surat) {
       return res.status(404).json({ 
         error: 'Surat keluar not found',

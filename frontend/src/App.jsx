@@ -16,6 +16,7 @@ import SuratEdit from './pages/surat/SuratEdit'
 import SuratKeluarIndex from './pages/surat-keluar/SuratKeluarIndex'
 import SuratKeluarCreate from './pages/surat-keluar/SuratKeluarCreate'
 import SuratKeluarEdit from './pages/surat-keluar/SuratKeluarEdit'
+import MailManagementPage from './pages/mail/MailManagementPage'
 
 function LoadingSpinner() {
   return (
@@ -154,6 +155,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <SuratKeluarEdit />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/mail-management"
+        element={
+          <ProtectedRoute>
+            <MailManagementPage />
           </ProtectedRoute>
         }
       />

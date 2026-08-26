@@ -52,6 +52,45 @@ const ensureSuratKeluarColumns = async (): Promise<void> => {
   `);
 };
 
+/**
+ * Fetch incoming letter records for a specific calendar month.
+ * `year` and `month` are 1-based (month: 1–12).
+ * Uses a half-open interval [start_of_month, start_of_next_month) so the
+ * filter is determined entirely by the server's clock — no client date needed.
+ */
+export const getIncomingLetterRecordsByMonth = async (
+  userId: number,
+  year: number,
+  month: number
+): Promise<Surat[]> => {
+  const startOfMonth = new Date(year, month - 1, 1);
+  const startOfNextMonth = new Date(year, month, 1);
+
+  const result = await pool.query(
+    `SELECT * FROM surats
+     WHERE user_id = $1
+       AND tanggal_masuk >= $2
+       AND tanggal_masuk < $3
+     ORDER BY tanggal_masuk DESC, created_at DESC, id DESC`,
+    [userId, startOfMonth.toISOString().slice(0, 10), startOfNextMonth.toISOString().slice(0, 10)]
+  );
+  return result.rows.map((row) => ({
+    id: row.id,
+    nomor_surat: row.nomor_surat || '',
+    nama_pengirim: row.nama_pengirim || '',
+    nama_surat: row.nama_surat || '',
+    tanggal_masuk: row.tanggal_masuk ? new Date(row.tanggal_masuk).toISOString().slice(0, 10) : '',
+    tanggal_buat: row.tanggal_buat ? new Date(row.tanggal_buat).toISOString().slice(0, 10) : '',
+    file_path: row.file_path || '',
+    google_drive_id: row.google_drive_id || '',
+    google_sheet_row: row.google_sheet_row ?? undefined,
+    user_id: row.user_id,
+    folder_id: row.folder_id ?? undefined,
+    created_at: row.created_at ? new Date(row.created_at).toISOString() : undefined,
+    updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
+  }));
+};
+
 export const getAllIncomingLetterRecords = async (userId: number): Promise<Surat[]> => {
   const result = await pool.query(
     'SELECT * FROM surats WHERE user_id = $1 ORDER BY created_at DESC, id DESC',

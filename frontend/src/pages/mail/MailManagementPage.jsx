@@ -19,6 +19,11 @@ export default function MailManagementPage() {
   const [view, setView] = useState('list'); // 'list', 'create', 'edit'
   const [editingId, setEditingId] = useState(null);
 
+  // Current-month filter — only applies to incoming mail (per spec).
+  // Defaults to true so the page opens showing the most relevant records.
+  // Resets back to true whenever the user switches back to the incoming tab.
+  const [currentMonthOnly, setCurrentMonthOnly] = useState(true);
+
   const [surats, setSurats] = useState([]);
   const [suratsKeluar, setSuratsKeluar] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -40,13 +45,14 @@ export default function MailManagementPage() {
       setView('list');
       setEditingId(null);
       setSearchTerm('');
+      setCurrentMonthOnly(true);
     }
   }, [queryType]);
 
-  // Fetch letters when active tab changes (Section 4 requirement: fully separate datasets)
+  // Fetch letters when active tab or month-filter changes
   useEffect(() => {
     fetchData();
-  }, [activeTab]);
+  }, [activeTab, currentMonthOnly]);
 
   // Toast timer auto-close
   useEffect(() => {
@@ -74,7 +80,10 @@ export default function MailManagementPage() {
     setReconnectNeeded(false);
     try {
       if (activeTab === 'incoming') {
-        const response = await api.get('/api/surat');
+        // Pass ?month=current when the toggle is active — server derives the
+        // actual year/month from its own clock so the view is never stale.
+        const params = currentMonthOnly ? '?month=current' : '';
+        const response = await api.get(`/api/surat${params}`);
         setSurats(response.data.data || []);
       } else {
         const response = await api.get('/api/surat-keluar');
@@ -93,9 +102,11 @@ export default function MailManagementPage() {
   const handleTabChange = (tab) => {
     setActiveTab(tab);
     setSearchParams({ type: tab });
-    setView('list'); // Reset view to list on tab change
+    setView('list');
     setEditingId(null);
     setSearchTerm('');
+    // Reset month filter to default (on) whenever switching back to incoming
+    setCurrentMonthOnly(true);
   };
 
   const handleReconnectGoogle = () => {
@@ -328,11 +339,29 @@ export default function MailManagementPage() {
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           {/* Toolbar */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-6 py-4 border-b border-gray-100">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Total</span>
               <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-purple-50 text-[#4B164C] border border-purple-100">
                 {(activeTab === 'incoming' ? surats : suratsKeluar).length} Surat
               </span>
+              {/* Current-month toggle — only shown on the incoming tab */}
+              {activeTab === 'incoming' && (
+                <button
+                  type="button"
+                  onClick={() => setCurrentMonthOnly((v) => !v)}
+                  title={currentMonthOnly ? 'Tampilkan semua bulan' : 'Tampilkan bulan ini saja'}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all ${
+                    currentMonthOnly
+                      ? 'bg-[#4B164C] text-white border-[#4B164C]'
+                      : 'bg-white text-slate-500 border-slate-200 hover:border-[#DD88CF] hover:text-[#4B164C]'
+                  }`}
+                >
+                  <i className="bi bi-calendar-month" />
+                  {currentMonthOnly
+                    ? new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })
+                    : 'Semua Bulan'}
+                </button>
+              )}
             </div>
             <div className="relative w-full sm:w-72">
               <i className="bi bi-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
@@ -351,6 +380,7 @@ export default function MailManagementPage() {
             type={activeTab}
             surats={filteredLetters}
             loading={loadingList}
+            currentMonthOnly={activeTab === 'incoming' && currentMonthOnly}
             onView={handleView}
             onPreview={handlePreview}
             onDownload={handleDownload}

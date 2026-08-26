@@ -4,6 +4,7 @@ import { Readable } from 'stream';
 import { findUserById, updateUserGoogleResourceIds } from '../models/User';
 import { getOAuth2ClientForUser, GoogleReconnectRequiredError, isGoogleErrorInvalidGrant } from './userGoogleAuthService';
 import { createFolder, findFolderByDriveId, findFoldersByUserAndMonth, findFolderById } from '../models/Folder';
+import { compressPdfIfNeeded } from './pdfCompressionService';
 
 /**
  * Helper to find an existing folder under parentId by name (to prevent duplicates)
@@ -387,7 +388,14 @@ export async function uploadUserLetterFile(
       logicalPath = `${rootName}/${monthYear}/${originalFileName}`;
     }
 
-    // 3. Upload file to target folder
+    // 3. Compress PDF if it meets the trigger threshold (both incoming and outgoing).
+    //    compressPdfIfNeeded() is a no-op for non-PDF files and files under the trigger.
+    //    Throws a user-visible error if the PDF is corrupt or still oversized after compression.
+    const compressionResult = await compressPdfIfNeeded(fileBuffer, mimeType || 'application/octet-stream', originalFileName);
+    console.log(compressionResult.summary);
+    const uploadBuffer = compressionResult.buffer;
+
+    // 4. Upload file to target folder
     const fileMetadata = {
       name: originalFileName,
       parents: [targetFolderId],
@@ -395,7 +403,7 @@ export async function uploadUserLetterFile(
 
     const media = {
       mimeType: mimeType || 'application/octet-stream',
-      body: Readable.from(fileBuffer),
+      body: Readable.from(uploadBuffer),
     };
 
     const response = await drive.files.create({
@@ -424,7 +432,12 @@ export async function uploadUserLetterFile(
       console.warn(`[GoogleDrive] Could not set reader permission on file ${fileId}:`, permErr);
     }
 
-    console.log(`[GoogleDrive] Upload successful! File ID: ${fileId}, Logical Path: ${logicalPath}`);
+    console.log(
+      `[GoogleDrive] Upload successful! File ID: ${fileId}, Logical Path: ${logicalPath}` +
+      (compressionResult.compressed
+        ? ` (compressed: ${(compressionResult.originalSize / 1024 / 1024).toFixed(2)} MB → ${(compressionResult.finalSize / 1024 / 1024).toFixed(2)} MB)`
+        : '')
+    );
     return { fileId, webViewLink, logicalPath };
   } catch (error: any) {
     console.error(`[GoogleDrive] Upload failed for user ${userId}:`, error);

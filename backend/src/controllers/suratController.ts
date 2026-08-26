@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
-import { Surat, deleteIncomingLetterRecord, createIncomingLetterRecord, updateIncomingLetterRecord, getAllIncomingLetterRecords, getIncomingLetterRecordById } from '../models/Surat';
+import { Surat, deleteIncomingLetterRecord, createIncomingLetterRecord, updateIncomingLetterRecord, getAllIncomingLetterRecords, getIncomingLetterRecordById, getIncomingLetterRecordsByMonth } from '../models/Surat';
 import fs from 'fs';
 import path from 'path';
 import { google } from 'googleapis';
@@ -21,8 +21,21 @@ export const index = async (req: AuthRequest, res: Response) => {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    // Read from local DB (has folder_id) instead of Google Sheets (no folder info)
-    const surats = await getAllIncomingLetterRecords(userId);
+    // ?month=current → server-side date-range filter on tanggal_masuk for this calendar month.
+    // The year/month are derived from the server clock so the view is never stale after midnight.
+    const monthParam = req.query.month as string | undefined;
+    const useCurrentMonth = monthParam === 'current';
+
+    let surats: Surat[];
+    let filterMeta: { year: number; month: number } | null = null;
+
+    if (useCurrentMonth) {
+      const now = new Date();
+      filterMeta = { year: now.getFullYear(), month: now.getMonth() + 1 };
+      surats = await getIncomingLetterRecordsByMonth(userId, filterMeta.year, filterMeta.month);
+    } else {
+      surats = await getAllIncomingLetterRecords(userId);
+    }
 
     // Build folder id → name map in one query to avoid N+1
     const folderMap: Record<number, string> = {};
@@ -42,7 +55,12 @@ export const index = async (req: AuthRequest, res: Response) => {
       folder_name: s.folder_id ? (folderMap[s.folder_id] ?? null) : null,
     }));
 
-    res.json({ success: true, data: enriched });
+    res.json({
+      success: true,
+      data: enriched,
+      // Include server-resolved month/year so the frontend never has to guess
+      ...(filterMeta && { filter: { month: filterMeta.month, year: filterMeta.year } }),
+    });
   } catch (error: any) {
     console.error('Get surats error:', error);
     if (isGoogleErrorInvalidGrant(error)) {

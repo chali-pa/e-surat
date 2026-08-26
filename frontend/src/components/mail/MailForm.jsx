@@ -2,7 +2,19 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import api from '../../api/axios';
 import FolderSelector from '../drive/FolderSelector';
 
+/**
+ * Maximum file size accepted by the server (mirrors MULTER_FILE_SIZE_LIMIT_BYTES
+ * in backend/src/config/upload.ts — change both together if you adjust the limit).
+ */
 const MAX_FILE_SIZE = 800 * 1024 * 1024; // 800 MB
+
+/**
+ * PDFs above this size will be automatically compressed server-side before
+ * being stored in Google Drive (mirrors PDF_COMPRESS_TRIGGER_BYTES in
+ * backend/src/services/pdfCompressionService.ts).
+ * Used only to show an informational hint in the upload zone — not enforced client-side.
+ */
+const PDF_COMPRESS_TRIGGER_BYTES = 8 * 1024 * 1024; // 8 MB
 const ALLOWED_TYPES = [
   'application/pdf',
   'application/msword',
@@ -467,9 +479,18 @@ export default function MailForm({ type, id, onSaved, onCancel }) {
             <label className="block text-sm font-semibold text-slate-700">
               Upload File Surat {!isEditMode && <span className="text-red-500">*</span>}
             </label>
-            <span className="text-xs text-slate-400 bg-slate-100 px-2.5 py-1 rounded-full font-medium">
-              Maks. 800 MB
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-400 bg-slate-100 px-2.5 py-1 rounded-full font-medium">
+                Maks. 800 MB
+              </span>
+              <span
+                className="text-xs text-slate-400 bg-blue-50 border border-blue-100 text-blue-600 px-2.5 py-1 rounded-full font-medium"
+                title={`PDF lebih dari ${formatBytes(PDF_COMPRESS_TRIGGER_BYTES)} akan dikompres otomatis di server`}
+              >
+                <i className="bi bi-file-zip mr-1" />
+                Auto-compress PDF &gt; {formatBytes(PDF_COMPRESS_TRIGGER_BYTES)}
+              </span>
+            </div>
           </div>
 
           <div

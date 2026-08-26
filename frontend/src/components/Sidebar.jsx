@@ -42,9 +42,6 @@ export default function Sidebar() {
 
   const menuItems = [
     { path: '/dashboard', icon: 'bi-grid-1x2-fill', label: 'Dashboard' },
-    { path: '/mail-management', icon: 'bi-mailbox', label: 'Kelola Surat' },
-    { path: '/surat', icon: 'bi-envelope-fill', label: 'Surat Masuk' },
-    { path: '/surat-keluar', icon: 'bi-send-fill', label: 'Surat Keluar' },
     { path: '/pdf-compressor', icon: 'bi-file-zip', label: 'Kompresor PDF' },
     { path: '/profile', icon: 'bi-person-fill', label: 'Profil' },
   ]

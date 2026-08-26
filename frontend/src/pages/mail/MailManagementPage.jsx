@@ -374,7 +374,7 @@ export default function MailManagementPage() {
       {/* ── Page Header ──────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[#4B164C]">Kelola Surat</h1>
+          <h1 className="text-2xl font-bold text-[#4B164C]">Dashboard</h1>
           <p className="mt-1 text-sm text-slate-500">Kelola surat masuk dan keluar secara terpadu di satu tempat.</p>
         </div>
         {view === 'list' && (

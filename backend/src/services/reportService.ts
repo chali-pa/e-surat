@@ -24,6 +24,7 @@ export interface IncomingMailRow {
   tanggal_buat: string;
   folder_name?: string | null;
   created_at?: string;
+  google_drive_id?: string | null;
 }
 
 export interface OutgoingMailRow {
@@ -35,6 +36,7 @@ export interface OutgoingMailRow {
   tanggal_buat: string;
   folder_name?: string | null;
   created_at?: string;
+  google_drive_id?: string | null;
 }
 
 // ─── helpers ───────────────────────────────────────────────────────────────
@@ -62,6 +64,18 @@ function clip(str: string | undefined | null, maxLen: number): string {
   return str.length > maxLen ? str.slice(0, maxLen - 1) + '…' : str;
 }
 
+/** Build a Google Drive file viewing URL from the file ID. */
+function buildDriveUrl(googleDriveId?: string | null): string {
+  if (!googleDriveId) return '-';
+  return `https://drive.google.com/file/d/${googleDriveId}/view`;
+}
+
+/** Build a shortened display version of a Drive URL. */
+function clipDriveUrl(googleDriveId?: string | null): string {
+  if (!googleDriveId) return 'No file';
+  return `drive.google.com/.../${googleDriveId.slice(-8)}`;
+}
+
 /** Draw a horizontal rule on a pdf-lib page at y. Returns the new y. */
 function drawHR(page: any, y: number, color: any, width: number): number {
   page.drawLine({
@@ -87,12 +101,12 @@ export async function generateIncomingMonthlyPdf(
   const title   = `Laporan Surat Masuk — ${monthLabel(month, year)}`;
   return buildSummaryPdf(title, rows.length, rows.map((r, i) => [
     String(i + 1),
-    clip(r.nomor_surat, 24),
+    clip(r.nomor_surat, 20),
     formatDate(r.tanggal_masuk),
-    clip(r.nama_pengirim, 28),
-    clip(r.nama_surat, 36),
-    clip(r.folder_name ?? 'Default', 20),
-  ]), ['No', 'Nomor Surat', 'Tgl Masuk', 'Pengirim', 'Perihal', 'Folder']);
+    clip(r.nama_pengirim, 24),
+    clip(r.nama_surat, 30),
+    clipDriveUrl(r.google_drive_id),
+  ]), ['No', 'Nomor Surat', 'Tgl Masuk', 'Pengirim', 'Perihal', 'Link Drive']);
 }
 
 /**
@@ -106,12 +120,12 @@ export async function generateOutgoingMonthlyPdf(
   const title = `Laporan Surat Keluar — ${monthLabel(month, year)}`;
   return buildSummaryPdf(title, rows.length, rows.map((r, i) => [
     String(i + 1),
-    clip(r.nomor_surat, 24),
+    clip(r.nomor_surat, 20),
     formatDate(r.tanggal_keluar),
-    clip(r.nama_penerima, 28),
-    clip(r.nama_surat, 36),
-    clip(r.folder_name ?? 'Default', 20),
-  ]), ['No', 'Nomor Surat', 'Tgl Keluar', 'Penerima', 'Perihal', 'Folder']);
+    clip(r.nama_penerima, 24),
+    clip(r.nama_surat, 30),
+    clipDriveUrl(r.google_drive_id),
+  ]), ['No', 'Nomor Surat', 'Tgl Keluar', 'Penerima', 'Perihal', 'Link Drive']);
 }
 
 /**
@@ -134,8 +148,8 @@ async function buildSummaryPdf(
   const MARGIN  = 40;
   const USABLE  = PAGE_W - MARGIN * 2;
 
-  // Column widths (sum = USABLE)
-  const COL_W = [28, 108, 76, 108, 190, 80];
+  // Column widths (sum = USABLE) - adjusted for Drive link column
+  const COL_W = [28, 90, 76, 100, 150, 118];
   const ROW_H  = 18;
   const HEAD_H = 22;
   const FONT_SZ = 8;
@@ -228,7 +242,7 @@ export async function generateIncomingExport(rows: IncomingMailRow[]): Promise<B
 
   const ws = wb.addWorksheet('Surat Masuk');
 
-  // Column definitions
+  // Column definitions - now includes Drive Link
   ws.columns = [
     { header: 'No',           key: 'no',           width: 5  },
     { header: 'Nomor Surat',  key: 'nomor_surat',  width: 24 },
@@ -237,6 +251,7 @@ export async function generateIncomingExport(rows: IncomingMailRow[]): Promise<B
     { header: 'Tgl Masuk',    key: 'tanggal_masuk', width: 16 },
     { header: 'Tgl Buat',     key: 'tanggal_buat', width: 16 },
     { header: 'Folder',       key: 'folder_name',  width: 22 },
+    { header: 'Link Drive',   key: 'drive_link',   width: 30 },
     { header: 'Dicatat Pada', key: 'created_at',   width: 24 },
   ];
 
@@ -248,7 +263,7 @@ export async function generateIncomingExport(rows: IncomingMailRow[]): Promise<B
   headerRow.height = 20;
 
   rows.forEach((r, i) => {
-    ws.addRow({
+    const row = ws.addRow({
       no:           i + 1,
       nomor_surat:  r.nomor_surat,
       nama_pengirim: r.nama_pengirim,
@@ -256,14 +271,26 @@ export async function generateIncomingExport(rows: IncomingMailRow[]): Promise<B
       tanggal_masuk: r.tanggal_masuk ? formatDate(r.tanggal_masuk) : '-',
       tanggal_buat: r.tanggal_buat  ? formatDate(r.tanggal_buat)  : '-',
       folder_name:  r.folder_name ?? 'Default',
+      drive_link:   r.google_drive_id ? 'Buka File' : 'No file',
       created_at:   r.created_at
         ? new Date(r.created_at).toLocaleString('id-ID')
         : '-',
     });
+
+    // Make the Drive link clickable if we have a google_drive_id
+    if (r.google_drive_id) {
+      const driveCell = row.getCell('drive_link');
+      const driveUrl = buildDriveUrl(r.google_drive_id);
+      driveCell.value = {
+        text: 'Buka File',
+        hyperlink: driveUrl,
+      };
+      driveCell.font = { color: { argb: 'FF0000EE' }, underline: true };
+    }
   });
 
   // Auto-filter on header row
-  ws.autoFilter = { from: 'A1', to: 'H1' };
+  ws.autoFilter = { from: 'A1', to: 'I1' };
 
   const arrayBuffer = await wb.xlsx.writeBuffer();
   return Buffer.from(arrayBuffer);

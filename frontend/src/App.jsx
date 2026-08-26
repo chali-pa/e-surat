@@ -10,13 +10,6 @@ import TermsOfService from './pages/TermsOfService'
 import Dashboard from './pages/Dashboard'
 import Profile from './pages/Profile'
 import Layout from './components/Layout'
-import SuratIndex from './pages/surat/SuratIndex'
-import SuratCreate from './pages/surat/SuratCreate'
-import SuratEdit from './pages/surat/SuratEdit'
-import SuratKeluarIndex from './pages/surat-keluar/SuratKeluarIndex'
-import SuratKeluarCreate from './pages/surat-keluar/SuratKeluarCreate'
-import SuratKeluarEdit from './pages/surat-keluar/SuratKeluarEdit'
-import MailManagementPage from './pages/mail/MailManagementPage'
 import PdfCompressorPage from './pages/pdf-compressor/PdfCompressorPage'
 
 function LoadingSpinner() {
@@ -111,62 +104,14 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
-      <Route
-        path="/surat"
-        element={
-          <ProtectedRoute>
-            <SuratIndex />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/surat/create"
-        element={
-          <ProtectedRoute>
-            <SuratCreate />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/surat/:id/edit"
-        element={
-          <ProtectedRoute>
-            <SuratEdit />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/surat-keluar"
-        element={
-          <ProtectedRoute>
-            <SuratKeluarIndex />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/surat-keluar/create"
-        element={
-          <ProtectedRoute>
-            <SuratKeluarCreate />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/surat-keluar/:id/edit"
-        element={
-          <ProtectedRoute>
-            <SuratKeluarEdit />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/mail-management"
-        element={
-          <ProtectedRoute>
-            <MailManagementPage />
-          </ProtectedRoute>
-        }
-      />
+      {/* Redirects from old routes to consolidated Dashboard */}
+      <Route path="/surat" element={<Navigate to="/dashboard?type=incoming" replace />} />
+      <Route path="/surat/create" element={<Navigate to="/dashboard?type=incoming" replace />} />
+      <Route path="/surat/:id/edit" element={<Navigate to="/dashboard?type=incoming" replace />} />
+      <Route path="/surat-keluar" element={<Navigate to="/dashboard?type=outgoing" replace />} />
+      <Route path="/surat-keluar/create" element={<Navigate to="/dashboard?type=outgoing" replace />} />
+      <Route path="/surat-keluar/:id/edit" element={<Navigate to="/dashboard?type=outgoing" replace />} />
+      <Route path="/mail-management" element={<Navigate to="/dashboard" replace />} />
       <Route
         path="/pdf-compressor"
         element={

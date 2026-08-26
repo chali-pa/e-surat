@@ -21,18 +21,27 @@ export const index = async (req: AuthRequest, res: Response) => {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    // ?month=current → server-side date-range filter on tanggal_masuk for this calendar month.
-    // The year/month are derived from the server clock so the view is never stale after midnight.
+    // Supports two query modes:
+    //   ?month=current          → server-clock month of tanggal_masuk
+    //   ?year=2026&month=8      → explicit year+month (1-based)
     const monthParam = req.query.month as string | undefined;
-    const useCurrentMonth = monthParam === 'current';
-
+    const yearParam  = req.query.year  as string | undefined;
     let surats: Surat[];
     let filterMeta: { year: number; month: number } | null = null;
 
-    if (useCurrentMonth) {
+    if (monthParam === 'current') {
       const now = new Date();
       filterMeta = { year: now.getFullYear(), month: now.getMonth() + 1 };
       surats = await getIncomingLetterRecordsByMonth(userId, filterMeta.year, filterMeta.month);
+    } else if (monthParam && yearParam) {
+      const y = parseInt(yearParam, 10);
+      const m = parseInt(monthParam, 10);
+      if (!isNaN(y) && !isNaN(m) && m >= 1 && m <= 12) {
+        filterMeta = { year: y, month: m };
+        surats = await getIncomingLetterRecordsByMonth(userId, y, m);
+      } else {
+        surats = await getAllIncomingLetterRecords(userId);
+      }
     } else {
       surats = await getAllIncomingLetterRecords(userId);
     }

@@ -17,6 +17,7 @@ import SuratKeluarIndex from './pages/surat-keluar/SuratKeluarIndex'
 import SuratKeluarCreate from './pages/surat-keluar/SuratKeluarCreate'
 import SuratKeluarEdit from './pages/surat-keluar/SuratKeluarEdit'
 import MailManagementPage from './pages/mail/MailManagementPage'
+import PdfCompressorPage from './pages/pdf-compressor/PdfCompressorPage'
 
 function LoadingSpinner() {
   return (
@@ -163,6 +164,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <MailManagementPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/pdf-compressor"
+        element={
+          <ProtectedRoute>
+            <PdfCompressorPage />
           </ProtectedRoute>
         }
       />

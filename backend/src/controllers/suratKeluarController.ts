@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
-import { SuratKeluar, deleteOutgoingLetterRecord, createOutgoingLetterRecord, updateOutgoingLetterRecord, getAllOutgoingLetterRecords, getOutgoingLetterRecordById } from '../models/Surat';
+import { SuratKeluar, deleteOutgoingLetterRecord, createOutgoingLetterRecord, updateOutgoingLetterRecord, getAllOutgoingLetterRecords, getOutgoingLetterRecordById, getOutgoingLetterRecordsByMonth } from '../models/Surat';
 import fs from 'fs';
 import path from 'path';
 import { google } from 'googleapis';
@@ -21,8 +21,32 @@ export const index = async (req: AuthRequest, res: Response) => {
   }
 
   try {
-    // Read from local DB (has folder_id) instead of Google Sheets (no folder info)
-    const surats = await getAllOutgoingLetterRecords(userId);
+    // Supports two query modes:
+    //   ?month=current          → server-clock month of tanggal_keluar
+    //   ?year=2026&month=8      → explicit year+month (1-based)
+    // Both filter in the DB query, not client-side.
+    const monthParam = req.query.month as string | undefined;
+    const yearParam  = req.query.year  as string | undefined;
+
+    let surats: SuratKeluar[];
+    let filterMeta: { year: number; month: number } | null = null;
+
+    if (monthParam === 'current') {
+      const now = new Date();
+      filterMeta = { year: now.getFullYear(), month: now.getMonth() + 1 };
+      surats = await getOutgoingLetterRecordsByMonth(userId, filterMeta.year, filterMeta.month);
+    } else if (monthParam && yearParam) {
+      const y = parseInt(yearParam, 10);
+      const m = parseInt(monthParam, 10);
+      if (!isNaN(y) && !isNaN(m) && m >= 1 && m <= 12) {
+        filterMeta = { year: y, month: m };
+        surats = await getOutgoingLetterRecordsByMonth(userId, y, m);
+      } else {
+        surats = await getAllOutgoingLetterRecords(userId);
+      }
+    } else {
+      surats = await getAllOutgoingLetterRecords(userId);
+    }
 
     // Build folder id → name map in one query to avoid N+1
     const folderMap: Record<number, string> = {};
@@ -32,17 +56,20 @@ export const index = async (req: AuthRequest, res: Response) => {
         if (f.id !== undefined) folderMap[f.id] = f.name;
       }
     } catch (folderErr) {
-      // Non-fatal: folder names simply won't appear if this fails
       console.warn('[SuratKeluarIndex] Could not load folder names:', folderErr);
     }
 
-    // Enrich records with folder_name
     const enriched = surats.map((s) => ({
       ...s,
       folder_name: s.folder_id ? (folderMap[s.folder_id] ?? null) : null,
     }));
 
-    res.json({ success: true, data: enriched, surats: enriched });
+    res.json({
+      success: true,
+      data: enriched,
+      surats: enriched,
+      ...(filterMeta && { filter: { month: filterMeta.month, year: filterMeta.year } }),
+    });
   } catch (error: any) {
     console.error('Get surat keluars error:', error);
     if (isGoogleErrorInvalidGrant(error)) {

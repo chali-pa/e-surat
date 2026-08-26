@@ -152,53 +152,72 @@ export default function Profile() {
       )}
 
       {/* ── Profile hero card ─────────────────────────────────────────── */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        {/* Banner */}
+      {/*
+        Layout strategy:
+        ─ The card uses overflow-visible so the avatar (which straddles the
+          banner/body boundary) is never clipped by the card's edge.
+        ─ The banner div is position:relative and has enough bottom padding
+          (pb-12) to "reserve" space for the avatar that overlaps it.
+        ─ The avatar wrapper is absolute, bottom-0, -translate-y-1/2 so
+          exactly half of the 80px avatar sits above the banner's bottom
+          edge and half below — at every breakpoint.
+        ─ z-10 on the avatar ensures it stacks above the banner gradient.
+        ─ The white body has pt-12 to clear the 40px of avatar that hangs
+          below the banner, plus a little breathing room.
+      */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-visible relative">
+
+        {/* Banner — relative so the avatar can be absolutely positioned inside it */}
         <div
-          className="h-28 w-full relative"
+          className="h-24 sm:h-28 w-full relative rounded-t-2xl overflow-hidden"
           style={{ background: 'linear-gradient(135deg, #4B164C 0%, #7B2D7C 55%, #DD88CF 100%)' }}
         >
-          {/* Decorative circles */}
-          <div className="absolute -top-6 -right-6 w-32 h-32 rounded-full bg-white/5" />
-          <div className="absolute -bottom-4 left-16 w-20 h-20 rounded-full bg-white/5" />
+          {/* Decorative circles — clipped to banner only, not to avatar */}
+          <div className="absolute -top-6 -right-6 w-32 h-32 rounded-full bg-white/5 pointer-events-none" />
+          <div className="absolute -bottom-4 left-16 w-20 h-20 rounded-full bg-white/5 pointer-events-none" />
+
+          {/* Avatar — absolute, anchored to banner bottom, translates up by 50% of its own height */}
+          <div
+            className="absolute left-4 sm:left-6 bottom-0 translate-y-1/2 z-10
+                        w-20 h-20 rounded-2xl border-4 border-white shadow-lg
+                        flex items-center justify-center text-xl font-bold text-white
+                        flex-shrink-0"
+            style={{ background: 'linear-gradient(135deg, #4B164C 0%, #DD88CF 100%)' }}
+            aria-label={`Avatar: ${initials}`}
+          >
+            {initials}
+          </div>
         </div>
 
-        <div className="px-6 pb-6">
-          {/* Avatar row */}
-          <div className="flex items-end justify-between gap-3 -mt-10">
-            <div
-              className="w-20 h-20 rounded-2xl border-4 border-white shadow-lg flex items-center justify-center text-xl font-bold text-white flex-shrink-0"
-              style={{ background: 'linear-gradient(135deg, #4B164C 0%, #DD88CF 100%)' }}
-            >
-              {initials}
+        {/* White body — pt-12 clears the 40px avatar overhang + 8px gap */}
+        <div className="px-4 sm:px-6 pt-12 pb-5">
+          {/* Name row: name/email on the left, status pill on the right */}
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="text-lg font-bold text-slate-900 truncate leading-tight">
+                {formData.name || 'Nama Pengguna'}
+              </h2>
+              <p className="text-sm text-slate-400 truncate mt-0.5">
+                {formData.email || 'email@contoh.com'}
+              </p>
+              <p className="text-xs text-slate-300 mt-1.5 flex items-center gap-1.5">
+                <i className="bi bi-person-badge flex-shrink-0" />
+                Anggota E-Surat
+              </p>
             </div>
 
-            {/* Active status pill */}
-            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 border border-green-200 rounded-full mb-1">
+            {/* Active status pill — moved out of the avatar row, sits top-right of body */}
+            <div className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-green-50 border border-green-200 rounded-full mt-0.5">
               <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block animate-pulse" />
               <span className="text-xs font-semibold text-green-700">Aktif</span>
             </div>
-          </div>
-
-          {/* Name, email, member label */}
-          <div className="mt-3">
-            <h2 className="text-lg font-bold text-slate-900 truncate">
-              {formData.name || 'Nama Pengguna'}
-            </h2>
-            <p className="text-sm text-slate-400 truncate mt-0.5">
-              {formData.email || 'email@contoh.com'}
-            </p>
-            <p className="text-xs text-slate-300 mt-1 flex items-center gap-1.5">
-              <i className="bi bi-person-badge" />
-              Anggota E-Surat
-            </p>
           </div>
         </div>
       </div>
 
       {/* ── Account info form ─────────────────────────────────────────── */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
-        <div className="px-6 py-4 border-b border-gray-100">
+        <div className="px-4 sm:px-6 py-4 border-b border-gray-100">
           <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
             <i className="bi bi-person-gear text-[#4B164C]" />
             Informasi Akun
@@ -286,7 +305,7 @@ export default function Profile() {
            Logout is a routine action. Placing it in its own card keeps it
            visually distinct from the irreversible delete-account action below. */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
-        <div className="px-6 py-4 border-b border-gray-100">
+        <div className="px-4 sm:px-6 py-4 border-b border-gray-100">
           <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
             <i className="bi bi-shield-lock text-[#4B164C]" />
             Sesi
@@ -314,7 +333,7 @@ export default function Profile() {
 
       {/* ── Danger Zone — delete account only ────────────────────────── */}
       <div className="bg-white rounded-2xl border border-red-100 shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-red-100 bg-red-50/50">
+        <div className="px-4 sm:px-6 py-4 border-b border-red-100 bg-red-50/50">
           <h3 className="text-sm font-semibold text-red-700 flex items-center gap-2">
             <i className="bi bi-shield-exclamation" />
             Zona Berbahaya

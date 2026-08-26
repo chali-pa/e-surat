@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import api from '../api/axios'
 import { useAuth } from '../context/AuthContext'
+import LogoutConfirmDialog from './LogoutConfirmDialog'
 
 export default function Sidebar() {
   const { logout } = useAuth()
@@ -140,37 +141,13 @@ export default function Sidebar() {
         </nav>
       </aside>
 
-      {/* Logout Confirmation Modal */}
-      {showLogoutModal && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-7">
-            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-red-100 to-red-200 flex items-center justify-center mx-auto mb-4">
-              <i className="bi bi-box-arrow-right text-2xl text-red-600"></i>
-            </div>
-            <h3 className="text-xl font-semibold text-gray-900 text-center mb-2">Keluar?</h3>
-            <p className="text-sm text-gray-500 text-center mb-6">
-              Sesi Anda akan diakhiri dan Anda akan diarahkan ke halaman login.
-            </p>
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowLogoutModal(false)}
-                disabled={isLoggingOut}
-                className="flex-1 py-3 px-4 rounded-xl border border-gray-200 bg-white text-gray-700 font-medium hover:bg-gray-50 transition disabled:opacity-50"
-              >
-                Batal
-              </button>
-              <button
-                onClick={confirmLogout}
-                disabled={isLoggingOut}
-                className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-br from-red-600 to-red-700 text-white font-semibold hover:from-red-700 hover:to-red-800 transition disabled:opacity-50"
-              >
-                {isLoggingOut ? 'Keluar...' : 'Ya, Keluar'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Logout Confirmation — uses independent LogoutConfirmDialog, no shared logic with account deletion */}
+      <LogoutConfirmDialog
+        isOpen={showLogoutModal}
+        onClose={() => setShowLogoutModal(false)}
+        onConfirm={confirmLogout}
+        loading={isLoggingOut}
+      />
     </>
   )
 }

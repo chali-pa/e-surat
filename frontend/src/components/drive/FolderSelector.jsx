@@ -209,8 +209,9 @@ function CreateFolderPanel({ monthYear, letterType, fileType, onFolderCreated, o
 
   return (
     <div className="mt-3 p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3" onClick={(e) => e.stopPropagation()}>
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <p className="text-sm font-semibold text-slate-700">Buat Folder Baru</p>
+        {/* Close button — adequate touch target */}
         <button
           type="button"
           onClick={(e) => {
@@ -218,9 +219,10 @@ function CreateFolderPanel({ monthYear, letterType, fileType, onFolderCreated, o
             e.stopPropagation()
             onCancel()
           }}
-          className="text-slate-400 hover:text-slate-600 transition-colors"
+          className="flex items-center justify-center min-w-[36px] min-h-[36px] text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-lg transition-colors"
+          aria-label="Tutup panel buat folder"
         >
-          <i className="bi bi-x-lg" />
+          <i className="bi bi-x-lg text-sm" />
         </button>
       </div>
 
@@ -259,7 +261,7 @@ function CreateFolderPanel({ monthYear, letterType, fileType, onFolderCreated, o
             type="button"
             onClick={handleCreate}
             disabled={creating || !folderName.trim()}
-            className="flex-1 py-2 px-4 rounded-lg bg-[#4B164C] hover:bg-[#3a123a] text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="flex-1 py-2.5 px-4 rounded-lg bg-[#4B164C] hover:bg-[#3a123a] text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 min-h-[44px]"
           >
             {creating ? (
               <>

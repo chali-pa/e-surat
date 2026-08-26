@@ -145,7 +145,7 @@ export default function Profile() {
             } text-lg flex-shrink-0`} />
             <span className="font-medium">{googleBanner.text}</span>
           </div>
-          <button onClick={() => setGoogleBanner(null)} className="text-slate-400 hover:text-slate-600 ml-3 flex-shrink-0">
+          <button onClick={() => setGoogleBanner(null)} className="flex items-center justify-center min-w-[44px] min-h-[44px] -mr-2 text-slate-400 hover:text-slate-600 ml-1 flex-shrink-0 rounded-xl hover:bg-slate-100 transition">
             <i className="bi bi-x-lg" />
           </button>
         </div>
@@ -206,7 +206,7 @@ export default function Profile() {
           <p className="text-xs text-slate-400 mt-0.5">Perbarui nama dan alamat email Anda</p>
         </div>
 
-        <form onSubmit={handleUpdate} className="p-6 space-y-5">
+        <form onSubmit={handleUpdate} className="p-4 sm:p-6 space-y-5">
           {saved && (
             <div className="flex items-center gap-3 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-700 text-sm">
               <i className="bi bi-check-circle-fill text-emerald-500 flex-shrink-0" />
@@ -266,7 +266,7 @@ export default function Profile() {
             <button
               type="submit"
               disabled={saving}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm font-semibold shadow-sm transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 sm:py-2.5 rounded-xl text-white text-sm font-semibold shadow-sm transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
               style={{ background: 'linear-gradient(135deg, #4B164C 0%, #DD88CF 100%)' }}
             >
               {saving ? (
@@ -294,7 +294,7 @@ export default function Profile() {
           <p className="text-xs text-slate-400 mt-0.5">Kelola sesi aktif akun Anda</p>
         </div>
 
-        <div className="px-6 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="px-4 sm:px-6 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
             <p className="text-sm font-semibold text-slate-800">Keluar dari akun</p>
             <p className="text-xs text-slate-400 mt-0.5">
@@ -304,7 +304,7 @@ export default function Profile() {
           <button
             type="button"
             onClick={() => setShowLogoutModal(true)}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 text-sm font-semibold hover:bg-slate-100 hover:border-slate-300 transition whitespace-nowrap"
+            className="inline-flex items-center justify-center gap-2 px-4 py-3 sm:py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 text-sm font-semibold hover:bg-slate-100 hover:border-slate-300 transition whitespace-nowrap min-h-[44px]"
           >
             <i className="bi bi-box-arrow-right" />
             Keluar
@@ -322,7 +322,7 @@ export default function Profile() {
           <p className="text-xs text-red-400 mt-0.5">Tindakan di bawah ini bersifat permanen dan tidak dapat dibatalkan</p>
         </div>
 
-        <div className="px-6 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="px-4 sm:px-6 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
             <p className="text-sm font-semibold text-slate-800">Hapus Akun</p>
             <p className="text-xs text-slate-400 mt-0.5">
@@ -336,7 +336,7 @@ export default function Profile() {
               setDeleteError('')
               setShowDeleteModal(true)
             }}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm font-semibold hover:bg-red-600 hover:text-white hover:border-red-600 transition whitespace-nowrap"
+            className="inline-flex items-center justify-center gap-2 px-4 py-3 sm:py-2.5 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm font-semibold hover:bg-red-600 hover:text-white hover:border-red-600 transition whitespace-nowrap min-h-[44px]"
           >
             <i className="bi bi-trash3" />
             Hapus Akun Saya
@@ -412,12 +412,12 @@ export default function Profile() {
             </div>
 
             {/* Modal Footer */}
-            <div className="px-6 pb-6 flex gap-3">
+            <div className="px-4 sm:px-6 pb-6 flex gap-3">
               <button
                 type="button"
                 onClick={() => setShowDeleteModal(false)}
                 disabled={deleting}
-                className="flex-1 py-2.5 px-4 rounded-xl border border-gray-200 text-gray-700 font-medium hover:bg-gray-50 transition text-sm disabled:opacity-50"
+                className="flex-1 py-3 px-4 rounded-xl border border-gray-200 text-gray-700 font-medium hover:bg-gray-50 transition text-sm disabled:opacity-50 min-h-[44px]"
               >
                 Batal
               </button>
@@ -425,7 +425,7 @@ export default function Profile() {
                 type="button"
                 onClick={handleDeleteAccount}
                 disabled={deleteConfirmText !== DELETE_KEYWORD || deleting}
-                className="flex-1 py-2.5 px-4 rounded-xl bg-red-600 text-white font-semibold hover:bg-red-700 transition text-sm disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
+                className="flex-1 py-3 px-4 rounded-xl bg-red-600 text-white font-semibold hover:bg-red-700 transition text-sm disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2 min-h-[44px]"
               >
                 {deleting ? (
                   <><i className="bi bi-arrow-repeat animate-spin" /> Menghapus...</>

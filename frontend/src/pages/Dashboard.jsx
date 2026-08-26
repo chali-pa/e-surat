@@ -453,7 +453,7 @@ export default function Dashboard() {
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
 
           {/* Toolbar */}
-          <div className="flex flex-col gap-3 px-6 py-4 border-b border-gray-100">
+          <div className="flex flex-col gap-3 px-4 sm:px-6 py-4 border-b border-gray-100">
             {/* Row 1: count + month picker + action buttons */}
             <div className="flex flex-wrap items-center gap-2">
 
@@ -468,33 +468,39 @@ export default function Dashboard() {
                 <button
                   type="button"
                   onClick={() => setMonthPickerOpen((v) => !v)}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all ${
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all min-h-[32px] ${
                     activeMonthSel
                       ? 'bg-[#4B164C] text-white border-[#4B164C]'
                       : 'bg-white text-slate-500 border-slate-200 hover:border-[#DD88CF] hover:text-[#4B164C]'
                   }`}
                   title="Pilih bulan"
+                  aria-expanded={monthPickerOpen}
+                  aria-haspopup="listbox"
                 >
                   <i className="bi bi-calendar-month" />
-                  {monthPillLabel(activeMonthSel)}
+                  <span className="hidden xs:inline">{monthPillLabel(activeMonthSel)}</span>
+                  <span className="xs:hidden">{activeMonthSel ? `${String(activeMonthSel.month).padStart(2,'0')}/${activeMonthSel.year}` : 'Bulan'}</span>
                   <i className={`bi bi-chevron-${monthPickerOpen ? 'up' : 'down'} text-[10px]`} />
                 </button>
 
                 {monthPickerOpen && (
-                  <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-2xl shadow-xl p-2 w-60">
+                  <div
+                    className="absolute left-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-2xl shadow-xl p-2 w-56 sm:w-60 max-w-[calc(100vw-2rem)]"
+                    role="listbox"
+                  >
                     {/* Show all / current month shortcuts */}
                     <div className="border-b border-gray-100 pb-1.5 mb-1.5 space-y-0.5">
                       <button
                         type="button"
                         onClick={handleShowCurrentMonth}
-                        className="w-full text-left px-3 py-1.5 text-xs font-semibold text-[#4B164C] hover:bg-purple-50 rounded-lg flex items-center gap-2"
+                        className="w-full text-left px-3 py-2 text-xs font-semibold text-[#4B164C] hover:bg-purple-50 rounded-lg flex items-center gap-2 min-h-[36px]"
                       >
                         <i className="bi bi-calendar-check" /> Bulan Ini
                       </button>
                       <button
                         type="button"
                         onClick={handleShowAll}
-                        className="w-full text-left px-3 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-50 rounded-lg flex items-center gap-2"
+                        className="w-full text-left px-3 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-50 rounded-lg flex items-center gap-2 min-h-[36px]"
                       >
                         <i className="bi bi-calendar3" /> Semua Bulan
                       </button>
@@ -507,8 +513,10 @@ export default function Dashboard() {
                           <button
                             key={`${opt.year}-${opt.month}`}
                             type="button"
+                            role="option"
+                            aria-selected={isActive}
                             onClick={() => handleMonthSelect(opt)}
-                            className={`w-full text-left px-3 py-1.5 text-xs rounded-lg flex items-center justify-between transition ${
+                            className={`w-full text-left px-3 py-2 text-xs rounded-lg flex items-center justify-between transition min-h-[36px] ${
                               isActive
                                 ? 'bg-[#4B164C] text-white font-semibold'
                                 : 'text-slate-600 hover:bg-slate-50'
@@ -524,7 +532,7 @@ export default function Dashboard() {
                 )}
               </div>
 
-              {/* Spacer */}
+              {/* Spacer pushes action buttons to the right on wider screens */}
               <span className="flex-1" />
 
               {/* ── Monthly PDF button (shown only when a month is selected) ── */}
@@ -534,17 +542,20 @@ export default function Dashboard() {
                   onClick={handleDownloadMonthlyPdf}
                   disabled={loadingPdf || totalCount === 0}
                   title={totalCount === 0 ? 'Tidak ada data untuk bulan ini' : `Unduh laporan PDF ${monthPillLabel(activeMonthSel)}`}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border border-red-200 bg-red-50 text-red-600 hover:bg-red-500 hover:text-white hover:border-red-500 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border border-red-200 bg-red-50 text-red-600 hover:bg-red-500 hover:text-white hover:border-red-500 disabled:opacity-40 disabled:cursor-not-allowed transition min-h-[32px]"
                 >
                   {loadingPdf ? (
-                    <svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none">
+                    <svg className="animate-spin w-3 h-3 flex-shrink-0" viewBox="0 0 24 24" fill="none">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                     </svg>
                   ) : (
-                    <i className="bi bi-file-earmark-pdf" />
+                    <i className="bi bi-file-earmark-pdf flex-shrink-0" />
                   )}
-                  {loadingPdf ? 'Membuat…' : 'Laporan PDF'}
+                  {/* Label hidden on very small screens — icon + title attr is sufficient */}
+                  <span className="hidden sm:inline">
+                    {loadingPdf ? 'Membuat…' : 'Laporan PDF'}
+                  </span>
                 </button>
               )}
 
@@ -555,22 +566,24 @@ export default function Dashboard() {
                   onClick={handleExportXlsx}
                   disabled={loadingExport || totalCount === 0}
                   title={totalCount === 0 ? 'Tidak ada data untuk diekspor' : `Ekspor data ke Excel${activeMonthSel ? ` (${monthPillLabel(activeMonthSel)})` : ' (semua)'}`}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white hover:border-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white hover:border-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed transition min-h-[32px]"
                 >
                   {loadingExport ? (
-                    <svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none">
+                    <svg className="animate-spin w-3 h-3 flex-shrink-0" viewBox="0 0 24 24" fill="none">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                     </svg>
                   ) : (
-                    <i className="bi bi-file-earmark-excel" />
+                    <i className="bi bi-file-earmark-excel flex-shrink-0" />
                   )}
-                  {loadingExport ? 'Mengekspor…' : 'Ekspor Excel'}
+                  <span className="hidden sm:inline">
+                    {loadingExport ? 'Mengekspor…' : 'Ekspor Excel'}
+                  </span>
                 </button>
               )}
             </div>
 
-            {/* Row 2: Search */}
+            {/* Row 2: Search — full-width on mobile, fixed width on sm+ */}
             <div className="relative w-full sm:w-72 self-end">
               <i className="bi bi-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
               <input
@@ -583,13 +596,11 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Table */}
+          {/* Table — MailTable's own overflow-x-auto wrapper handles horizontal scroll */}
           <MailTable
             type={activeTab}
             surats={filteredLetters}
             loading={loadingList}
-            // Pass the active selection so MailTable knows when to show the
-            // enhanced date+time column (any month filter active = richer display)
             currentMonthOnly={!!activeMonthSel}
             onView={handleView}
             onPreview={handlePreview}

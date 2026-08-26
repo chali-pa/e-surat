@@ -50,7 +50,7 @@ export default function LogoutConfirmDialog({ isOpen, onClose, onConfirm, loadin
             type="button"
             onClick={onClose}
             disabled={loading}
-            className="flex-1 py-2.5 px-4 rounded-xl border border-gray-200 text-gray-700 font-medium hover:bg-gray-50 transition text-sm disabled:opacity-50"
+            className="flex-1 py-3 px-4 rounded-xl border border-gray-200 text-gray-700 font-medium hover:bg-gray-50 transition text-sm disabled:opacity-50 min-h-[44px]"
           >
             Batal
           </button>
@@ -60,7 +60,7 @@ export default function LogoutConfirmDialog({ isOpen, onClose, onConfirm, loadin
             type="button"
             onClick={onConfirm}
             disabled={loading}
-            className="flex-1 py-2.5 px-4 rounded-xl text-white font-semibold transition text-sm flex items-center justify-center gap-2 disabled:opacity-50 hover:opacity-90"
+            className="flex-1 py-3 px-4 rounded-xl text-white font-semibold transition text-sm flex items-center justify-center gap-2 disabled:opacity-50 hover:opacity-90 min-h-[44px]"
             style={{ background: 'linear-gradient(135deg, #4B164C 0%, #DD88CF 100%)' }}
           >
             {loading ? (

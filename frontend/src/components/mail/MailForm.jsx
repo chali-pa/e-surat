@@ -258,26 +258,28 @@ export default function MailForm({ type, id, onSaved, onCancel }) {
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
       {/* Card Header */}
       <div
-        className="px-6 py-4 border-b border-gray-100 flex justify-between items-center"
+        className="px-4 sm:px-6 py-4 border-b border-gray-100 flex justify-between items-center gap-3"
         style={{ background: 'linear-gradient(135deg, #4B164C08 0%, #DD88CF0A 100%)' }}
       >
-        <div>
+        <div className="min-w-0">
           <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2">
-            <i className={`bi ${type === 'incoming' ? 'bi-file-earmark-arrow-down' : 'bi-file-earmark-arrow-up'} text-[#4B164C]`} />
-            {isEditMode ? 'Edit' : 'Tambah'} Surat {type === 'incoming' ? 'Masuk' : 'Keluar'}
+            <i className={`bi ${type === 'incoming' ? 'bi-file-earmark-arrow-down' : 'bi-file-earmark-arrow-up'} text-[#4B164C] flex-shrink-0`} />
+            <span className="truncate">{isEditMode ? 'Edit' : 'Tambah'} Surat {type === 'incoming' ? 'Masuk' : 'Keluar'}</span>
           </h3>
           <p className="text-xs text-slate-400 mt-0.5">Semua field bertanda * wajib diisi</p>
         </div>
+        {/* Close button — min 44×44 touch target */}
         <button
           type="button"
           onClick={onCancel}
-          className="text-slate-400 hover:text-slate-600 transition"
+          className="flex-shrink-0 flex items-center justify-center min-w-[44px] min-h-[44px] -mr-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition"
+          aria-label="Tutup form"
         >
           <i className="bi bi-x-lg text-lg" />
         </button>
       </div>
 
-      <form onSubmit={handleSubmit} className="p-6 space-y-6">
+      <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-6">
         {/* Google Not Connected Banner */}
         {!googleConnected && !errors.googleReconnect && (
           <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-900">
@@ -474,19 +476,18 @@ export default function MailForm({ type, id, onSaved, onCancel }) {
 
         {/* Upload File */}
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
+          {/* Label row — stacks vertically on mobile, side-by-side on sm+ */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-2">
             <label className="block text-sm font-semibold text-slate-700">
               Upload File Surat {!isEditMode && <span className="text-red-500">*</span>}
             </label>
-            <div className="flex items-center gap-2">
-              <span
-                className="text-xs text-slate-400 bg-blue-50 border border-blue-100 text-blue-600 px-2.5 py-1 rounded-full font-medium"
-                title={`PDF lebih dari ${formatBytes(PDF_COMPRESS_TRIGGER_BYTES)} akan dikompres otomatis di server`}
-              >
-                <i className="bi bi-file-zip mr-1" />
-                Auto-compress PDF &gt; {formatBytes(PDF_COMPRESS_TRIGGER_BYTES)}
-              </span>
-            </div>
+            <span
+              className="inline-flex items-center self-start sm:self-auto text-xs text-blue-600 bg-blue-50 border border-blue-100 px-2.5 py-1 rounded-full font-medium"
+              title={`PDF lebih dari ${formatBytes(PDF_COMPRESS_TRIGGER_BYTES)} akan dikompres otomatis di server`}
+            >
+              <i className="bi bi-file-zip mr-1 flex-shrink-0" />
+              Auto-compress PDF &gt; {formatBytes(PDF_COMPRESS_TRIGGER_BYTES)}
+            </span>
           </div>
 
           <div
@@ -529,7 +530,7 @@ export default function MailForm({ type, id, onSaved, onCancel }) {
                 <button
                   type="button"
                   onClick={() => setFormData({ ...formData, file_surat: null })}
-                  className="px-3 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-xs font-semibold transition"
+                  className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-xs font-semibold transition min-h-[36px]"
                 >
                   Hapus File
                 </button>
@@ -577,20 +578,20 @@ export default function MailForm({ type, id, onSaved, onCancel }) {
           </div>
         )}
 
-        {/* Footer Actions */}
-        <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+        {/* Footer Actions — full-width stacked on mobile, side-by-side on sm+ */}
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4 border-t border-slate-100">
           <button
             type="button"
             onClick={onCancel}
             disabled={loading}
-            className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition disabled:opacity-50"
+            className="w-full sm:w-auto px-5 py-3 sm:py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition disabled:opacity-50 min-h-[44px]"
           >
             Batal
           </button>
           <button
             type="submit"
             disabled={loading}
-            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-white text-sm font-semibold shadow-sm transition hover:opacity-90 disabled:opacity-50"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 sm:py-2.5 rounded-xl text-white text-sm font-semibold shadow-sm transition hover:opacity-90 disabled:opacity-50 min-h-[44px]"
             style={{ background: 'linear-gradient(135deg, #4B164C 0%, #DD88CF 100%)' }}
           >
             {loading && <i className="bi bi-arrow-repeat animate-spin text-sm" />}

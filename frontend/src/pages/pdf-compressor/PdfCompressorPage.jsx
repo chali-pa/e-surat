@@ -218,7 +218,7 @@ export default function PdfCompressorPage() {
           </h3>
         </div>
 
-        <div className="p-6 space-y-5">
+        <div className="p-4 sm:p-6 space-y-5">
 
           {/* Error banner */}
           {error && (
@@ -235,7 +235,7 @@ export default function PdfCompressorPage() {
             onDragOver={handleDrag}
             onDrop={handleDrop}
             onClick={() => !file && fileInputRef.current?.click()}
-            className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-all duration-200 ${
+            className={`relative border-2 border-dashed rounded-xl p-6 sm:p-8 text-center transition-all duration-200 ${
               file
                 ? 'cursor-default'
                 : 'cursor-pointer'
@@ -326,7 +326,7 @@ export default function PdfCompressorPage() {
                   {result.wasCompressed ? (
                     <>
                       <p className="font-semibold text-emerald-800 text-sm">Kompresi berhasil!</p>
-                      <div className="mt-2 grid grid-cols-3 gap-3 text-center">
+                      <div className="mt-2 grid grid-cols-3 gap-2 sm:gap-3 text-center">
                         <div className="bg-white/70 rounded-lg p-2">
                           <p className="text-xs text-slate-500">Ukuran Asli</p>
                           <p className="font-bold text-slate-700 text-sm">{formatBytes(result.originalSize)}</p>
@@ -358,8 +358,8 @@ export default function PdfCompressorPage() {
             </div>
           )}
 
-          {/* Action buttons */}
-          <div className="flex items-center gap-3 pt-1">
+          {/* Action buttons — flex-wrap so "Kompres File Lain" falls below on very narrow screens */}
+          <div className="flex flex-wrap items-center gap-3 pt-1">
             {!result ? (
               /* Before compression */
               <>
@@ -367,7 +367,7 @@ export default function PdfCompressorPage() {
                   type="button"
                   onClick={handleCompress}
                   disabled={!file || loading}
-                  className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-white text-sm font-semibold shadow-md disabled:opacity-50 disabled:cursor-not-allowed transition hover:opacity-90"
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-white text-sm font-semibold shadow-md disabled:opacity-50 disabled:cursor-not-allowed transition hover:opacity-90 min-h-[44px]"
                   style={{ background: 'linear-gradient(135deg, #4B164C 0%, #DD88CF 100%)' }}
                 >
                   {loading ? (
@@ -389,7 +389,7 @@ export default function PdfCompressorPage() {
                   <button
                     type="button"
                     onClick={handleReset}
-                    className="px-4 py-2.5 rounded-xl border-2 border-slate-200 text-slate-600 text-sm font-medium hover:bg-gray-50 hover:border-slate-300 transition"
+                    className="px-4 py-3 rounded-xl border-2 border-slate-200 text-slate-600 text-sm font-medium hover:bg-gray-50 hover:border-slate-300 transition min-h-[44px]"
                   >
                     Reset
                   </button>
@@ -401,7 +401,7 @@ export default function PdfCompressorPage() {
                 <button
                   type="button"
                   onClick={handleDownload}
-                  className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-white text-sm font-semibold shadow-md transition hover:opacity-90"
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-white text-sm font-semibold shadow-md transition hover:opacity-90 min-h-[44px]"
                   style={{ background: 'linear-gradient(135deg, #4B164C 0%, #DD88CF 100%)' }}
                 >
                   <i className="bi bi-download" />
@@ -410,7 +410,7 @@ export default function PdfCompressorPage() {
                 <button
                   type="button"
                   onClick={handleReset}
-                  className="px-4 py-2.5 rounded-xl border-2 border-slate-200 text-slate-600 text-sm font-medium hover:bg-gray-50 hover:border-slate-300 transition"
+                  className="px-4 py-3 rounded-xl border-2 border-slate-200 text-slate-600 text-sm font-medium hover:bg-gray-50 hover:border-slate-300 transition min-h-[44px]"
                 >
                   <i className="bi bi-arrow-clockwise mr-1" />
                   Kompres File Lain

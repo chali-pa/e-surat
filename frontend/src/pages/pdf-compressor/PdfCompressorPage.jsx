@@ -307,7 +307,7 @@ export default function PdfCompressorPage() {
                       </>
                     )}
                   </p>
-                  <p className="text-xs text-slate-400 mt-1">Hanya file PDF · Maks. 800 MB</p>
+                  <p className="text-xs text-slate-400 mt-1">Hanya file PDF</p>
                 </div>
               </div>
             )}

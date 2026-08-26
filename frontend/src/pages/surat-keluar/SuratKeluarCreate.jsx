@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom'
 import api from '../../api/axios'
 import FolderSelector from '../../components/drive/FolderSelector'
 
-const MAX_FILE_SIZE = 800 * 1024 * 1024 // 800 MB
 const ALLOWED_TYPES = [
   'application/pdf',
   'application/msword',
@@ -59,9 +58,6 @@ export default function SuratKeluarCreate() {
     if (!file) return null
     if (!ALLOWED_TYPES.includes(file.type)) {
       return `Tipe file tidak didukung. Gunakan: ${ALLOWED_EXT.join(', ')}`
-    }
-    if (file.size > MAX_FILE_SIZE) {
-      return `Ukuran file melebihi batas maksimal 800 MB. Ukuran file Anda: ${formatBytes(file.size)}`
     }
     return null
   }
@@ -393,9 +389,6 @@ export default function SuratKeluarCreate() {
               <label className="block text-sm font-semibold text-slate-700">
                 Upload File Surat <span className="text-red-500">*</span>
               </label>
-              <span className="text-xs text-slate-400 bg-slate-100 px-2.5 py-1 rounded-full font-medium">
-                Maks. 800 MB
-              </span>
             </div>
 
             {/* Drag & Drop Zone */}
@@ -459,7 +452,7 @@ export default function SuratKeluarCreate() {
                       )}
                     </p>
                     <p className="text-xs text-slate-400 mt-1">
-                      {ALLOWED_EXT.join(', ')} — Maksimal 800 MB
+                      {ALLOWED_EXT.join(', ')}
                     </p>
                   </div>
                 </div>

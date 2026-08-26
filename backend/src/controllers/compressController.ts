@@ -64,9 +64,10 @@ export const compressPdf = async (req: AuthRequest, res: Response) => {
 export const compressPdfInfo = (_req: AuthRequest, res: Response) => {
   res.json({
     trigger_bytes: PDF_COMPRESS_TRIGGER_BYTES,
-    max_bytes:     PDF_COMPRESS_MAX_BYTES,
+    // max_bytes is Infinity (no cap) — omit the numeric value to avoid
+    // JSON serialisation issues; callers should treat its absence as "no limit".
     trigger_label: formatBytes(PDF_COMPRESS_TRIGGER_BYTES),
-    max_label:     formatBytes(PDF_COMPRESS_MAX_BYTES),
+    max_label:     'Tidak ada batas',
   });
 };
 

@@ -8,23 +8,9 @@ export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [showLogoutModal, setShowLogoutModal] = useState(false)
-  const [logoutMethod, setLogoutMethod] = useState('password') // 'password' or 'google'
-  const [verificationInput, setVerificationInput] = useState('')
-  const [verificationError, setVerificationError] = useState('')
-  const [isVerifying, setIsVerifying] = useState(false)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
-
-  // Detect login method from localStorage
-  useEffect(() => {
-    const user = JSON.parse(localStorage.getItem('user') || '{}')
-    // If user has a google flag or no password, assume Google login
-    if (user.loginMethod === 'google' || (user.name && !user.email?.includes('@'))) {
-      setLogoutMethod('google')
-    } else {
-      setLogoutMethod('password')
-    }
-  }, [])
 
   // Listen for collapse sidebar event
   useEffect(() => {
@@ -48,57 +34,19 @@ export default function Sidebar() {
 
   const handleLogout = () => {
     setShowLogoutModal(true)
-    setVerificationInput('')
-    setVerificationError('')
-    setIsVerifying(false)
   }
 
   const confirmLogout = async () => {
-    setIsVerifying(true)
-    setVerificationError('')
-    
+    setIsLoggingOut(true)
     try {
-      const user = JSON.parse(localStorage.getItem('user') || '{}')
-      
-      if (logoutMethod === 'password') {
-        // Verify password with backend
-        try {
-          const response = await api.post('/api/verify-password', { 
-            email: user.email,
-            password: verificationInput 
-          })
-          if (!response.data.success) {
-            setVerificationError('Password yang Anda masukkan salah')
-            setIsVerifying(false)
-            return
-          }
-        } catch (error) {
-          setVerificationError('Password yang Anda masukkan salah')
-          setIsVerifying(false)
-          return
-        }
-      } else {
-        // Verify Google account name
-        if (verificationInput.toLowerCase() !== user.name?.toLowerCase()) {
-          setVerificationError('Nama akun Google yang Anda masukkan salah')
-          setIsVerifying(false)
-          return
-        }
-      }
-
-      // Verification passed, proceed with logout
-      try {
-        await api.post('/api/logout')
-      } catch (error) {
-        console.error('Logout failed:', error)
-      } finally {
-        logout()
-        setShowLogoutModal(false)
-        navigate('/login', { replace: true })
-      }
+      await api.post('/api/logout')
     } catch (error) {
-      setVerificationError('Terjadi kesalahan saat verifikasi')
-      setIsVerifying(false)
+      // Non-fatal: proceed with client-side cleanup even if server call fails
+      console.error('Logout server call failed:', error)
+    } finally {
+      logout()
+      setShowLogoutModal(false)
+      navigate('/login', { replace: true })
     }
   }
 
@@ -195,46 +143,29 @@ export default function Sidebar() {
       {/* Logout Confirmation Modal */}
       {showLogoutModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-7">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-7">
             <div className="w-14 h-14 rounded-full bg-gradient-to-br from-red-100 to-red-200 flex items-center justify-center mx-auto mb-4">
               <i className="bi bi-box-arrow-right text-2xl text-red-600"></i>
             </div>
             <h3 className="text-xl font-semibold text-gray-900 text-center mb-2">Keluar?</h3>
-            <p className="text-sm text-gray-600 text-center mb-4">
-              {logoutMethod === 'password' 
-                ? 'Masukkan password Anda untuk konfirmasi logout.' 
-                : 'Masukkan nama akun Google Anda untuk konfirmasi logout.'}
+            <p className="text-sm text-gray-500 text-center mb-6">
+              Sesi Anda akan diakhiri dan Anda akan diarahkan ke halaman login.
             </p>
-            
-            {/* Verification Input */}
-            <div className="mb-4">
-              <input
-                type={logoutMethod === 'password' ? 'password' : 'text'}
-                value={verificationInput}
-                onChange={(e) => setVerificationInput(e.target.value)}
-                placeholder={logoutMethod === 'password' ? 'Password' : 'Nama akun Google'}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
-                disabled={isVerifying}
-              />
-              {verificationError && (
-                <p className="text-red-500 text-xs mt-2">{verificationError}</p>
-              )}
-            </div>
 
             <div className="flex gap-3">
               <button
                 onClick={() => setShowLogoutModal(false)}
-                disabled={isVerifying}
+                disabled={isLoggingOut}
                 className="flex-1 py-3 px-4 rounded-xl border border-gray-200 bg-white text-gray-700 font-medium hover:bg-gray-50 transition disabled:opacity-50"
               >
                 Batal
               </button>
               <button
                 onClick={confirmLogout}
-                disabled={isVerifying || !verificationInput}
+                disabled={isLoggingOut}
                 className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-br from-red-600 to-red-700 text-white font-semibold hover:from-red-700 hover:to-red-800 transition disabled:opacity-50"
               >
-                {isVerifying ? 'Memverifikasi...' : 'Ya, Keluar'}
+                {isLoggingOut ? 'Keluar...' : 'Ya, Keluar'}
               </button>
             </div>
           </div>

@@ -66,9 +66,11 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
-// Body parsing middleware (max 800MB for file uploads)
-app.use(express.json({ limit: '800mb' }));
-app.use(express.urlencoded({ extended: true, limit: '800mb' }));
+// Body parsing middleware — no hard application-level cap.
+// Infrastructure limits (Vercel payload size, Nginx client_max_body_size, etc.)
+// are the effective ceiling; see backend/src/config/upload.ts for details.
+app.use(express.json({ limit: '2gb' }));
+app.use(express.urlencoded({ extended: true, limit: '2gb' }));
 
 // Static files for uploads
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));

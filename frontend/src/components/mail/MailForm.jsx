@@ -3,10 +3,12 @@ import api from '../../api/axios';
 import FolderSelector from '../drive/FolderSelector';
 
 /**
- * Maximum file size accepted by the server (mirrors MULTER_FILE_SIZE_LIMIT_BYTES
- * in backend/src/config/upload.ts — change both together if you adjust the limit).
+ * Maximum file size accepted by the server.
+ * No hard application-level cap — large files are accepted and run through
+ * the compression pipeline.  The only effective ceilings are infrastructure
+ * limits (Vercel payload size, Nginx client_max_body_size, etc.).
+ * This constant is removed; the validation below no longer rejects by size.
  */
-const MAX_FILE_SIZE = 800 * 1024 * 1024; // 800 MB
 
 /**
  * PDFs above this size will be automatically compressed server-side before
@@ -111,9 +113,6 @@ export default function MailForm({ type, id, onSaved, onCancel }) {
     if (!file) return null;
     if (!ALLOWED_TYPES.includes(file.type)) {
       return `Tipe file tidak didukung. Gunakan: ${ALLOWED_EXT.join(', ')}`;
-    }
-    if (file.size > MAX_FILE_SIZE) {
-      return `Ukuran file melebihi batas maksimal 800 MB. Ukuran file Anda: ${formatBytes(file.size)}`;
     }
     return null;
   };
@@ -480,9 +479,6 @@ export default function MailForm({ type, id, onSaved, onCancel }) {
               Upload File Surat {!isEditMode && <span className="text-red-500">*</span>}
             </label>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-400 bg-slate-100 px-2.5 py-1 rounded-full font-medium">
-                Maks. 800 MB
-              </span>
               <span
                 className="text-xs text-slate-400 bg-blue-50 border border-blue-100 text-blue-600 px-2.5 py-1 rounded-full font-medium"
                 title={`PDF lebih dari ${formatBytes(PDF_COMPRESS_TRIGGER_BYTES)} akan dikompres otomatis di server`}

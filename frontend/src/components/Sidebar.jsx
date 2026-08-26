@@ -63,7 +63,7 @@ export default function Sidebar() {
       )}
 
       {/* Mobile header — z-[95] keeps it above the overlay so it's always tappable */}
-      <header className="lg:hidden sticky top-0 z-[95] bg-white border-b border-gray-100 flex items-center justify-between px-4 py-3 shadow-sm">
+      <header className="lg:hidden sticky top-0 z-[95] bg-white border-b border-gray-200 flex items-center justify-between px-4 py-3">
         {/* Hamburger — min 44×44 touch target */}
         <button
           onClick={() => setMobileOpen(true)}
@@ -79,11 +79,14 @@ export default function Sidebar() {
         <span className="min-w-[44px]" aria-hidden="true" />
       </header>
 
-      {/* Sidebar drawer — z-[100] sits above overlay and mobile header */}
+      {/* Sidebar drawer — z-[100] sits above overlay and mobile header.
+           Uses border-r for visual separation instead of shadow-sm — a box
+           shadow on all sides makes a full-height sticky column look like a
+           floating card, which is the "floating sidebar" visual bug. */}
       <aside
         id="sidebar"
         className={`
-          fixed lg:sticky top-0 h-screen z-[100] bg-white border-r border-gray-100 shadow-sm
+          fixed lg:sticky top-0 h-screen z-[100] bg-white border-r border-gray-200
           flex flex-col
           transition-transform duration-300
           ${collapsed ? 'lg:w-[72px]' : 'lg:w-[260px]'}
@@ -92,7 +95,7 @@ export default function Sidebar() {
         `}
       >
         {/* Sidebar header */}
-        <div className={`h-[76px] flex-shrink-0 flex items-center border-b border-gray-100 px-4 ${collapsed ? 'justify-center' : 'justify-between'}`}>
+        <div className={`h-[76px] flex-shrink-0 flex items-center border-b border-gray-200 px-4 ${collapsed ? 'justify-center' : 'justify-between'}`}>
           <button
             onClick={() => setCollapsed(!collapsed)}
             aria-label={collapsed ? 'Perluas Sidebar' : 'Ciutkan Sidebar'}
@@ -131,7 +134,7 @@ export default function Sidebar() {
             </Link>
           ))}
 
-          <div className="mt-4 border-t border-gray-100 pt-4">
+          <div className="mt-4 border-t border-gray-200 pt-4">
             <button
               onClick={handleLogout}
               aria-label="Keluar"

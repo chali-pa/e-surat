@@ -468,7 +468,7 @@ export default function Dashboard() {
                 <button
                   type="button"
                   onClick={() => setMonthPickerOpen((v) => !v)}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all min-h-[32px] ${
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all min-h-[36px] ${
                     activeMonthSel
                       ? 'bg-[#4B164C] text-white border-[#4B164C]'
                       : 'bg-white text-slate-500 border-slate-200 hover:border-[#DD88CF] hover:text-[#4B164C]'
@@ -478,8 +478,7 @@ export default function Dashboard() {
                   aria-haspopup="listbox"
                 >
                   <i className="bi bi-calendar-month" />
-                  <span className="hidden xs:inline">{monthPillLabel(activeMonthSel)}</span>
-                  <span className="xs:hidden">{activeMonthSel ? `${String(activeMonthSel.month).padStart(2,'0')}/${activeMonthSel.year}` : 'Bulan'}</span>
+                  {monthPillLabel(activeMonthSel)}
                   <i className={`bi bi-chevron-${monthPickerOpen ? 'up' : 'down'} text-[10px]`} />
                 </button>
 
@@ -542,7 +541,7 @@ export default function Dashboard() {
                   onClick={handleDownloadMonthlyPdf}
                   disabled={loadingPdf || totalCount === 0}
                   title={totalCount === 0 ? 'Tidak ada data untuk bulan ini' : `Unduh laporan PDF ${monthPillLabel(activeMonthSel)}`}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border border-red-200 bg-red-50 text-red-600 hover:bg-red-500 hover:text-white hover:border-red-500 disabled:opacity-40 disabled:cursor-not-allowed transition min-h-[32px]"
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border border-red-200 bg-red-50 text-red-600 hover:bg-red-500 hover:text-white hover:border-red-500 disabled:opacity-40 disabled:cursor-not-allowed transition min-h-[36px]"
                 >
                   {loadingPdf ? (
                     <svg className="animate-spin w-3 h-3 flex-shrink-0" viewBox="0 0 24 24" fill="none">
@@ -566,7 +565,7 @@ export default function Dashboard() {
                   onClick={handleExportXlsx}
                   disabled={loadingExport || totalCount === 0}
                   title={totalCount === 0 ? 'Tidak ada data untuk diekspor' : `Ekspor data ke Excel${activeMonthSel ? ` (${monthPillLabel(activeMonthSel)})` : ' (semua)'}`}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white hover:border-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed transition min-h-[32px]"
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white hover:border-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed transition min-h-[36px]"
                 >
                   {loadingExport ? (
                     <svg className="animate-spin w-3 h-3 flex-shrink-0" viewBox="0 0 24 24" fill="none">

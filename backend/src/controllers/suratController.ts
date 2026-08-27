@@ -6,6 +6,7 @@ import path from 'path';
 import { google } from 'googleapis';
 import { isGoogleErrorInvalidGrant, GoogleReconnectRequiredError, getOAuth2ClientForUser } from '../services/userGoogleAuthService';
 import { uploadUserLetterFile, deleteUserFile, moveDriveFileToCorrectFolder, formatMonthFolderName, getMonthName, validateFolderOwnership } from '../services/userGoogleDriveService';
+import { MAX_FOLDER_UPDATE_FILE_SIZE_BYTES } from '../config/upload';
 import { findFolderById, findFoldersByUser } from '../models/Folder';
 import {
   getIncomingLetterByRow,
@@ -13,7 +14,6 @@ import {
   updateIncomingLetterInSheet,
   deleteIncomingLetterRow,
 } from '../services/userGoogleSheetsService';
-import { sendMailWithSurat } from '../services/emailService';
 
 export const index = async (req: AuthRequest, res: Response) => {
   try {
@@ -321,6 +321,27 @@ export const update = async (req: AuthRequest, res: Response) => {
         });
       }
       customFolderDriveId = validation.googleDriveFolderId;
+    }
+
+    // ── Folder-update file-size limit ──────────────────────────────────────
+    // When a file is being replaced on a record that has (or will have) a
+    // folder assigned, reject if the original upload exceeds the limit.
+    //
+    // Scope (see backend/src/config/upload.ts for full explanation):
+    //   • Per-file, not cumulative folder size.
+    //   • Update-only — create (store) is not covered here.
+    //   • Pre-compression — checked against original size before auto-compress.
+    //
+    // The effective folder is whichever is non-empty: the new folder_id from
+    // the request body, or the existing one already saved on the record.
+    const effectiveFolderId = folder_id || oldSurat.folder_id;
+    if (req.file && effectiveFolderId && req.file.size > MAX_FOLDER_UPDATE_FILE_SIZE_BYTES) {
+      const limitMB = MAX_FOLDER_UPDATE_FILE_SIZE_BYTES / (1024 * 1024);
+      const fileMB  = (req.file.size / (1024 * 1024)).toFixed(1);
+      return res.status(413).json({
+        error: 'FILE_TOO_LARGE_FOR_FOLDER_UPDATE',
+        message: `File ini melebihi batas ${limitMB} MB untuk pembaruan folder. Ukuran file Anda: ${fileMB} MB. Silakan pilih file yang lebih kecil.`,
+      });
     }
 
     if (req.file) {
@@ -784,56 +805,6 @@ export const serveFile = async (req: AuthRequest, res: Response) => {
         error_code: 'SERVER_ERROR'
       });
     }
-  }
-};
-
-export const sendEmailSurat = async (req: AuthRequest, res: Response) => {
-  if (!req.user?.id) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-
-  const suratId = parseInt(req.params.id, 10);
-  if (isNaN(suratId)) {
-    return res.status(400).json({ error: 'ID Surat tidak valid' });
-  }
-
-  const { recipients, message } = req.body;
-  if (!recipients) {
-    return res.status(400).json({ error: 'Alamat email penerima wajib diisi.' });
-  }
-
-  try {
-    const surat = await getIncomingLetterRecordById(req.user.id, suratId);
-    if (!surat) {
-      return res.status(404).json({ error: 'Surat masuk tidak ditemukan.' });
-    }
-
-    if (surat.user_id !== req.user.id) {
-      return res.status(403).json({ error: 'Anda tidak memiliki akses ke surat ini.' });
-    }
-
-    const result = await sendMailWithSurat({
-      userId: req.user.id,
-      suratType: 'masuk',
-      suratId,
-      recipients,
-      customMessage: message,
-      suratData: {
-        nomorSurat: surat.nomor_surat,
-        namaSuratOrPerihal: surat.nama_surat,
-        pengirimOrPenerima: surat.nama_pengirim,
-        tanggal: surat.tanggal_masuk ? new Date(surat.tanggal_masuk).toISOString().split('T')[0] : '',
-        googleDriveId: surat.google_drive_id,
-        filePath: surat.file_path,
-      },
-    });
-
-    res.json(result);
-  } catch (err: any) {
-    console.error('[suratController] Send email error:', err);
-    res.status(422).json({
-      error: err?.message || 'Gagal mengirim email.',
-    });
   }
 };
 

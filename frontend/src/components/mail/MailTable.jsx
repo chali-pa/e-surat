@@ -27,7 +27,7 @@ function formatDateTime(isoStr) {
  * Shared action-button strip used in both the table row and the mobile card.
  * All six action buttons: view, preview, download, print, edit, delete.
  */
-function ActionButtons({ surat, onView, onPreview, onDownload, onPrint, onSendEmail, onEdit, onDelete }) {
+function ActionButtons({ surat, onView, onPreview, onDownload, onPrint, onEdit, onDelete }) {
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
       <button
@@ -62,16 +62,6 @@ function ActionButtons({ surat, onView, onPreview, onDownload, onPrint, onSendEm
       >
         <i className="bi bi-printer text-xs" />
       </button>
-      {onSendEmail && (
-        <button
-          onClick={() => onSendEmail(surat)}
-          title="Kirim via Email"
-          aria-label="Kirim surat via email"
-          className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 border border-indigo-200 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition"
-        >
-          <i className="bi bi-envelope-at text-xs" />
-        </button>
-      )}
       <button
         onClick={() => onEdit(surat)}
         title="Edit surat"
@@ -105,7 +95,6 @@ export default function MailTable({
   onPreview,
   onDownload,
   onPrint,
-  onSendEmail,
   onEdit,
   onDelete,
 }) {

@@ -14,6 +14,23 @@
  * PDF auto-compression uses PDF_COMPRESS_TRIGGER_BYTES (8 MB, defined in
  * pdfCompressionService.ts) to decide whether to compress before Drive
  * upload — that threshold is unrelated to any upload size cap.
+ *
+ * MAX_FOLDER_UPDATE_FILE_SIZE_BYTES is a separate, independent limit that
+ * applies specifically to file replacements on mail records that have a
+ * folder assigned (edit/update flow only, not create).  It is enforced
+ * both client-side (MailForm.jsx) and server-side (suratController.update /
+ * suratKeluarController.update).
+ *
+ * Scope decisions (documented here so they can be changed in one place):
+ *   • Per-file, not cumulative folder size — checked against the individual
+ *     replacement file, not the sum of all files already in the folder.
+ *   • Update-only — applied when editing an existing record that has a
+ *     folder_id.  Create operations are NOT covered; to extend to creates,
+ *     add the same check to the store() handlers in each controller.
+ *   • Pre-compression — the limit is checked against the original uploaded
+ *     file size BEFORE auto-compression runs.  If you want to attempt
+ *     compression first and then check, move the guard below the
+ *     compressPdfIfNeeded() call in uploadUserLetterFile().
  */
 
 import multer from 'multer';
@@ -25,6 +42,21 @@ import multer from 'multer';
  * @deprecated Use the platform's own limits rather than this constant.
  */
 export const MULTER_FILE_SIZE_LIMIT_BYTES = Infinity;
+
+/**
+ * Maximum file size for replacement files uploaded during a folder-assigned
+ * mail-record update (edit flow).
+ *
+ * This is the SINGLE source of truth for this limit.  Both the client
+ * (MailForm.jsx) and the server (suratController / suratKeluarController)
+ * import/mirror this value — do not hardcode 50 MB anywhere else.
+ *
+ * 50 MB expressed as bytes: 50 × 1024 × 1024 = 52,428,800 bytes.
+ *
+ * See the module-level doc comment for scope decisions (per-file, update-
+ * only, pre-compression check).
+ */
+export const MAX_FOLDER_UPDATE_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB
 
 const storage = multer.memoryStorage();
 

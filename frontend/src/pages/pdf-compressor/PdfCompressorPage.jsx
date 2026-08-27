@@ -180,9 +180,6 @@ export default function PdfCompressorPage() {
           </span>
           <h1 className="text-2xl font-bold text-[#4B164C]">Kompresor PDF</h1>
         </div>
-        <p className="text-sm text-slate-500 ml-10">
-          Kompres file PDF secara langsung — tanpa menyimpan ke Drive atau membuat catatan surat.
-        </p>
       </div>
 
       {/* Info card */}

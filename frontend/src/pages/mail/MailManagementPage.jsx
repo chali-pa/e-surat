@@ -5,6 +5,7 @@ import DocumentPreviewModal from '../../components/DocumentPreviewModal';
 import MailTable from '../../components/mail/MailTable';
 import MailForm from '../../components/mail/MailForm';
 import DeleteConfirmDialog from '../../components/mail/DeleteConfirmDialog';
+import SendEmailModal from '../../components/mail/SendEmailModal';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
 
@@ -77,6 +78,7 @@ export default function MailManagementPage() {
   // ── Modals / overlays ───────────────────────────────────────────────
   const [deleteModal, setDeleteModal]   = useState({ show: false, surat: null });
   const [previewModal, setPreviewModal] = useState({ show: false, surat: null, autoPrint: false, letterType: 'incoming' });
+  const [emailModal, setEmailModal]     = useState({ show: false, surat: null, letterType: 'incoming' });
 
   // ── Loading flags ────────────────────────────────────────────────────
   const [reconnectNeeded, setReconnectNeeded] = useState(false);
@@ -345,6 +347,14 @@ export default function MailManagementPage() {
     fetchData();
   };
 
+  const handleSendEmail = (surat) => {
+    setEmailModal({
+      show: true,
+      surat,
+      letterType: previewModal.show ? previewModal.letterType : activeTab,
+    });
+  };
+
   // ─── Search filter (client-side over already-fetched page) ───────────
 
   const filteredLetters = (() => {
@@ -595,6 +605,7 @@ export default function MailManagementPage() {
             onPreview={handlePreview}
             onDownload={handleDownloadFile}
             onPrint={handlePrint}
+            onSendEmail={handleSendEmail}
             onEdit={handleEdit}
             onDelete={handleDeleteClick}
           />
@@ -624,11 +635,22 @@ export default function MailManagementPage() {
         onClose={handleClosePreview}
         surat={previewModal.surat}
         autoPrint={previewModal.autoPrint}
+        onSendEmail={handleSendEmail}
         apiEndpoint={
           previewModal.surat
             ? `/api/${previewModal.letterType === 'incoming' ? 'surat' : 'surat-keluar'}/${previewModal.surat.id}/file`
             : ''
         }
+      />
+
+      {/* Send Email Modal */}
+      <SendEmailModal
+        show={emailModal.show}
+        onClose={() => setEmailModal({ show: false, surat: null, letterType: activeTab })}
+        surat={emailModal.surat}
+        letterType={emailModal.letterType}
+        onSuccess={(msg) => setToast({ show: true, type: 'success', message: msg })}
+        onError={(err) => setToast({ show: true, type: 'error', message: err })}
       />
     </div>
   );

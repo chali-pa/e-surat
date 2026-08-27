@@ -13,6 +13,7 @@ import {
   updateIncomingLetterInSheet,
   deleteIncomingLetterRow,
 } from '../services/userGoogleSheetsService';
+import { sendMailWithSurat } from '../services/emailService';
 
 export const index = async (req: AuthRequest, res: Response) => {
   try {
@@ -785,3 +786,54 @@ export const serveFile = async (req: AuthRequest, res: Response) => {
     }
   }
 };
+
+export const sendEmailSurat = async (req: AuthRequest, res: Response) => {
+  if (!req.user?.id) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const suratId = parseInt(req.params.id, 10);
+  if (isNaN(suratId)) {
+    return res.status(400).json({ error: 'ID Surat tidak valid' });
+  }
+
+  const { recipients, message } = req.body;
+  if (!recipients) {
+    return res.status(400).json({ error: 'Alamat email penerima wajib diisi.' });
+  }
+
+  try {
+    const surat = await getIncomingLetterRecordById(req.user.id, suratId);
+    if (!surat) {
+      return res.status(404).json({ error: 'Surat masuk tidak ditemukan.' });
+    }
+
+    if (surat.user_id !== req.user.id) {
+      return res.status(403).json({ error: 'Anda tidak memiliki akses ke surat ini.' });
+    }
+
+    const result = await sendMailWithSurat({
+      userId: req.user.id,
+      suratType: 'masuk',
+      suratId,
+      recipients,
+      customMessage: message,
+      suratData: {
+        nomorSurat: surat.nomor_surat,
+        namaSuratOrPerihal: surat.nama_surat,
+        pengirimOrPenerima: surat.nama_pengirim,
+        tanggal: surat.tanggal_masuk ? new Date(surat.tanggal_masuk).toISOString().split('T')[0] : '',
+        googleDriveId: surat.google_drive_id,
+        filePath: surat.file_path,
+      },
+    });
+
+    res.json(result);
+  } catch (err: any) {
+    console.error('[suratController] Send email error:', err);
+    res.status(422).json({
+      error: err?.message || 'Gagal mengirim email.',
+    });
+  }
+};
+

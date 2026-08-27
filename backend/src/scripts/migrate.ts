@@ -6,15 +6,20 @@ async function runMigration() {
   try {
     console.log('Starting database migration...');
     
-    // Read migration file
-    const migrationPath = path.join(__dirname, '../../migrations/init.sql');
-    const sql = fs.readFileSync(migrationPath, 'utf8');
+    // Read and execute init.sql
+    const initPath = path.join(__dirname, '../../migrations/init.sql');
+    const initSql = fs.readFileSync(initPath, 'utf8');
+    await pool.query(initSql);
     
-    console.log('Executing migration SQL...');
-    await pool.query(sql);
+    // Read and execute add_email_logs.sql
+    const emailLogsPath = path.join(__dirname, '../../migrations/add_email_logs.sql');
+    if (fs.existsSync(emailLogsPath)) {
+      const emailLogsSql = fs.readFileSync(emailLogsPath, 'utf8');
+      await pool.query(emailLogsSql);
+    }
     
     console.log('✅ Migration completed successfully!');
-    console.log('Tables created: users, surats, surat_keluars');
+    console.log('Tables created/updated: users, surats, surat_keluars, email_logs');
     
     process.exit(0);
   } catch (error) {

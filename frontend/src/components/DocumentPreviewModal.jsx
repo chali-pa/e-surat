@@ -5,7 +5,7 @@ import api from '../api/axios'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
 
-export default function DocumentPreviewModal({ show, onClose, surat, apiEndpoint, autoPrint = false }) {
+export default function DocumentPreviewModal({ show, onClose, surat, apiEndpoint, autoPrint = false, onSendEmail }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [fileKind, setFileKind] = useState(null) // 'pdf' | 'excel' | 'word' | 'image' | 'unsupported'
@@ -521,6 +521,20 @@ export default function DocumentPreviewModal({ show, onClose, surat, apiEndpoint
                   <i className="bi bi-arrow-clockwise" />
                 </button>
               </div>
+            )}
+
+            {/* EMAIL BUTTON */}
+            {onSendEmail && (
+              <button
+                onClick={() => onSendEmail(surat)}
+                disabled={loading || !!error}
+                aria-label="Kirim via email"
+                title="Kirim via email"
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:px-4 sm:py-2 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-semibold hover:bg-indigo-600 hover:text-white transition disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
+              >
+                <i className="bi bi-envelope-paper text-sm" />
+                <span className="hidden sm:inline">Kirim Email</span>
+              </button>
             )}
 
             {/* PRINT BUTTON */}

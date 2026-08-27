@@ -191,16 +191,14 @@ export default function PdfCompressorPage() {
         <div className="space-y-0.5">
           <p className="font-semibold">Cara kerja kompresor ini</p>
           <p className="text-xs text-blue-600">
-            File diunggah ke server, dikompres menggunakan pdf-lib (re-save dengan object streams),
-            lalu langsung diunduh ke perangkat Anda. Tidak ada data yang disimpan ke database atau Google Drive.
+            File diunggah ke server, dikompresi dengan mengoptimalkan struktur objek PDF dan melakukan re-encoding / downsampling gambar resolusi tinggi, lalu langsung diunduh. Tidak ada data yang disimpan ke database atau Google Drive.
           </p>
           <p className="text-xs text-blue-600 mt-1">
-            Pemampatan terbaik pada PDF dengan banyak elemen teks dan metadata. File yang sudah
-            dioptimalkan atau hanya berisi gambar mungkin tidak berkurang secara signifikan.
+            Kompresi bekerja paling efektif pada dokumen hasil pemindaian (scan) atau PDF yang memiliki gambar berukuran besar.
           </p>
           {thresholdInfo && (
             <p className="text-xs text-blue-500 mt-1">
-              Sama dengan fitur kompres otomatis pada formulir surat — menggunakan ambang batas <strong>{triggerLabel}</strong>.
+              Menggunakan engine kompresi yang sama dengan fitur auto-kompres formulir surat (ambang batas otomatis: <strong>{triggerLabel}</strong>).
             </p>
           )}
         </div>
@@ -345,11 +343,10 @@ export default function PdfCompressorPage() {
                     </>
                   ) : (
                     <>
-                      <p className="font-semibold text-blue-800 text-sm">File di-save ulang</p>
+                      <p className="font-semibold text-blue-800 text-sm">File Sudah Dioptimalkan</p>
                       <p className="text-xs text-blue-600 mt-0.5">
-                        File berukuran {formatBytes(result.originalSize)} — di bawah ambang kompresi ({triggerLabel}).
-                        File tetap di-save ulang oleh pdf-lib (membersihkan metadata dan struktur).
-                        Hasil: {formatBytes(result.finalSize)}.
+                        File berukuran {formatBytes(result.originalSize)} sudah memiliki ukuran yang efisien.
+                        Proses kompresi tidak menemukan ukuran yang lebih kecil, sehingga file asli dipertahankan.
                       </p>
                     </>
                   )}

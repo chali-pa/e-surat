@@ -32,7 +32,8 @@ export const compressPdf = async (req: AuthRequest, res: Response) => {
   const outputName = `${baseName}_compressed.pdf`;
 
   try {
-    const result = await compressPdfIfNeeded(req.file.buffer, 'application/pdf', originalName);
+    // For standalone compression tool, force compress regardless of trigger threshold
+    const result = await compressPdfIfNeeded(req.file.buffer, 'application/pdf', originalName, { forceCompress: true });
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/pdf',
@@ -64,8 +65,6 @@ export const compressPdf = async (req: AuthRequest, res: Response) => {
 export const compressPdfInfo = (_req: AuthRequest, res: Response) => {
   res.json({
     trigger_bytes: PDF_COMPRESS_TRIGGER_BYTES,
-    // max_bytes is Infinity (no cap) — omit the numeric value to avoid
-    // JSON serialisation issues; callers should treat its absence as "no limit".
     trigger_label: formatBytes(PDF_COMPRESS_TRIGGER_BYTES),
     max_label:     'Tidak ada batas',
   });

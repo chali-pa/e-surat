@@ -6,7 +6,7 @@ import path from 'path';
 import { google } from 'googleapis';
 import { isGoogleErrorInvalidGrant, GoogleReconnectRequiredError, getOAuth2ClientForUser } from '../services/userGoogleAuthService';
 import { uploadUserLetterFile, deleteUserFile, moveDriveFileToCorrectFolder, formatMonthFolderName, getMonthName, validateFolderOwnership } from '../services/userGoogleDriveService';
-import { MAX_FOLDER_UPDATE_FILE_SIZE_BYTES, MAX_FOLDER_UPDATE_SIZE_MB, MAX_MAIL_UPLOAD_SIZE_BYTES, MAX_MAIL_UPLOAD_SIZE_MB } from '../config/upload';
+import { MAX_MAIL_UPLOAD_SIZE_BYTES, MAX_MAIL_UPLOAD_SIZE_MB } from '../config/upload';
 import { findFolderById, findFoldersByUser } from '../models/Folder';
 import {
   getIncomingLetterByRow,
@@ -172,14 +172,13 @@ export const store = async (req: AuthRequest, res: Response) => {
       customFolderDriveId = validation.googleDriveFolderId;
     }
 
-    // ── Mail upload file-size limit ────────────────────────────────────────
-    // Enforce 50 MB maximum for all mail form uploads (create and edit).
-    // No auto-compression occurs — files exceeding this limit are rejected.
+    // ── Mail upload size limit ────────────────────────────────────────
+    // Applies to all file uploads.
     if (req.file && req.file.size > MAX_MAIL_UPLOAD_SIZE_BYTES) {
       const fileMB = (req.file.size / (1024 * 1024)).toFixed(1);
       return res.status(413).json({
         error: 'FILE_TOO_LARGE',
-        message: `Ukuran file melebihi batas maksimum ${MAX_MAIL_UPLOAD_SIZE_MB} MB. Ukuran file Anda: ${fileMB} MB. Silakan pilih file yang lebih kecil atau kompres file tersebut menggunakan alat kompresor PDF di sidebar.`,
+        message: `Ukuran file maksimum adalah ${MAX_MAIL_UPLOAD_SIZE_MB} MB. File Anda ${fileMB} MB — silakan kurangi ukurannya dan coba lagi.`,
       });
     }
 
@@ -334,15 +333,14 @@ export const update = async (req: AuthRequest, res: Response) => {
       customFolderDriveId = validation.googleDriveFolderId;
     }
 
-    // ── Mail upload file-size limit ────────────────────────────────────────
-    // Enforce 50 MB maximum for all mail form uploads (both create and edit).
-    // This replaces the previous auto-compression approach with a simple size limit.
-    // The limit applies to ALL file replacements, not just folder-assigned records.
+    // ── Mail upload size limit ──────────────────────────────────────────────
+    // Applies to all file replacements, regardless of folder assignment.
+    // See backend/src/config/upload.ts for the single-source constant.
     if (req.file && req.file.size > MAX_MAIL_UPLOAD_SIZE_BYTES) {
       const fileMB = (req.file.size / (1024 * 1024)).toFixed(1);
       return res.status(413).json({
         error: 'FILE_TOO_LARGE',
-        message: `Ukuran file melebihi batas maksimum ${MAX_MAIL_UPLOAD_SIZE_MB} MB. Ukuran file Anda: ${fileMB} MB. Silakan pilih file yang lebih kecil atau kompres file tersebut menggunakan alat kompresor PDF di sidebar.`,
+        message: `Ukuran file maksimum adalah ${MAX_MAIL_UPLOAD_SIZE_MB} MB. File Anda ${fileMB} MB — silakan kurangi ukurannya dan coba lagi.`,
       });
     }
 

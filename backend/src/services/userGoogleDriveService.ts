@@ -387,12 +387,8 @@ export async function uploadUserLetterFile(
       logicalPath = `${rootName}/${monthYear}/${originalFileName}`;
     }
 
-    // 3. NO COMPRESSION — Files are uploaded directly to Drive.
-    //    Auto-compression has been removed from the mail upload flow.
-    //    The standalone PDF Compressor tool continues to work independently.
-    const uploadBuffer = fileBuffer;
-
-    // 4. Upload file to target folder
+    // 3. Upload file directly to target folder (no auto-compression —
+    //    size validation is performed by the controller before this call).
     const fileMetadata = {
       name: originalFileName,
       parents: [targetFolderId],
@@ -400,7 +396,7 @@ export async function uploadUserLetterFile(
 
     const media = {
       mimeType: mimeType || 'application/octet-stream',
-      body: Readable.from(uploadBuffer),
+      body: Readable.from(fileBuffer),
     };
 
     const response = await drive.files.create({
@@ -429,7 +425,7 @@ export async function uploadUserLetterFile(
       console.warn(`[GoogleDrive] Could not set reader permission on file ${fileId}:`, permErr);
     }
 
-    console.log(`[GoogleDrive] Upload successful! File ID: ${fileId}, Logical Path: ${logicalPath}`);
+    console.log(`[GoogleDrive] Upload successful! File ID: ${fileId}`);
     return { fileId, webViewLink, logicalPath };
   } catch (error: any) {
     console.error(`[GoogleDrive] Upload failed for user ${userId}:`, error);

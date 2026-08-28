@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import api from '../../api/axios';
 import FolderSelector from '../drive/FolderSelector';
-import { MAX_MAIL_UPLOAD_SIZE_MB, MAX_MAIL_UPLOAD_SIZE_BYTES } from '../../config/constants';
+import { MAX_MAIL_UPLOAD_SIZE_MB } from '../../config/constants';
 
 /**
  * Supported file types for mail form uploads.
@@ -104,16 +104,25 @@ export default function MailForm({ type, id, onSaved, onCancel }) {
     if (!ALLOWED_TYPES.includes(file.type)) {
       return `Tipe file tidak didukung. Gunakan: ${ALLOWED_EXT.join(', ')}`;
     }
-    // 50 MB limit for ALL mail uploads (create and edit)
-    if (file.size > MAX_MAIL_UPLOAD_SIZE_BYTES) {
-      const fileMB = (file.size / (1024 * 1024)).toFixed(1);
-      return `Ukuran file melebihi batas maksimum ${MAX_MAIL_UPLOAD_SIZE_MB} MB. Ukuran file Anda: ${fileMB} MB. Silakan kompres file menggunakan alat kompresor PDF di sidebar.`;
-    }
     return null;
   };
 
   const handleFileSelect = (file) => {
     if (!file) return;
+
+    // ── Mail upload size limit (client-side) ────────────────────────────
+    // Applies universally: all file types, create and update, folder or not.
+    // Mirrors the server-side check in suratController / suratKeluarController.
+    const limitBytes = MAX_MAIL_UPLOAD_SIZE_MB * 1024 * 1024;
+    if (file.size > limitBytes) {
+      const fileMB = (file.size / (1024 * 1024)).toFixed(1);
+      setErrors((prev) => ({
+        ...prev,
+        file_surat: `Ukuran file maksimum adalah ${MAX_MAIL_UPLOAD_SIZE_MB} MB. File Anda ${fileMB} MB — silakan kurangi ukurannya dan coba lagi.`,
+      }));
+      setFormData((prev) => ({ ...prev, file_surat: null }));
+      return;
+    }
 
     const err = validateFile(file);
     if (err) {
@@ -161,6 +170,17 @@ export default function MailForm({ type, id, onSaved, onCancel }) {
     if (!formData.tanggal_buat) newErrors.tanggal_buat = 'Tanggal buat wajib diisi';
     if (!formData.nama_surat.trim()) newErrors.nama_surat = 'Perihal surat wajib diisi';
     if (!isEditMode && !formData.file_surat) newErrors.file_surat = 'File surat wajib diunggah';
+
+    // ── Mail upload size limit (submit-time guard) ────────────────────────
+    // Safety net in case the file was set before the size check could run
+    // (e.g. file dragged in before validateFile ran with current state).
+    if (formData.file_surat) {
+      const limitBytes = MAX_MAIL_UPLOAD_SIZE_MB * 1024 * 1024;
+      if (formData.file_surat.size > limitBytes) {
+        const fileMB = (formData.file_surat.size / (1024 * 1024)).toFixed(1);
+        newErrors.file_surat = `Ukuran file maksimum adalah ${MAX_MAIL_UPLOAD_SIZE_MB} MB. File Anda ${fileMB} MB — silakan kurangi ukurannya dan coba lagi.`;
+      }
+    }
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -472,9 +492,18 @@ export default function MailForm({ type, id, onSaved, onCancel }) {
 
         {/* Upload File */}
         <div className="space-y-2">
-          <label className="block text-sm font-semibold text-slate-700">
-            Upload File Surat {!isEditMode && <span className="text-red-500">*</span>}
-          </label>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-2">
+            <label className="block text-sm font-semibold text-slate-700">
+              Upload File Surat {!isEditMode && <span className="text-red-500">*</span>}
+            </label>
+            <span
+              className="inline-flex items-center self-start sm:self-auto text-xs text-slate-500 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-full font-medium"
+              title={`Ukuran file maksimum ${MAX_MAIL_UPLOAD_SIZE_MB} MB. File yang melebihi batas ini akan ditolak.`}
+            >
+              <i className="bi bi-hdd mr-1 flex-shrink-0" />
+              Maks. {MAX_MAIL_UPLOAD_SIZE_MB} MB
+            </span>
+          </div>
 
           <div
             onDragEnter={handleDrag}
@@ -530,7 +559,7 @@ export default function MailForm({ type, id, onSaved, onCancel }) {
                   Tarik & lepas file di sini, atau klik untuk memilih
                 </p>
                 <p className="text-xs text-slate-400">
-                  Mendukung: PDF, Word, Excel, JPG, PNG (maks. {MAX_MAIL_UPLOAD_SIZE_MB} MB)
+                  Mendukung: PDF, Word, Excel, JPG, PNG · Maks. {MAX_MAIL_UPLOAD_SIZE_MB} MB
                 </p>
               </div>
             )}

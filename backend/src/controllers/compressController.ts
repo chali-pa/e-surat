@@ -3,9 +3,11 @@
  *
  * POST /api/compress-pdf
  *
- * Standalone PDF compression utility — reuses the exact same
- * compressPdfIfNeeded() function used by the mail-form upload flow.
- * No DB record or Drive file is created; the compressed PDF is
+ * Standalone PDF compression utility — uses compressPdfIfNeeded() from
+ * pdfCompressionService.ts directly.  The mail-form upload flow does NOT
+ * call this controller or the compression service; files uploaded via the
+ * mail forms go straight to Google Drive with no compression step.
+ * No DB record or Drive file is created here; the compressed PDF is
  * streamed directly back to the caller as a file download.
  */
 

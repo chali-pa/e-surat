@@ -6,7 +6,7 @@ import path from 'path';
 import { google } from 'googleapis';
 import { isGoogleErrorInvalidGrant, GoogleReconnectRequiredError, getOAuth2ClientForUser } from '../services/userGoogleAuthService';
 import { uploadUserLetterFile, deleteUserFile, moveDriveFileToCorrectFolder, formatMonthFolderName, getMonthName, validateFolderOwnership } from '../services/userGoogleDriveService';
-import { MAX_FOLDER_UPDATE_FILE_SIZE_BYTES, MAX_FOLDER_UPDATE_SIZE_MB } from '../config/upload';
+import { MAX_FOLDER_UPDATE_FILE_SIZE_BYTES, MAX_FOLDER_UPDATE_SIZE_MB, MAX_MAIL_UPLOAD_SIZE_BYTES, MAX_MAIL_UPLOAD_SIZE_MB } from '../config/upload';
 import { findFolderById, findFoldersByUser } from '../models/Folder';
 import {
   getIncomingLetterByRow,
@@ -172,6 +172,17 @@ export const store = async (req: AuthRequest, res: Response) => {
       customFolderDriveId = validation.googleDriveFolderId;
     }
 
+    // ── Mail upload file-size limit ────────────────────────────────────────
+    // Enforce 50 MB maximum for all mail form uploads (create and edit).
+    // No auto-compression occurs — files exceeding this limit are rejected.
+    if (req.file && req.file.size > MAX_MAIL_UPLOAD_SIZE_BYTES) {
+      const fileMB = (req.file.size / (1024 * 1024)).toFixed(1);
+      return res.status(413).json({
+        error: 'FILE_TOO_LARGE',
+        message: `Ukuran file melebihi batas maksimum ${MAX_MAIL_UPLOAD_SIZE_MB} MB. Ukuran file Anda: ${fileMB} MB. Silakan pilih file yang lebih kecil atau kompres file tersebut menggunakan alat kompresor PDF di sidebar.`,
+      });
+    }
+
     if (req.file) {
       const originalName = req.file.originalname || `${nomor_surat}_${Date.now()}`;
       const ext = path.extname(originalName) || '.pdf';
@@ -323,26 +334,15 @@ export const update = async (req: AuthRequest, res: Response) => {
       customFolderDriveId = validation.googleDriveFolderId;
     }
 
-    // ── Folder-update file-size limit ──────────────────────────────────────
-    // When a file is being replaced on a record that has (or will have) a
-    // folder assigned, reject if the original upload exceeds the limit.
-    //
-    // Scope (see backend/src/config/upload.ts for full explanation):
-    //   • Per-file, not cumulative folder size.
-    //   • Update-only — create (store) is not covered here.
-    //   • Pre-compression — checked against original size before auto-compress.
-    //
-    // The effective folder is whichever is non-empty: the new folder_id from
-    // the request body, or the existing one already saved on the record.
-    const effectiveFolderId = folder_id || oldSurat.folder_id;
-    // ── Folder-update file-size limit ──────────────────────────────────────
-    // Scope: per-file, update-only, pre-compression (original file size).
-    // See backend/src/config/upload.ts for the single-source constant.
-    if (req.file && effectiveFolderId && req.file.size > MAX_FOLDER_UPDATE_FILE_SIZE_BYTES) {
+    // ── Mail upload file-size limit ────────────────────────────────────────
+    // Enforce 50 MB maximum for all mail form uploads (both create and edit).
+    // This replaces the previous auto-compression approach with a simple size limit.
+    // The limit applies to ALL file replacements, not just folder-assigned records.
+    if (req.file && req.file.size > MAX_MAIL_UPLOAD_SIZE_BYTES) {
       const fileMB = (req.file.size / (1024 * 1024)).toFixed(1);
       return res.status(413).json({
-        error: 'FILE_TOO_LARGE_FOR_FOLDER_UPDATE',
-        message: `File ini melebihi batas ${MAX_FOLDER_UPDATE_SIZE_MB} MB untuk pembaruan folder. Ukuran file Anda: ${fileMB} MB. Silakan pilih file yang lebih kecil.`,
+        error: 'FILE_TOO_LARGE',
+        message: `Ukuran file melebihi batas maksimum ${MAX_MAIL_UPLOAD_SIZE_MB} MB. Ukuran file Anda: ${fileMB} MB. Silakan pilih file yang lebih kecil atau kompres file tersebut menggunakan alat kompresor PDF di sidebar.`,
       });
     }
 

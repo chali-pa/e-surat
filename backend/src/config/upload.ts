@@ -1,62 +1,48 @@
 /**
  * Multer upload configuration (memory storage).
  *
- * No hard application-level file-size cap is enforced here.
- * The only size constraints are genuine infrastructure limits:
+ * NO auto-compression occurs for mail uploads as of this revision.
+ * Files uploaded through incoming/outgoing mail forms are sent directly
+ * to Google Drive with no compression step, subject only to the size
+ * limits below and genuine infrastructure constraints.
  *
- *   • Vercel Hobby:  ~4.5 MB payload limit (platform hard limit)
- *   • Vercel Pro:    up to 250 MB payload limit
- *   • Self-hosted:   limited only by available server memory and
- *                    the client_max_body_size of any upstream proxy
- *                    (e.g. Nginx default is 1 MB — raise it explicitly
- *                    if deploying behind Nginx with large uploads).
+ * The standalone PDF Compressor tool (sidebar) continues to work independently
+ * with its own compression logic via the /api/compress-pdf endpoint.
  *
- * PDF auto-compression uses PDF_COMPRESS_TRIGGER_BYTES (8 MB, defined in
- * pdfCompressionService.ts) to decide whether to compress before Drive
- * upload — that threshold is unrelated to any upload size cap.
- *
- * MAX_FOLDER_UPDATE_FILE_SIZE_BYTES is a separate, independent limit that
- * applies specifically to file replacements on mail records that have a
- * folder assigned (edit/update flow only, not create).  It is enforced
- * both client-side (MailForm.jsx) and server-side (suratController.update /
- * suratKeluarController.update).
- *
- * Scope decisions (documented here so they can be changed in one place):
- *   • Per-file, not cumulative folder size — checked against the individual
- *     replacement file, not the sum of all files already in the folder.
- *   • Update-only — applied when editing an existing record that has a
- *     folder_id.  Create operations are NOT covered; to extend to creates,
- *     add the same check to the store() handlers in each controller.
- *   • Pre-compression — the limit is checked against the original uploaded
- *     file size BEFORE auto-compression runs.  If you want to attempt
- *     compression first and then check, move the guard below the
- *     compressPdfIfNeeded() call in uploadUserLetterFile().
+ * Size constraints:
+ *   • MAX_MAIL_UPLOAD_SIZE_MB: 50 MB limit for all mail form uploads
+ *   • Infrastructure limits: Vercel (~4.5 MB Hobby, ~250 MB Pro), Nginx
+ *     client_max_body_size, etc. — ensure these are set appropriately.
+ *   • MAX_FOLDER_UPDATE_FILE_SIZE_BYTES: Previously implemented 50 MB limit
+ *     for folder-assigned record updates (kept for backward compatibility).
  */
 
 import multer from 'multer';
 
 /**
- * Exported so other modules can reference the effective limit without
- * duplicating knowledge.  Kept as a named export for backward compat —
- * now set to Infinity to signal "no application-level cap".
+ * Maximum file size for any document/photo uploaded through the mail forms
+ * (both incoming and outgoing, both create and edit operations).
+ * 
+ * This replaces the previous auto-compression approach with a simple size limit.
+ * Files exceeding this limit are rejected with a clear error message.
+ * 
+ * 50 MB = 50 × 1024 × 1024 = 52,428,800 bytes
+ */
+export const MAX_MAIL_UPLOAD_SIZE_MB = 50;
+export const MAX_MAIL_UPLOAD_SIZE_BYTES = MAX_MAIL_UPLOAD_SIZE_MB * 1024 * 1024;
+
+/**
+ * @deprecated Use MAX_MAIL_UPLOAD_SIZE_BYTES for general mail uploads instead.
+ * This constant remains for backward compatibility with existing folder-update
+ * validation code but should be consolidated.
+ */
+export const MAX_FOLDER_UPDATE_SIZE_MB = 50;
+export const MAX_FOLDER_UPDATE_FILE_SIZE_BYTES = MAX_FOLDER_UPDATE_SIZE_MB * 1024 * 1024;
+
+/**
  * @deprecated Use the platform's own limits rather than this constant.
  */
 export const MULTER_FILE_SIZE_LIMIT_BYTES = Infinity;
-
-export const MAX_FOLDER_UPDATE_SIZE_MB = 50;
-
-/**
- * Maximum file size for replacement files uploaded during a folder-assigned
- * mail-record update (edit flow).
- *
- * This is the SINGLE source of truth for this limit.  Both the client
- * (MailForm.jsx) and the server (suratController / suratKeluarController)
- * import/mirror this value — do not hardcode 50 MB anywhere else.
- *
- * See the module-level doc comment for scope decisions (per-file, update-
- * only, pre-compression check).
- */
-export const MAX_FOLDER_UPDATE_FILE_SIZE_BYTES = MAX_FOLDER_UPDATE_SIZE_MB * 1024 * 1024;
 
 const storage = multer.memoryStorage();
 

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import api from '../../api/axios';
 import FolderSelector from '../drive/FolderSelector';
+import { MAX_FOLDER_UPDATE_SIZE_MB } from '../../config/constants';
 
 /**
  * Maximum file size accepted by the server.
@@ -119,6 +120,24 @@ export default function MailForm({ type, id, onSaved, onCancel }) {
 
   const handleFileSelect = (file) => {
     if (!file) return;
+
+    // ── Folder-update file-size limit (client-side, pre-compression) ───────
+    // Only enforced in edit mode when the record has (or will have) a folder.
+    // Mirrors the server-side check in suratController / suratKeluarController.
+    // Limit is pre-compression: we check the original file the user selected.
+    if (isEditMode && selectedFolder) {
+      const limitBytes = MAX_FOLDER_UPDATE_SIZE_MB * 1024 * 1024;
+      if (file.size > limitBytes) {
+        const fileMB = (file.size / (1024 * 1024)).toFixed(1);
+        setErrors((prev) => ({
+          ...prev,
+          file_surat: `File ini melebihi batas ${MAX_FOLDER_UPDATE_SIZE_MB} MB untuk pembaruan folder. Ukuran file Anda: ${fileMB} MB. Silakan pilih file yang lebih kecil.`,
+        }));
+        setFormData((prev) => ({ ...prev, file_surat: null }));
+        return;
+      }
+    }
+
     const err = validateFile(file);
     if (err) {
       setErrors((prev) => ({ ...prev, file_surat: err }));
@@ -165,6 +184,17 @@ export default function MailForm({ type, id, onSaved, onCancel }) {
     if (!formData.tanggal_buat) newErrors.tanggal_buat = 'Tanggal buat wajib diisi';
     if (!formData.nama_surat.trim()) newErrors.nama_surat = 'Perihal surat wajib diisi';
     if (!isEditMode && !formData.file_surat) newErrors.file_surat = 'File surat wajib diunggah';
+
+    // ── Folder-update file-size limit (submit-time guard) ─────────────────
+    // Safety net in case the file was set before a folder was selected
+    // (i.e. the handleFileSelect check didn't fire with a folder present yet).
+    if (isEditMode && selectedFolder && formData.file_surat) {
+      const limitBytes = MAX_FOLDER_UPDATE_SIZE_MB * 1024 * 1024;
+      if (formData.file_surat.size > limitBytes) {
+        const fileMB = (formData.file_surat.size / (1024 * 1024)).toFixed(1);
+        newErrors.file_surat = `File ini melebihi batas ${MAX_FOLDER_UPDATE_SIZE_MB} MB untuk pembaruan folder. Ukuran file Anda: ${fileMB} MB. Silakan pilih file yang lebih kecil.`;
+      }
+    }
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);

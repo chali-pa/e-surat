@@ -6,7 +6,7 @@ import path from 'path';
 import { google } from 'googleapis';
 import { isGoogleErrorInvalidGrant, GoogleReconnectRequiredError, getOAuth2ClientForUser } from '../services/userGoogleAuthService';
 import { uploadUserLetterFile, deleteUserFile, moveDriveFileToCorrectFolder, formatMonthFolderName, getMonthName, validateFolderOwnership } from '../services/userGoogleDriveService';
-import { MAX_FOLDER_UPDATE_FILE_SIZE_BYTES } from '../config/upload';
+import { MAX_FOLDER_UPDATE_FILE_SIZE_BYTES, MAX_FOLDER_UPDATE_SIZE_MB } from '../config/upload';
 import { findFolderById, findFoldersByUser } from '../models/Folder';
 import {
   getIncomingLetterByRow,
@@ -335,12 +335,14 @@ export const update = async (req: AuthRequest, res: Response) => {
     // The effective folder is whichever is non-empty: the new folder_id from
     // the request body, or the existing one already saved on the record.
     const effectiveFolderId = folder_id || oldSurat.folder_id;
+    // ── Folder-update file-size limit ──────────────────────────────────────
+    // Scope: per-file, update-only, pre-compression (original file size).
+    // See backend/src/config/upload.ts for the single-source constant.
     if (req.file && effectiveFolderId && req.file.size > MAX_FOLDER_UPDATE_FILE_SIZE_BYTES) {
-      const limitMB = MAX_FOLDER_UPDATE_FILE_SIZE_BYTES / (1024 * 1024);
-      const fileMB  = (req.file.size / (1024 * 1024)).toFixed(1);
+      const fileMB = (req.file.size / (1024 * 1024)).toFixed(1);
       return res.status(413).json({
         error: 'FILE_TOO_LARGE_FOR_FOLDER_UPDATE',
-        message: `File ini melebihi batas ${limitMB} MB untuk pembaruan folder. Ukuran file Anda: ${fileMB} MB. Silakan pilih file yang lebih kecil.`,
+        message: `File ini melebihi batas ${MAX_FOLDER_UPDATE_SIZE_MB} MB untuk pembaruan folder. Ukuran file Anda: ${fileMB} MB. Silakan pilih file yang lebih kecil.`,
       });
     }
 

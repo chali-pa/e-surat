@@ -43,6 +43,8 @@ import multer from 'multer';
  */
 export const MULTER_FILE_SIZE_LIMIT_BYTES = Infinity;
 
+export const MAX_FOLDER_UPDATE_SIZE_MB = 50;
+
 /**
  * Maximum file size for replacement files uploaded during a folder-assigned
  * mail-record update (edit flow).
@@ -51,12 +53,10 @@ export const MULTER_FILE_SIZE_LIMIT_BYTES = Infinity;
  * (MailForm.jsx) and the server (suratController / suratKeluarController)
  * import/mirror this value — do not hardcode 50 MB anywhere else.
  *
- * 50 MB expressed as bytes: 50 × 1024 × 1024 = 52,428,800 bytes.
- *
  * See the module-level doc comment for scope decisions (per-file, update-
  * only, pre-compression check).
  */
-export const MAX_FOLDER_UPDATE_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB
+export const MAX_FOLDER_UPDATE_FILE_SIZE_BYTES = MAX_FOLDER_UPDATE_SIZE_MB * 1024 * 1024;
 
 const storage = multer.memoryStorage();
 

@@ -11,6 +11,7 @@ import Dashboard from './pages/Dashboard'
 import Profile from './pages/Profile'
 import Layout from './components/Layout'
 import PdfCompressorPage from './pages/pdf-compressor/PdfCompressorPage'
+import ErrorBoundary from './components/ErrorBoundary'
 
 function LoadingSpinner() {
   return (
@@ -137,8 +138,10 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppRoutes />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
+    </ErrorBoundary>
   )
 }

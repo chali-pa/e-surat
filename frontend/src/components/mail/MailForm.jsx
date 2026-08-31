@@ -48,6 +48,21 @@ export default function MailForm({ type, id, prepopulatedFile, onClearFile, onSa
   const [uploadProgress, setUploadProgress] = useState(0);
   const [dragActive, setDragActive] = useState(false);
   const [googleConnected, setGoogleConnected] = useState(true);
+  
+  const [objectUrl, setObjectUrl] = useState('');
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+
+  useEffect(() => {
+    if (formData.file_surat) {
+      const url = URL.createObjectURL(formData.file_surat);
+      setObjectUrl(url);
+      return () => {
+        URL.revokeObjectURL(url);
+      };
+    } else {
+      setObjectUrl('');
+    }
+  }, [formData.file_surat]);
 
   // Check Google account connection status
   useEffect(() => {
@@ -268,97 +283,12 @@ export default function MailForm({ type, id, prepopulatedFile, onClearFile, onSa
     }`;
   };
 
-  if (fetchingData) {
+  const renderFormBody = (isSplit) => {
+    const fieldsGridClass = isSplit ? "grid grid-cols-1 gap-5" : "grid grid-cols-1 md:grid-cols-2 gap-6";
     return (
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-16 text-center text-slate-400">
-        <i className="bi bi-arrow-repeat text-4xl mb-3 block animate-spin" />
-        Memuat data surat...
-      </div>
-    );
-  }
-
-  return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-      {/* Card Header */}
-      <div
-        className="px-4 sm:px-6 py-4 border-b border-gray-100 flex justify-between items-center gap-3"
-        style={{ background: 'linear-gradient(135deg, #4B164C08 0%, #DD88CF0A 100%)' }}
-      >
-        <div className="min-w-0">
-          <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2">
-            <i className={`bi ${type === 'incoming' ? 'bi-file-earmark-arrow-down' : 'bi-file-earmark-arrow-up'} text-[#4B164C] flex-shrink-0`} />
-            <span className="truncate">{isEditMode ? 'Edit' : 'Tambah'} Surat {type === 'incoming' ? 'Masuk' : 'Keluar'}</span>
-          </h3>
-          <p className="text-xs text-slate-400 mt-0.5">Semua field bertanda * wajib diisi</p>
-        </div>
-        {/* Close button — min 44×44 touch target */}
-        <button
-          type="button"
-          onClick={onCancel}
-          className="flex-shrink-0 flex items-center justify-center min-w-[44px] min-h-[44px] -mr-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition"
-          aria-label="Tutup form"
-        >
-          <i className="bi bi-x-lg text-lg" />
-        </button>
-      </div>
-
-      <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-6">
-        {/* Google Not Connected Banner */}
-        {!googleConnected && !errors.googleReconnect && (
-          <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-900">
-            <div className="flex items-start gap-3 text-sm">
-              <i className="bi bi-exclamation-triangle-fill text-amber-500 text-lg flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="font-semibold text-amber-900">Akun Google Belum Terhubung</p>
-                <p className="text-xs text-amber-700 mt-0.5">
-                  Hubungkan akun Google Anda dari profil agar surat tersimpan otomatis ke Google Drive dan Google Sheets pribadi Anda.
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={handleReconnectGoogle}
-              className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold shadow-sm transition whitespace-nowrap"
-            >
-              <i className="bi bi-google" /> Hubungkan
-            </button>
-          </div>
-        )}
-
-        {/* Google Reconnect Banner */}
-        {errors.googleReconnect ? (
-          <div className="p-5 bg-amber-50 border border-amber-200 rounded-xl space-y-3">
-            <div className="flex items-start gap-3 text-amber-800 text-sm font-medium">
-              <i className="bi bi-exclamation-triangle-fill text-amber-500 text-lg flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="font-semibold text-amber-900">Your Google connection needs to be renewed.</p>
-                <p className="text-xs text-amber-700 mt-1">
-                  Please reconnect your Google account to continue saving your letters to Google Drive and Google Sheets.
-                </p>
-              </div>
-            </div>
-            <div className="pt-1">
-              <button
-                type="button"
-                onClick={handleReconnectGoogle}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-all"
-              >
-                <i className="bi bi-google" /> Reconnect Google
-              </button>
-            </div>
-          </div>
-        ) : errors.general ? (
-          <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3 text-red-800 text-sm">
-            <i className="bi bi-exclamation-octagon-fill text-red-500 text-lg flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="font-semibold">Terjadi Kesalahan</p>
-              <p className="text-xs text-red-600 mt-0.5">{errors.general}</p>
-            </div>
-          </div>
-        ) : null}
-
+      <>
         {/* Grid Fields */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className={fieldsGridClass}>
           {/* Nomor Surat */}
           <div className="space-y-1.5">
             <label className="block text-sm font-semibold text-slate-700">
@@ -623,7 +553,184 @@ export default function MailForm({ type, id, prepopulatedFile, onClearFile, onSa
             {isEditMode ? 'Simpan Perubahan' : 'Tambah Surat'}
           </button>
         </div>
+      </>
+    );
+  };
+
+  if (fetchingData) {
+    return (
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-16 text-center text-slate-400">
+        <i className="bi bi-arrow-repeat text-4xl mb-3 block animate-spin" />
+        Memuat data surat...
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      {/* Card Header */}
+      <div
+        className="px-4 sm:px-6 py-4 border-b border-gray-100 flex justify-between items-center gap-3"
+        style={{ background: 'linear-gradient(135deg, #4B164C08 0%, #DD88CF0A 100%)' }}
+      >
+        <div className="min-w-0">
+          <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2">
+            <i className={`bi ${type === 'incoming' ? 'bi-file-earmark-arrow-down' : 'bi-file-earmark-arrow-up'} text-[#4B164C] flex-shrink-0`} />
+            <span className="truncate">{isEditMode ? 'Edit' : 'Tambah'} Surat {type === 'incoming' ? 'Masuk' : 'Keluar'}</span>
+          </h3>
+          <p className="text-xs text-slate-400 mt-0.5">Semua field bertanda * wajib diisi</p>
+        </div>
+        {/* Close button — min 44×44 touch target */}
+        <button
+          type="button"
+          onClick={onCancel}
+          className="flex-shrink-0 flex items-center justify-center min-w-[44px] min-h-[44px] -mr-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition"
+          aria-label="Tutup form"
+        >
+          <i className="bi bi-x-lg text-lg" />
+        </button>
+      </div>
+
+      <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-6">
+        {/* Google Not Connected Banner */}
+        {!googleConnected && !errors.googleReconnect && (
+          <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-900">
+            <div className="flex items-start gap-3 text-sm">
+              <i className="bi bi-exclamation-triangle-fill text-amber-500 text-lg flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-amber-900">Akun Google Belum Terhubung</p>
+                <p className="text-xs text-amber-700 mt-0.5">
+                  Hubungkan akun Google Anda dari profil agar surat tersimpan otomatis ke Google Drive dan Google Sheets pribadi Anda.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleReconnectGoogle}
+              className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold shadow-sm transition whitespace-nowrap"
+            >
+              <i className="bi bi-google" /> Hubungkan
+            </button>
+          </div>
+        )}
+
+        {/* Google Reconnect Banner */}
+        {errors.googleReconnect ? (
+          <div className="p-5 bg-amber-50 border border-amber-200 rounded-xl space-y-3">
+            <div className="flex items-start gap-3 text-amber-800 text-sm font-medium">
+              <i className="bi bi-exclamation-triangle-fill text-amber-500 text-lg flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-amber-900">Your Google connection needs to be renewed.</p>
+                <p className="text-xs text-amber-700 mt-1">
+                  Please reconnect your Google account to continue saving your letters to Google Drive and Google Sheets.
+                </p>
+              </div>
+            </div>
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={handleReconnectGoogle}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-all"
+              >
+                <i className="bi bi-google" /> Reconnect Google
+              </button>
+            </div>
+          </div>
+        ) : errors.general ? (
+          <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3 text-red-800 text-sm">
+            <i className="bi bi-exclamation-octagon-fill text-red-500 text-lg flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold">Terjadi Kesalahan</p>
+              <p className="text-xs text-red-600 mt-0.5">{errors.general}</p>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Conditional Layout */}
+        {formData.file_surat && prepopulatedFile ? (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            {/* Left Column: Large Legible Preview (Takes 7/12 width on desktop) */}
+            <div className="lg:col-span-7 space-y-4">
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col h-[580px] relative shadow-inner">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-200/80 mb-3">
+                  <div className="min-w-0">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-400">File Terpindai</span>
+                    <h4 className="text-xs font-semibold text-slate-700 truncate">{formData.file_surat.name}</h4>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setLightboxOpen(true)}
+                      className="px-2.5 py-1.5 bg-[#4B164C] text-white hover:bg-opacity-90 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer transition min-h-[32px]"
+                      title="Perbesar Tampilan"
+                    >
+                      <i className="bi bi-zoom-in" />
+                      <span>Zoom</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex-1 min-h-0 bg-white rounded-xl overflow-hidden border border-slate-150 flex items-center justify-center relative">
+                  {formData.file_surat.type === 'application/pdf' ? (
+                    <iframe
+                      src={objectUrl}
+                      title="PDF Scanned Document Preview"
+                      className="w-full h-full border-none"
+                    />
+                  ) : (
+                    <img
+                      src={objectUrl}
+                      alt="Scanned Document Preview"
+                      className="max-w-full max-h-full object-contain cursor-zoom-in"
+                      onClick={() => setLightboxOpen(true)}
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Right Column: Form fields */}
+            <div className="lg:col-span-5 space-y-6">
+              {renderFormBody(true)}
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {renderFormBody(false)}
+          </div>
+        )}
       </form>
+
+      {/* Click to Enlarge Lightbox modal */}
+      {lightboxOpen && objectUrl && (
+        <div className="fixed inset-0 z-[999] bg-black/95 backdrop-blur-sm flex flex-col">
+          <header className="p-4 flex items-center justify-between text-white border-b border-white/10 bg-slate-950">
+            <h3 className="text-sm font-semibold truncate">{formData.file_surat?.name}</h3>
+            <button
+              type="button"
+              onClick={() => setLightboxOpen(false)}
+              className="p-2 rounded-lg hover:bg-white/10 text-white min-w-[44px] min-h-[44px] flex items-center justify-center cursor-pointer transition"
+            >
+              <i className="bi bi-x-lg text-lg" />
+            </button>
+          </header>
+          <div className="flex-1 p-4 flex items-center justify-center overflow-auto">
+            {formData.file_surat?.type === 'application/pdf' ? (
+              <iframe
+                src={objectUrl}
+                title="Full Screen PDF Preview"
+                className="w-full h-full max-w-5xl rounded-lg bg-white shadow-2xl"
+              />
+            ) : (
+              <img
+                src={objectUrl}
+                alt="Full screen view"
+                className="max-w-full max-h-full object-contain shadow-2xl rounded-lg"
+              />
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

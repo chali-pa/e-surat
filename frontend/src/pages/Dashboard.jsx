@@ -62,6 +62,13 @@ export default function Dashboard() {
   const [editingId, setEditingId]   = useState(null);
   const [scannedFile, setScannedFile] = useState(null);
 
+  // Dedicated Scanner MFP States
+  const [scannerMode, setScannerMode] = useState('camera'); // 'camera' | 'mfp'
+  const [scanIdentifier, setScanIdentifier] = useState('');
+  const [scannerSettingsOpen, setScannerSettingsOpen] = useState(false);
+  const [sseStatus, setSseStatus] = useState('disconnected'); // 'disconnected' | 'connecting' | 'connected' | 'error'
+  const sseRef = useRef(null);
+
   const queryView = searchParams.get('view');
 
   // Helper to handle views navigation with URL parameter sync
@@ -176,6 +183,138 @@ export default function Dashboard() {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [monthPickerOpen]);
+
+  // ─── Scanner Connection and Actions ───────────────────────────────────
+
+  const handleScanDetected = useCallback(async (filename) => {
+    try {
+      setToast({ show: true, type: 'success', message: 'Dokumen scan baru terdeteksi! Memuat...' });
+
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+      const token = localStorage.getItem('token');
+
+      // Fetch scan file as blob
+      const response = await api.get(`/api/scan/file`, {
+        params: { filename, token },
+        responseType: 'blob'
+      });
+
+      // Convert to File
+      const fileType = response.data.type || 'application/octet-stream';
+      const file = new File([response.data], filename.split('/').pop(), { type: fileType });
+
+      // Check size limit (50 MB)
+      const MAX_MAIL_UPLOAD_SIZE_MB = 50;
+      const limitBytes = MAX_MAIL_UPLOAD_SIZE_MB * 1024 * 1024;
+      if (file.size > limitBytes) {
+        setToast({
+          show: true,
+          type: 'error',
+          message: `Ukuran file scan (${(file.size / (1024 * 1024)).toFixed(1)} MB) melebihi batas 50 MB.`
+        });
+        return;
+      }
+
+      // Trigger navigation and prepopulate
+      setScannedFile(file);
+      navigateToView('create');
+    } catch (err) {
+      console.error('Failed to retrieve scanned file:', err);
+      setToast({ show: true, type: 'error', message: 'Gagal mengunduh file scan dari server.' });
+    }
+  }, [searchParams]);
+
+  const connectSSE = useCallback((identifier) => {
+    if (sseRef.current) {
+      sseRef.current.close();
+      sseRef.current = null;
+    }
+
+    if (!identifier) {
+      setSseStatus('disconnected');
+      return;
+    }
+
+    setSseStatus('connecting');
+
+    const token = localStorage.getItem('token');
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+    const streamUrl = `${API_BASE_URL}/api/scan/stream?token=${encodeURIComponent(token || '')}&scanIdentifier=${encodeURIComponent(identifier)}`;
+
+    try {
+      const es = new EventSource(streamUrl);
+      sseRef.current = es;
+
+      es.onopen = () => {
+        setSseStatus('connected');
+        console.log('SSE scanner connection established');
+      };
+
+      es.onerror = (err) => {
+        console.error('SSE scanner connection error:', err);
+        setSseStatus('error');
+      };
+
+      es.addEventListener('scan-detected', async (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          console.log('Scan detected:', data);
+          await handleScanDetected(data.filename);
+        } catch (err) {
+          console.error('Failed to handle detected scan:', err);
+        }
+      });
+    } catch (err) {
+      console.error('Failed to create EventSource:', err);
+      setSseStatus('error');
+    }
+  }, [handleScanDetected]);
+
+  // Load scanner settings from localStorage on mount
+  useEffect(() => {
+    const savedMode = localStorage.getItem('scannerMode') || 'camera';
+    const savedIdent = localStorage.getItem('scanIdentifier') || '';
+    setScannerMode(savedMode);
+    setScanIdentifier(savedIdent);
+  }, []);
+
+  // Sync SSE connection based on scannerMode and scanIdentifier
+  useEffect(() => {
+    if (scannerMode === 'mfp' && scanIdentifier) {
+      connectSSE(scanIdentifier);
+    } else {
+      if (sseRef.current) {
+        sseRef.current.close();
+        sseRef.current = null;
+      }
+      setSseStatus('disconnected');
+    }
+
+    return () => {
+      if (sseRef.current) {
+        sseRef.current.close();
+        sseRef.current = null;
+      }
+    };
+  }, [scannerMode, scanIdentifier, connectSSE]);
+
+  // Close scanner settings when clicking outside
+  useEffect(() => {
+    if (!scannerSettingsOpen) return;
+    const handler = (e) => {
+      if (!e.target.closest('[data-scanner-settings]')) setScannerSettingsOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [scannerSettingsOpen]);
+
+  const handleScanButtonClick = () => {
+    if (scannerMode === 'camera') {
+      navigateToView('scan');
+    } else {
+      setScannerSettingsOpen(true);
+    }
+  };
 
   // ─── Data fetching ────────────────────────────────────────────────────
 
@@ -441,10 +580,10 @@ export default function Dashboard() {
         {view === 'list' && (
           <div className="flex flex-wrap gap-2 self-start sm:self-auto">
             <button
-              onClick={() => navigateToView('scan')}
+              onClick={handleScanButtonClick}
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-slate-700 bg-white border border-slate-200 text-sm font-semibold shadow-sm transition hover:bg-slate-50 cursor-pointer min-h-[44px]"
             >
-              <i className="bi bi-camera-fill text-[#4B164C]" />
+              <i className={`bi ${scannerMode === 'mfp' ? 'bi-printer-fill' : 'bi-camera-fill'} text-[#4B164C]`} />
               Pindai Dokumen
             </button>
             <button
@@ -532,6 +671,122 @@ export default function Dashboard() {
               <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-purple-50 text-[#4B164C] border border-purple-100">
                 {totalCount} Surat
               </span>
+
+              {/* ── Scanner Settings ── */}
+              <div className="relative" data-scanner-settings>
+                <button
+                  type="button"
+                  onClick={() => setScannerSettingsOpen((v) => !v)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all min-h-[36px] ${
+                    scannerMode === 'mfp'
+                      ? sseStatus === 'connected'
+                        ? 'bg-emerald-500 text-white border-emerald-500'
+                        : sseStatus === 'connecting'
+                        ? 'bg-amber-500 text-white border-amber-500'
+                        : sseStatus === 'error'
+                        ? 'bg-red-500 text-white border-red-500'
+                        : 'bg-[#4B164C] text-white border-[#4B164C]'
+                      : 'bg-white text-slate-500 border-slate-200 hover:border-[#DD88CF] hover:text-[#4B164C]'
+                  }`}
+                  title="Pengaturan Scanner"
+                >
+                  <i className={`bi ${scannerMode === 'mfp' ? 'bi-printer' : 'bi-camera'} text-sm`} />
+                  <span>
+                    {scannerMode === 'mfp'
+                      ? `MFP: ${scanIdentifier || 'Belum diatur'}`
+                      : 'Scanner: Kamera'}
+                  </span>
+                  <i className={`bi bi-chevron-${scannerSettingsOpen ? 'up' : 'down'} text-[10px]`} />
+                </button>
+
+                {scannerSettingsOpen && (
+                  <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-2xl shadow-xl p-4 w-72 max-w-[calc(100vw-2rem)] text-slate-800">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Pengaturan Scanner</h4>
+                    
+                    {/* Mode selector */}
+                    <div className="space-y-2 mb-4">
+                      <label className="block text-xs font-semibold text-slate-500">Mode Pemindai</label>
+                      <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setScannerMode('camera');
+                            localStorage.setItem('scannerMode', 'camera');
+                          }}
+                          className={`py-1.5 text-xs font-bold rounded-lg transition ${
+                            scannerMode === 'camera'
+                              ? 'bg-white text-[#4B164C] shadow-sm'
+                              : 'text-slate-500 hover:text-slate-800'
+                          }`}
+                        >
+                          Kamera
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setScannerMode('mfp');
+                            localStorage.setItem('scannerMode', 'mfp');
+                          }}
+                          className={`py-1.5 text-xs font-bold rounded-lg transition ${
+                            scannerMode === 'mfp'
+                              ? 'bg-white text-[#4B164C] shadow-sm'
+                              : 'text-slate-500 hover:text-slate-800'
+                          }`}
+                        >
+                          Scanner MFP
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* MFP Configuration */}
+                    {scannerMode === 'mfp' && (
+                      <div className="space-y-3 pt-2 border-t border-slate-100">
+                        <div className="space-y-1">
+                          <label htmlFor="scanIdentInput" className="block text-xs font-semibold text-slate-500">
+                            Identitas Scan (Prefix/Folder)
+                          </label>
+                          <input
+                            id="scanIdentInput"
+                            type="text"
+                            value={scanIdentifier}
+                            onChange={(e) => {
+                              setScanIdentifier(e.target.value);
+                              localStorage.setItem('scanIdentifier', e.target.value);
+                            }}
+                            placeholder="Contoh: john_ atau john"
+                            className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-[#4B164C]"
+                          />
+                          <p className="text-[10px] text-slate-400 mt-1 leading-normal">
+                            Nama folder atau awalan nama file scan yang diatur di printer MFP Anda.
+                          </p>
+                        </div>
+
+                        {/* Status bar */}
+                        <div className="flex items-center gap-2 pt-1 text-xs">
+                          <span className={`w-2.5 h-2.5 rounded-full ${
+                            sseStatus === 'connected'
+                              ? 'bg-emerald-500 animate-pulse'
+                              : sseStatus === 'connecting'
+                              ? 'bg-amber-500 animate-pulse'
+                              : sseStatus === 'error'
+                              ? 'bg-red-500'
+                              : 'bg-slate-300'
+                          }`} />
+                          <span className="font-medium text-slate-600">
+                            {sseStatus === 'connected'
+                              ? 'Terhubung, Menunggu Scan...'
+                              : sseStatus === 'connecting'
+                              ? 'Menghubungkan...'
+                              : sseStatus === 'error'
+                              ? 'Koneksi gagal'
+                              : 'Terputus'}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
 
               {/* ── Month picker ──────────────────────────────────── */}
               <div className="relative" data-month-picker>

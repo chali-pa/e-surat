@@ -16,6 +16,11 @@ import profileRoutes from './routes/profile';
 import googleRoutes from './routes/google';
 import folderRoutes from './routes/folder';
 import compressRoutes from './routes/compress';
+import scanRoutes from './routes/scan';
+
+// Initialize scan hot-folder watcher
+import { startScanWatcher } from './services/scanWatcher';
+startScanWatcher();
 
 // Import Google configuration
 import { initializeGoogleServices } from './config/google';
@@ -100,6 +105,7 @@ app.use('/api/profile', profileRoutes);
 app.use('/api/google', googleRoutes);
 app.use('/api/folders', folderRoutes);
 app.use('/api/compress-pdf', compressRoutes);
+app.use('/api/scan', scanRoutes);
 
 // 404 handler
 app.use((req, res) => {

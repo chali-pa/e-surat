@@ -5,6 +5,7 @@ import DocumentPreviewModal from '../components/DocumentPreviewModal';
 import MailTable from '../components/mail/MailTable';
 import MailForm from '../components/mail/MailForm';
 import DeleteConfirmDialog from '../components/mail/DeleteConfirmDialog';
+import DocumentScanner from '../components/mail/DocumentScanner';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
 
@@ -57,8 +58,31 @@ export default function Dashboard() {
   const initialTab = queryType === 'outgoing' ? 'outgoing' : 'incoming';
 
   const [activeTab, setActiveTab]   = useState(initialTab);
-  const [view, setView]             = useState('list'); // 'list' | 'create' | 'edit'
+  const [view, setView]             = useState('list'); // 'list' | 'create' | 'edit' | 'scan'
   const [editingId, setEditingId]   = useState(null);
+  const [scannedFile, setScannedFile] = useState(null);
+
+  const queryView = searchParams.get('view');
+
+  // Helper to handle views navigation with URL parameter sync
+  const navigateToView = (newView, paramsUpdate = {}) => {
+    setView(newView);
+    if (newView === 'list') {
+      setEditingId(null);
+    }
+    const params = new URLSearchParams(searchParams);
+    if (newView === 'list') {
+      params.delete('view');
+    } else {
+      params.set('view', newView);
+    }
+    // Apply optional param updates
+    Object.entries(paramsUpdate).forEach(([key, val]) => {
+      if (val === null) params.delete(key);
+      else params.set(key, val);
+    });
+    setSearchParams(params);
+  };
 
   // ── Per-tab month selection ──────────────────────────────────────────
   // null  → show all records for that tab
@@ -94,12 +118,10 @@ export default function Dashboard() {
 
   // ─── Effects ──────────────────────────────────────────────────────────
 
-  // Sync URL ?type= param → tab state, always reset to list
+  // Sync URL ?type= param → tab state
   useEffect(() => {
     if (queryType === 'incoming' || queryType === 'outgoing') {
       setActiveTab(queryType);
-      setView('list');
-      setEditingId(null);
       setSearchTerm('');
       setMonthPickerOpen(false);
       // Reset each tab's month selection back to current-month on navigation
@@ -107,6 +129,22 @@ export default function Dashboard() {
       setSelectedMonthOutgoing(currentMonthValue());
     }
   }, [queryType]);
+
+  // Sync URL ?view= param → view state
+  useEffect(() => {
+    if (queryView === 'scan') {
+      setView('scan');
+      setEditingId(null);
+    } else if (queryView === 'create') {
+      setView('create');
+      setEditingId(null);
+    } else if (queryView === 'edit') {
+      setView('edit');
+    } else {
+      setView('list');
+      setEditingId(null);
+    }
+  }, [queryView]);
 
   // Fetch whenever tab or the active tab's month selection changes
   useEffect(() => {
@@ -172,11 +210,20 @@ export default function Dashboard() {
 
   const handleTabChange = (tab) => {
     setActiveTab(tab);
-    setSearchParams({ type: tab });
-    setView('list');
-    setEditingId(null);
     setSearchTerm('');
     setMonthPickerOpen(false);
+
+    // Maintain 'create' view if scanned file exists, otherwise go to list
+    const targetView = (view === 'create' && scannedFile) ? 'create' : 'list';
+
+    const params = new URLSearchParams(searchParams);
+    params.set('type', tab);
+    if (targetView === 'list') {
+      params.delete('view');
+    } else {
+      params.set('view', targetView);
+    }
+    setSearchParams(params);
   };
 
   // ─── Month picker actions ─────────────────────────────────────────────
@@ -308,7 +355,10 @@ export default function Dashboard() {
     setPreviewModal({ show: true, surat, autoPrint: true, letterType: activeTab });
   };
 
-  const handleEdit = (surat) => { setEditingId(surat.id); setView('edit'); };
+  const handleEdit = (surat) => {
+    setEditingId(surat.id);
+    navigateToView('edit');
+  };
   const handleDeleteClick = (surat) => setDeleteModal({ show: true, surat });
 
   const handleDeleteConfirm = async () => {
@@ -335,9 +385,20 @@ export default function Dashboard() {
     }
   };
 
+  const handleCapturedDocument = (file) => {
+    setScannedFile(file);
+    navigateToView('create');
+  };
+
+  const handleCancelCreate = () => {
+    setScannedFile(null);
+    navigateToView('list');
+  };
+
   const handleSaved = (type, action) => {
-    setView('list');
+    navigateToView('list');
     setEditingId(null);
+    setScannedFile(null);
     setToast({
       show: true, type: 'success',
       message: `Surat ${type === 'incoming' ? 'masuk' : 'keluar'} berhasil ${action === 'created' ? 'ditambahkan' : 'diperbarui'}.`,
@@ -378,19 +439,28 @@ export default function Dashboard() {
           <p className="mt-1 text-sm text-slate-500">Kelola surat masuk dan keluar secara terpadu di satu tempat.</p>
         </div>
         {view === 'list' && (
-          <button
-            onClick={() => setView('create')}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm font-semibold shadow-sm transition hover:opacity-90 self-start sm:self-auto"
-            style={{ background: 'linear-gradient(135deg, #4B164C 0%, #DD88CF 100%)' }}
-          >
-            <i className="bi bi-plus-lg" />
-            Tambah Surat {activeTab === 'incoming' ? 'Masuk' : 'Keluar'}
-          </button>
+          <div className="flex flex-wrap gap-2 self-start sm:self-auto">
+            <button
+              onClick={() => navigateToView('scan')}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-slate-700 bg-white border border-slate-200 text-sm font-semibold shadow-sm transition hover:bg-slate-50 cursor-pointer min-h-[44px]"
+            >
+              <i className="bi bi-camera-fill text-[#4B164C]" />
+              Pindai Dokumen
+            </button>
+            <button
+              onClick={() => navigateToView('create')}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm font-semibold shadow-sm transition hover:opacity-90 cursor-pointer min-h-[44px]"
+              style={{ background: 'linear-gradient(135deg, #4B164C 0%, #DD88CF 100%)' }}
+            >
+              <i className="bi bi-plus-lg" />
+              Tambah Surat {activeTab === 'incoming' ? 'Masuk' : 'Keluar'}
+            </button>
+          </div>
         )}
       </div>
 
       {/* ── Tab Switcher ─────────────────────────────────────────────── */}
-      {view === 'list' && (
+      {(view === 'list' || (view === 'create' && scannedFile)) && (
         <div className="flex border-b border-slate-100 gap-4">
           {[
             { id: 'incoming', label: 'Surat Masuk' },
@@ -609,13 +679,20 @@ export default function Dashboard() {
             onDelete={handleDeleteClick}
           />
         </div>
+      ) : view === 'scan' ? (
+        <DocumentScanner
+          onCapture={handleCapturedDocument}
+          onCancel={handleCancelCreate}
+        />
       ) : (
         <MailForm
           key={`${activeTab}-${editingId ?? 'create'}`}
           type={activeTab}
           id={editingId}
+          prepopulatedFile={scannedFile}
+          onClearFile={() => setScannedFile(null)}
           onSaved={handleSaved}
-          onCancel={() => { setView('list'); setEditingId(null); }}
+          onCancel={handleCancelCreate}
         />
       )}
 

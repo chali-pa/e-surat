@@ -26,7 +26,7 @@ function formatBytes(bytes) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
-export default function MailForm({ type, id, onSaved, onCancel }) {
+export default function MailForm({ type, id, prepopulatedFile, onClearFile, onSaved, onCancel }) {
   const isEditMode = !!id;
   const fileInputRef = useRef(null);
 
@@ -137,6 +137,13 @@ export default function MailForm({ type, id, onSaved, onCancel }) {
       setFormData((prev) => ({ ...prev, file_surat: file }));
     }
   };
+
+  // Prepopulate scanned file if provided
+  useEffect(() => {
+    if (prepopulatedFile) {
+      handleFileSelect(prepopulatedFile);
+    }
+  }, [prepopulatedFile]);
 
   const handleDrag = useCallback((e) => {
     e.preventDefault();
@@ -544,7 +551,10 @@ export default function MailForm({ type, id, onSaved, onCancel }) {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setFormData({ ...formData, file_surat: null })}
+                  onClick={() => {
+                    setFormData({ ...formData, file_surat: null });
+                    if (onClearFile) onClearFile();
+                  }}
                   className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-xs font-semibold transition min-h-[36px]"
                 >
                   Hapus File

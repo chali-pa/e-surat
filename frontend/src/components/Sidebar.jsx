@@ -29,6 +29,7 @@ export default function Sidebar() {
 
   const menuItems = [
     { path: '/dashboard', icon: 'bi-grid-1x2-fill', label: 'Dashboard' },
+    { path: '/dashboard?view=scan', icon: 'bi-camera-fill', label: 'Pindai Dokumen' },
     { path: '/pdf-compressor', icon: 'bi-file-zip', label: 'Kompresor PDF' },
     { path: '/profile', icon: 'bi-person-fill', label: 'Profil' },
   ]
@@ -113,26 +114,32 @@ export default function Sidebar() {
 
         {/* Nav — overflow-y-auto so it scrolls if items ever exceed screen height */}
         <nav className="flex-1 overflow-y-auto p-3 space-y-1 mt-2">
-          {menuItems.map((item) => (
-            <Link
-              key={item.path}
-              to={item.path}
-              onClick={() => setMobileOpen(false)}
-              aria-label={item.label}
-              title={collapsed ? item.label : undefined}
-              className={`
-                flex items-center p-3 rounded-xl transition min-h-[44px]
-                ${collapsed ? 'justify-center' : 'px-4'}
-                ${location.pathname === item.path
-                  ? 'bg-purple-50 text-[#4B164C] font-medium'
-                  : 'text-slate-600 hover:bg-slate-100'
-                }
-              `}
-            >
-              <i className={`bi ${item.icon} text-lg flex-shrink-0`}></i>
-              {!collapsed && <span className="ml-4 menu-text font-medium text-sm">{item.label}</span>}
-            </Link>
-          ))}
+          {menuItems.map((item) => {
+            const isItemActive = item.path.includes('?')
+              ? (location.pathname + location.search) === item.path
+              : location.pathname === item.path && !location.search.includes('view=scan');
+
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                onClick={() => setMobileOpen(false)}
+                aria-label={item.label}
+                title={collapsed ? item.label : undefined}
+                className={`
+                  flex items-center p-3 rounded-xl transition min-h-[44px]
+                  ${collapsed ? 'justify-center' : 'px-4'}
+                  ${isItemActive
+                    ? 'bg-purple-50 text-[#4B164C] font-medium'
+                    : 'text-slate-600 hover:bg-slate-100'
+                  }
+                `}
+              >
+                <i className={`bi ${item.icon} text-lg flex-shrink-0`}></i>
+                {!collapsed && <span className="ml-4 menu-text font-medium text-sm">{item.label}</span>}
+              </Link>
+            );
+          })}
 
           <div className="mt-4 border-t border-gray-200 pt-4">
             <button

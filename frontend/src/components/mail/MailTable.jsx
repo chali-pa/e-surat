@@ -111,9 +111,9 @@ export default function MailTable({
   // ── Loading state ──────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="text-center py-16 text-slate-400">
-        <i className="bi bi-arrow-repeat text-4xl mb-3 block animate-spin" />
-        Memuat data...
+      <div className="h-full flex flex-col items-center justify-center text-slate-400">
+        <i className="bi bi-arrow-repeat text-4xl mb-3 block animate-spin text-[#4B164C]" />
+        <span>Memuat data...</span>
       </div>
     );
   }
@@ -121,17 +121,17 @@ export default function MailTable({
   // ── Empty state ────────────────────────────────────────────────────────
   if (surats.length === 0) {
     return (
-      <div className="text-center py-16 text-slate-400">
+      <div className="h-full flex flex-col items-center justify-center text-slate-400">
         <i className="bi bi-inbox text-4xl block mb-3 text-slate-300" />
-        <p className="text-sm">Tidak ada data surat {type === 'incoming' ? 'masuk' : 'keluar'}</p>
+        <p className="text-sm font-medium">Tidak ada data surat {type === 'incoming' ? 'masuk' : 'keluar'}</p>
       </div>
     );
   }
 
   return (
-    <>
+    <div className="h-full flex flex-col">
       {/* ── Mobile card list — shown below sm breakpoint only ────────── */}
-      <div className="sm:hidden divide-y divide-gray-50">
+      <div className="sm:hidden flex-1 divide-y divide-gray-50 overflow-y-auto">
         {surats.map((surat, index) => (
           <div key={surat.id} className="px-4 py-4 space-y-3">
             {/* Card header: index badge + letter number + date */}
@@ -191,11 +191,11 @@ export default function MailTable({
       </div>
 
       {/* ── Desktop/tablet table — shown sm and above ─────────────────
-           Wrapped in overflow-x-auto so wide tables scroll horizontally
-           within the card rather than pushing the page layout.           */}
-      <div className="hidden sm:block overflow-x-auto">
-        <table className="w-full min-w-[820px]">
-          <thead>
+           Wrapped in overflow-auto so wide tables scroll horizontally
+           and vertically within the card rather than pushing the page layout. */}
+      <div className="hidden sm:block flex-1 overflow-auto">
+        <table className="w-full min-w-[820px] h-full">
+          <thead className="sticky top-0 bg-[#FAF7FC] z-10 shadow-[inset_0_-1px_0_rgba(0,0,0,0.05)]">
             <tr className="bg-[#FAF7FC]">
               <th className="w-12 text-center py-3 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">No</th>
               <th className="py-3 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-left">Nomor Surat</th>
@@ -285,6 +285,6 @@ export default function MailTable({
           </tbody>
         </table>
       </div>
-    </>
+    </div>
   );
 }

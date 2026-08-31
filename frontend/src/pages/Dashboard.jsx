@@ -659,21 +659,24 @@ export default function Dashboard() {
 
       {/* ── Main Content ─────────────────────────────────────────────── */}
       {view === 'list' ? (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col min-h-[420px] max-h-[calc(100vh-16rem)]">
 
-          {/* Toolbar */}
-          <div className="flex flex-col gap-3 px-4 sm:px-6 py-4 border-b border-gray-100">
-            {/* Row 1: count + month picker + action buttons */}
+          {/* ── Toolbar ────────────────────────────────────────────── */}
+          <div className="flex-none px-4 sm:px-6 py-4 border-b border-gray-100 flex flex-col gap-3">
+
+            {/* Row 1: badges · scanner · month-picker · [spacer] · export actions
+                Wraps naturally on narrow viewports — each pill is a self-contained
+                flex item with its own relative positioning for its dropdown. */}
             <div className="flex flex-wrap items-center gap-2">
 
               {/* Total badge */}
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Total</span>
-              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-purple-50 text-[#4B164C] border border-purple-100">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-400 shrink-0">Total</span>
+              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-purple-50 text-[#4B164C] border border-purple-100 shrink-0">
                 {totalCount} Surat
               </span>
 
-              {/* ── Scanner Settings ── */}
-              <div className="relative" data-scanner-settings>
+              {/* ── Scanner settings pill ─────────────────────────── */}
+              <div className="relative shrink-0" data-scanner-settings>
                 <button
                   type="button"
                   onClick={() => setScannerSettingsOpen((v) => !v)}
@@ -691,54 +694,40 @@ export default function Dashboard() {
                   title="Pengaturan Scanner"
                 >
                   <i className={`bi ${scannerMode === 'mfp' ? 'bi-printer' : 'bi-camera'} text-sm`} />
-                  <span>
+                  <span className="max-w-[140px] truncate">
                     {scannerMode === 'mfp'
                       ? `MFP: ${scanIdentifier || 'Belum diatur'}`
                       : 'Scanner: Kamera'}
                   </span>
-                  <i className={`bi bi-chevron-${scannerSettingsOpen ? 'up' : 'down'} text-[10px]`} />
+                  <i className={`bi bi-chevron-${scannerSettingsOpen ? 'up' : 'down'} text-[10px] shrink-0`} />
                 </button>
 
                 {scannerSettingsOpen && (
                   <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-2xl shadow-xl p-4 w-72 max-w-[calc(100vw-2rem)] text-slate-800">
                     <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Pengaturan Scanner</h4>
-                    
+
                     {/* Mode selector */}
                     <div className="space-y-2 mb-4">
                       <label className="block text-xs font-semibold text-slate-500">Mode Pemindai</label>
                       <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl">
                         <button
                           type="button"
-                          onClick={() => {
-                            setScannerMode('camera');
-                            localStorage.setItem('scannerMode', 'camera');
-                          }}
-                          className={`py-1.5 text-xs font-bold rounded-lg transition ${
-                            scannerMode === 'camera'
-                              ? 'bg-white text-[#4B164C] shadow-sm'
-                              : 'text-slate-500 hover:text-slate-800'
-                          }`}
+                          onClick={() => { setScannerMode('camera'); localStorage.setItem('scannerMode', 'camera'); }}
+                          className={`py-1.5 text-xs font-bold rounded-lg transition ${scannerMode === 'camera' ? 'bg-white text-[#4B164C] shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
                         >
                           Kamera
                         </button>
                         <button
                           type="button"
-                          onClick={() => {
-                            setScannerMode('mfp');
-                            localStorage.setItem('scannerMode', 'mfp');
-                          }}
-                          className={`py-1.5 text-xs font-bold rounded-lg transition ${
-                            scannerMode === 'mfp'
-                              ? 'bg-white text-[#4B164C] shadow-sm'
-                              : 'text-slate-500 hover:text-slate-800'
-                          }`}
+                          onClick={() => { setScannerMode('mfp'); localStorage.setItem('scannerMode', 'mfp'); }}
+                          className={`py-1.5 text-xs font-bold rounded-lg transition ${scannerMode === 'mfp' ? 'bg-white text-[#4B164C] shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
                         >
                           Scanner MFP
                         </button>
                       </div>
                     </div>
 
-                    {/* MFP Configuration */}
+                    {/* MFP identifier + status */}
                     {scannerMode === 'mfp' && (
                       <div className="space-y-3 pt-2 border-t border-slate-100">
                         <div className="space-y-1">
@@ -760,26 +749,18 @@ export default function Dashboard() {
                             Nama folder atau awalan nama file scan yang diatur di printer MFP Anda.
                           </p>
                         </div>
-
-                        {/* Status bar */}
                         <div className="flex items-center gap-2 pt-1 text-xs">
-                          <span className={`w-2.5 h-2.5 rounded-full ${
-                            sseStatus === 'connected'
-                              ? 'bg-emerald-500 animate-pulse'
-                              : sseStatus === 'connecting'
-                              ? 'bg-amber-500 animate-pulse'
-                              : sseStatus === 'error'
-                              ? 'bg-red-500'
-                              : 'bg-slate-300'
+                          <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                            sseStatus === 'connected'   ? 'bg-emerald-500 animate-pulse' :
+                            sseStatus === 'connecting'  ? 'bg-amber-500 animate-pulse'  :
+                            sseStatus === 'error'       ? 'bg-red-500'                  :
+                                                          'bg-slate-300'
                           }`} />
                           <span className="font-medium text-slate-600">
-                            {sseStatus === 'connected'
-                              ? 'Terhubung, Menunggu Scan...'
-                              : sseStatus === 'connecting'
-                              ? 'Menghubungkan...'
-                              : sseStatus === 'error'
-                              ? 'Koneksi gagal'
-                              : 'Terputus'}
+                            {sseStatus === 'connected'  ? 'Terhubung, Menunggu Scan...' :
+                             sseStatus === 'connecting' ? 'Menghubungkan...'            :
+                             sseStatus === 'error'      ? 'Koneksi gagal'               :
+                                                          'Terputus'}
                           </span>
                         </div>
                       </div>
@@ -788,31 +769,30 @@ export default function Dashboard() {
                 )}
               </div>
 
-              {/* ── Month picker ──────────────────────────────────── */}
-              <div className="relative" data-month-picker>
+              {/* ── Month-filter pill ─────────────────────────────── */}
+              <div className="relative shrink-0" data-month-picker>
                 <button
                   type="button"
                   onClick={() => setMonthPickerOpen((v) => !v)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all min-h-[36px] ${
+                  aria-expanded={monthPickerOpen}
+                  aria-haspopup="listbox"
+                  title="Filter berdasarkan bulan"
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all min-h-[36px] min-w-[130px] ${
                     activeMonthSel
                       ? 'bg-[#4B164C] text-white border-[#4B164C]'
                       : 'bg-white text-slate-500 border-slate-200 hover:border-[#DD88CF] hover:text-[#4B164C]'
                   }`}
-                  title="Pilih bulan"
-                  aria-expanded={monthPickerOpen}
-                  aria-haspopup="listbox"
                 >
-                  <i className="bi bi-calendar-month" />
-                  {monthPillLabel(activeMonthSel)}
-                  <i className={`bi bi-chevron-${monthPickerOpen ? 'up' : 'down'} text-[10px]`} />
+                  <i className="bi bi-calendar-month shrink-0" />
+                  <span className="truncate">{monthPillLabel(activeMonthSel)}</span>
+                  <i className={`bi bi-chevron-${monthPickerOpen ? 'up' : 'down'} text-[10px] shrink-0`} />
                 </button>
 
                 {monthPickerOpen && (
                   <div
-                    className="absolute left-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-2xl shadow-xl p-2 w-56 sm:w-60 max-w-[calc(100vw-2rem)]"
                     role="listbox"
+                    className="absolute left-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-2xl shadow-xl p-2 w-56 max-w-[calc(100vw-2rem)]"
                   >
-                    {/* Show all / current month shortcuts */}
                     <div className="border-b border-gray-100 pb-1.5 mb-1.5 space-y-0.5">
                       <button
                         type="button"
@@ -829,7 +809,6 @@ export default function Dashboard() {
                         <i className="bi bi-calendar3" /> Semua Bulan
                       </button>
                     </div>
-                    {/* Scrollable month list */}
                     <div className="max-h-48 overflow-y-auto space-y-0.5 pr-1">
                       {monthOptions.map((opt) => {
                         const isActive = activeMonthSel?.year === opt.year && activeMonthSel?.month === opt.month;
@@ -856,60 +835,44 @@ export default function Dashboard() {
                 )}
               </div>
 
-              {/* Spacer pushes action buttons to the right on wider screens */}
+              {/* Spacer — pushes export actions to the right on wider screens */}
               <span className="flex-1" />
 
-              {/* ── Monthly PDF button (shown only when a month is selected) ── */}
+              {/* ── Export actions ────────────────────────────────── */}
               {activeMonthSel && (
                 <button
                   type="button"
                   onClick={handleDownloadMonthlyPdf}
                   disabled={loadingPdf || totalCount === 0}
                   title={totalCount === 0 ? 'Tidak ada data untuk bulan ini' : `Unduh laporan PDF ${monthPillLabel(activeMonthSel)}`}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border border-red-200 bg-red-50 text-red-600 hover:bg-red-500 hover:text-white hover:border-red-500 disabled:opacity-40 disabled:cursor-not-allowed transition min-h-[36px]"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border border-red-200 bg-red-50 text-red-600 hover:bg-red-500 hover:text-white hover:border-red-500 disabled:opacity-40 disabled:cursor-not-allowed transition min-h-[36px] shrink-0"
                 >
-                  {loadingPdf ? (
-                    <svg className="animate-spin w-3 h-3 flex-shrink-0" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                  ) : (
-                    <i className="bi bi-file-earmark-pdf flex-shrink-0" />
-                  )}
-                  {/* Label hidden on very small screens — icon + title attr is sufficient */}
-                  <span className="hidden sm:inline">
-                    {loadingPdf ? 'Membuat…' : 'Laporan PDF'}
-                  </span>
+                  {loadingPdf
+                    ? <svg className="animate-spin w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                    : <i className="bi bi-file-earmark-pdf shrink-0" />}
+                  <span className="hidden sm:inline">{loadingPdf ? 'Membuat…' : 'Laporan PDF'}</span>
                 </button>
               )}
 
-              {/* ── Xlsx Export button (incoming tab only) ─────────── */}
               {activeTab === 'incoming' && (
                 <button
                   type="button"
                   onClick={handleExportXlsx}
                   disabled={loadingExport || totalCount === 0}
-                  title={totalCount === 0 ? 'Tidak ada data untuk diekspor' : `Ekspor data ke Excel${activeMonthSel ? ` (${monthPillLabel(activeMonthSel)})` : ' (semua)'}`}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white hover:border-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed transition min-h-[36px]"
+                  title={totalCount === 0 ? 'Tidak ada data untuk diekspor' : 'Export data ke Excel'}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white hover:border-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed transition min-h-[36px] shrink-0"
                 >
-                  {loadingExport ? (
-                    <svg className="animate-spin w-3 h-3 flex-shrink-0" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                  ) : (
-                    <i className="bi bi-file-earmark-excel flex-shrink-0" />
-                  )}
-                  <span className="hidden sm:inline">
-                    {loadingExport ? 'Mengekspor…' : 'Ekspor Excel'}
-                  </span>
+                  {loadingExport
+                    ? <svg className="animate-spin w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                    : <i className="bi bi-file-earmark-excel shrink-0" />}
+                  <span className="hidden sm:inline">Excel</span>
                 </button>
               )}
             </div>
 
-            {/* Row 2: Search — full-width on mobile, fixed width on sm+ */}
-            <div className="relative w-full sm:w-72 self-end">
-              <i className="bi bi-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
+            {/* Row 2: search — full-width on mobile, right-aligned fixed width on sm+ */}
+            <div className="relative w-full sm:w-72 sm:self-end">
+              <i className="bi bi-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none" />
               <input
                 type="search"
                 value={searchTerm}
@@ -920,19 +883,23 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Table — MailTable's own overflow-x-auto wrapper handles horizontal scroll */}
-          <MailTable
-            type={activeTab}
-            surats={filteredLetters}
-            loading={loadingList}
-            currentMonthOnly={!!activeMonthSel}
-            onView={handleView}
-            onPreview={handlePreview}
-            onDownload={handleDownloadFile}
-            onPrint={handlePrint}
-            onEdit={handleEdit}
-            onDelete={handleDeleteClick}
-          />
+          {/* ── Table area — overflow-hidden here (not on card root) clips the
+               table cleanly at the card's bottom rounded corner while leaving
+               the toolbar dropdowns free to overflow above. ──────────────── */}
+          <div className="flex-1 overflow-hidden rounded-b-2xl">
+            <MailTable
+              type={activeTab}
+              surats={filteredLetters}
+              loading={loadingList}
+              currentMonthOnly={!!activeMonthSel}
+              onView={handleView}
+              onPreview={handlePreview}
+              onDownload={handleDownloadFile}
+              onPrint={handlePrint}
+              onEdit={handleEdit}
+              onDelete={handleDeleteClick}
+            />
+          </div>
         </div>
       ) : view === 'scan' ? (
         <DocumentScanner

@@ -122,7 +122,7 @@ export async function ensureUserSpreadsheet(
 /**
  * Append incoming letter row to user's spreadsheet
  */
-export async function appendIncomingLetterToSheet(userId: number, surat: Surat): Promise<number> {
+export async function appendIncomingLetterToSheet(userId: number, surat: Surat): Promise<{ rowId: number; sheetRowNumber: number }> {
   try {
     const sheetId = await ensureUserSpreadsheet(userId, 'incoming');
     const auth = await getOAuth2ClientForUser(userId);
@@ -130,18 +130,22 @@ export async function appendIncomingLetterToSheet(userId: number, surat: Surat):
 
     // Read column A to find maximum ID to prevent duplicates
     let maxId = 0;
+    let existingRowCount = 1;
     try {
       const getRes = await sheets.spreadsheets.values.get({
         spreadsheetId: sheetId,
         range: 'Data!A:A',
       });
-      if (getRes.data.values && getRes.data.values.length > 1) {
-        const ids = getRes.data.values
-          .slice(1)
-          .map(r => parseInt(r[0]))
-          .filter(id => !isNaN(id));
-        if (ids.length > 0) {
-          maxId = Math.max(...ids);
+      if (getRes.data.values) {
+        existingRowCount = getRes.data.values.length;
+        if (existingRowCount > 1) {
+          const ids = getRes.data.values
+            .slice(1)
+            .map(r => parseInt(String(r[0] || '').trim()))
+            .filter(id => !isNaN(id));
+          if (ids.length > 0) {
+            maxId = Math.max(...ids);
+          }
         }
       }
     } catch (e) {
@@ -163,7 +167,7 @@ export async function appendIncomingLetterToSheet(userId: number, surat: Surat):
       createdAt,
     ];
 
-    const response = await sheets.spreadsheets.values.append({
+    await sheets.spreadsheets.values.append({
       spreadsheetId: sheetId,
       range: 'Data!A:I',
       valueInputOption: 'USER_ENTERED',
@@ -172,8 +176,9 @@ export async function appendIncomingLetterToSheet(userId: number, surat: Surat):
       },
     });
 
-    console.log(`[GoogleSheets] Appended incoming letter for user ${userId} to sheet ${sheetId} with ID: ${rowId}`);
-    return rowId;
+    const sheetRowNumber = existingRowCount + 1;
+    console.log(`[GoogleSheets] Appended incoming letter for user ${userId} to sheet ${sheetId} with ID: ${rowId} at row: ${sheetRowNumber}`);
+    return { rowId, sheetRowNumber };
   } catch (error: any) {
     console.error(`[GoogleSheets] Failed to append incoming letter for user ${userId}:`, error);
     if (isGoogleErrorInvalidGrant(error)) {
@@ -186,7 +191,7 @@ export async function appendIncomingLetterToSheet(userId: number, surat: Surat):
 /**
  * Append outgoing letter row to user's spreadsheet
  */
-export async function appendOutgoingLetterToSheet(userId: number, surat: SuratKeluar): Promise<number> {
+export async function appendOutgoingLetterToSheet(userId: number, surat: SuratKeluar): Promise<{ rowId: number; sheetRowNumber: number }> {
   try {
     const sheetId = await ensureUserSpreadsheet(userId, 'outgoing');
     const auth = await getOAuth2ClientForUser(userId);
@@ -194,18 +199,22 @@ export async function appendOutgoingLetterToSheet(userId: number, surat: SuratKe
 
     // Read column A to find maximum ID to prevent duplicates
     let maxId = 0;
+    let existingRowCount = 1;
     try {
       const getRes = await sheets.spreadsheets.values.get({
         spreadsheetId: sheetId,
         range: 'Data!A:A',
       });
-      if (getRes.data.values && getRes.data.values.length > 1) {
-        const ids = getRes.data.values
-          .slice(1)
-          .map(r => parseInt(r[0]))
-          .filter(id => !isNaN(id));
-        if (ids.length > 0) {
-          maxId = Math.max(...ids);
+      if (getRes.data.values) {
+        existingRowCount = getRes.data.values.length;
+        if (existingRowCount > 1) {
+          const ids = getRes.data.values
+            .slice(1)
+            .map(r => parseInt(String(r[0] || '').trim()))
+            .filter(id => !isNaN(id));
+          if (ids.length > 0) {
+            maxId = Math.max(...ids);
+          }
         }
       }
     } catch (e) {
@@ -227,7 +236,7 @@ export async function appendOutgoingLetterToSheet(userId: number, surat: SuratKe
       createdAt,
     ];
 
-    const response = await sheets.spreadsheets.values.append({
+    await sheets.spreadsheets.values.append({
       spreadsheetId: sheetId,
       range: 'Data!A:I',
       valueInputOption: 'USER_ENTERED',
@@ -236,8 +245,9 @@ export async function appendOutgoingLetterToSheet(userId: number, surat: SuratKe
       },
     });
 
-    console.log(`[GoogleSheets] Appended outgoing letter for user ${userId} to sheet ${sheetId} with ID: ${rowId}`);
-    return rowId;
+    const sheetRowNumber = existingRowCount + 1;
+    console.log(`[GoogleSheets] Appended outgoing letter for user ${userId} to sheet ${sheetId} with ID: ${rowId} at row: ${sheetRowNumber}`);
+    return { rowId, sheetRowNumber };
   } catch (error: any) {
     console.error(`[GoogleSheets] Failed to append outgoing letter for user ${userId}:`, error);
     if (isGoogleErrorInvalidGrant(error)) {
@@ -463,8 +473,12 @@ export async function findRowById(
     const rows = res.data.values;
     if (!rows) return null;
     for (let i = 0; i < rows.length; i++) {
-      if (rows[i] && parseInt(rows[i][0]) === id) {
-        return i;
+      if (rows[i]) {
+        const valStr = String(rows[i][0] || '').trim();
+        const parsed = parseInt(valStr, 10);
+        if (!isNaN(parsed) && parsed === id) {
+          return i;
+        }
       }
     }
     return null;
@@ -475,25 +489,71 @@ export async function findRowById(
 }
 
 /**
+ * Find row index using stored 1-based sheet row number (verifies ID at that row)
+ */
+export async function verifyRowBySheetRow(
+  sheets: sheets_v4.Sheets,
+  spreadsheetId: string,
+  sheetRowNumber: number,
+  expectedId: number
+): Promise<number | null> {
+  if (!sheetRowNumber || sheetRowNumber < 2) return null;
+  try {
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `Data!A${sheetRowNumber}`,
+    });
+    const val = res.data.values?.[0]?.[0];
+    if (val !== undefined && val !== null) {
+      const parsed = parseInt(String(val).trim(), 10);
+      if (!isNaN(parsed) && parsed === expectedId) {
+        return sheetRowNumber - 1; // 0-based index
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Update incoming letter in sheet
  */
-export async function updateIncomingLetterInSheet(userId: number, rowNumber: number, surat: Surat): Promise<void> {
+export async function updateIncomingLetterInSheet(
+  userId: number,
+  letterId: number,
+  surat: Surat,
+  storedSheetRow?: number,
+  driveId?: string
+): Promise<void> {
   try {
     const sheetId = await ensureUserSpreadsheet(userId, 'incoming');
     const auth = await getOAuth2ClientForUser(userId);
     const sheets = google.sheets({ version: 'v4', auth });
 
-    const rowIndex = await findRowById(sheets, sheetId, rowNumber)
-      || (surat.google_drive_id ? await findRowByDriveId(sheets, sheetId, surat.google_drive_id) : null);
+    // 1. Try finding row by ID in Column A
+    let rowIndex = await findRowById(sheets, sheetId, letterId);
 
+    // 2. Try stored sheet row verification
+    if (rowIndex === null && storedSheetRow) {
+      rowIndex = await verifyRowBySheetRow(sheets, sheetId, storedSheetRow, letterId);
+    }
+
+    // 3. Try Drive ID in Column G
+    const searchDriveId = driveId || surat.google_drive_id;
+    if (rowIndex === null && searchDriveId) {
+      rowIndex = await findRowByDriveId(sheets, sheetId, searchDriveId);
+    }
+
+    // 4. Graceful fallback: row deleted or missing, re-append
     if (rowIndex === null) {
-      console.warn(`[GoogleSheets] Row not found for update, appending instead`);
+      console.warn(`[GoogleSheets] Row for letter ID ${letterId} not found in sheet, re-appending`);
       await appendIncomingLetterToSheet(userId, surat);
       return;
     }
 
     const rowValues = [
-      rowNumber,
+      letterId,
       surat.nomor_surat,
       surat.nama_pengirim,
       surat.nama_surat,
@@ -504,14 +564,17 @@ export async function updateIncomingLetterInSheet(userId: number, rowNumber: num
       surat.updated_at || new Date().toISOString(),
     ];
 
+    const targetRowNumber = rowIndex + 1;
     await sheets.spreadsheets.values.update({
       spreadsheetId: sheetId,
-      range: `Data!A${rowIndex + 1}:I${rowIndex + 1}`,
+      range: `Data!A${targetRowNumber}:I${targetRowNumber}`,
       valueInputOption: 'USER_ENTERED',
       requestBody: { values: [rowValues] },
     });
+
+    console.log(`[GoogleSheets] Successfully updated incoming letter ID ${letterId} at row ${targetRowNumber}`);
   } catch (error: any) {
-    console.error(`[GoogleSheets] Update failed for row ${rowNumber}:`, error);
+    console.error(`[GoogleSheets] Update failed for incoming letter ID ${letterId}:`, error);
     if (isGoogleErrorInvalidGrant(error)) {
       throw new GoogleReconnectRequiredError();
     }
@@ -522,23 +585,41 @@ export async function updateIncomingLetterInSheet(userId: number, rowNumber: num
 /**
  * Update outgoing letter in sheet
  */
-export async function updateOutgoingLetterInSheet(userId: number, rowNumber: number, surat: SuratKeluar): Promise<void> {
+export async function updateOutgoingLetterInSheet(
+  userId: number,
+  letterId: number,
+  surat: SuratKeluar,
+  storedSheetRow?: number,
+  driveId?: string
+): Promise<void> {
   try {
     const sheetId = await ensureUserSpreadsheet(userId, 'outgoing');
     const auth = await getOAuth2ClientForUser(userId);
     const sheets = google.sheets({ version: 'v4', auth });
 
-    const rowIndex = await findRowById(sheets, sheetId, rowNumber)
-      || (surat.google_drive_id ? await findRowByDriveId(sheets, sheetId, surat.google_drive_id) : null);
+    // 1. Try finding row by ID in Column A
+    let rowIndex = await findRowById(sheets, sheetId, letterId);
 
+    // 2. Try stored sheet row verification
+    if (rowIndex === null && storedSheetRow) {
+      rowIndex = await verifyRowBySheetRow(sheets, sheetId, storedSheetRow, letterId);
+    }
+
+    // 3. Try Drive ID in Column G
+    const searchDriveId = driveId || surat.google_drive_id;
+    if (rowIndex === null && searchDriveId) {
+      rowIndex = await findRowByDriveId(sheets, sheetId, searchDriveId);
+    }
+
+    // 4. Graceful fallback: row deleted or missing, re-append
     if (rowIndex === null) {
-      console.warn(`[GoogleSheets] Row not found for update, appending instead`);
+      console.warn(`[GoogleSheets] Row for outgoing letter ID ${letterId} not found in sheet, re-appending`);
       await appendOutgoingLetterToSheet(userId, surat);
       return;
     }
 
     const rowValues = [
-      rowNumber,
+      letterId,
       surat.nomor_surat,
       surat.nama_penerima,
       surat.nama_surat,
@@ -549,14 +630,17 @@ export async function updateOutgoingLetterInSheet(userId: number, rowNumber: num
       surat.updated_at || new Date().toISOString(),
     ];
 
+    const targetRowNumber = rowIndex + 1;
     await sheets.spreadsheets.values.update({
       spreadsheetId: sheetId,
-      range: `Data!A${rowIndex + 1}:I${rowIndex + 1}`,
+      range: `Data!A${targetRowNumber}:I${targetRowNumber}`,
       valueInputOption: 'USER_ENTERED',
       requestBody: { values: [rowValues] },
     });
+
+    console.log(`[GoogleSheets] Successfully updated outgoing letter ID ${letterId} at row ${targetRowNumber}`);
   } catch (error: any) {
-    console.error(`[GoogleSheets] Update outgoing failed for row ${rowNumber}:`, error);
+    console.error(`[GoogleSheets] Update outgoing failed for letter ID ${letterId}:`, error);
     if (isGoogleErrorInvalidGrant(error)) {
       throw new GoogleReconnectRequiredError();
     }
@@ -565,23 +649,34 @@ export async function updateOutgoingLetterInSheet(userId: number, rowNumber: num
 }
 
 /**
- * Delete letter row from sheet and file from drive
+ * Delete incoming letter row from sheet
  */
-export async function deleteIncomingLetterRow(userId: number, rowNumber: number, fileId?: string): Promise<void> {
+export async function deleteIncomingLetterRow(
+  userId: number,
+  letterId: number,
+  fileId?: string,
+  storedSheetRow?: number
+): Promise<void> {
   try {
-    if (fileId) {
-      await deleteUserFile(userId, fileId);
-    }
-
     const sheetId = await ensureUserSpreadsheet(userId, 'incoming');
     const auth = await getOAuth2ClientForUser(userId);
     const sheets = google.sheets({ version: 'v4', auth });
 
-    const rowIndex = await findRowById(sheets, sheetId, rowNumber)
-      || (fileId ? await findRowByDriveId(sheets, sheetId, fileId) : null);
+    // 1. Try finding row by ID in Column A
+    let rowIndex = await findRowById(sheets, sheetId, letterId);
+
+    // 2. Try stored sheet row verification
+    if (rowIndex === null && storedSheetRow) {
+      rowIndex = await verifyRowBySheetRow(sheets, sheetId, storedSheetRow, letterId);
+    }
+
+    // 3. Try Drive ID in Column G
+    if (rowIndex === null && fileId) {
+      rowIndex = await findRowByDriveId(sheets, sheetId, fileId);
+    }
 
     if (rowIndex === null) {
-      console.warn(`[GoogleSheets] Row with ID ${rowNumber} not found in sheet ${sheetId} for deletion`);
+      console.warn(`[GoogleSheets] Row with ID ${letterId} not found in sheet ${sheetId} for deletion`);
       return;
     }
 
@@ -607,9 +702,9 @@ export async function deleteIncomingLetterRow(userId: number, rowNumber: number,
         ],
       },
     });
-    console.log(`[GoogleSheets] Deleted row index ${rowIndex} from sheet ${sheetId}`);
+    console.log(`[GoogleSheets] Deleted row index ${rowIndex} (row ${rowIndex + 1}) from incoming sheet ${sheetId}`);
   } catch (error: any) {
-    console.error(`[GoogleSheets] Delete incoming failed for row ${rowNumber}:`, error);
+    console.error(`[GoogleSheets] Delete incoming failed for letter ID ${letterId}:`, error);
     if (isGoogleErrorInvalidGrant(error)) {
       throw new GoogleReconnectRequiredError();
     }
@@ -618,23 +713,34 @@ export async function deleteIncomingLetterRow(userId: number, rowNumber: number,
 }
 
 /**
- * Delete outgoing letter row from sheet and file from drive
+ * Delete outgoing letter row from sheet
  */
-export async function deleteOutgoingLetterRow(userId: number, rowNumber: number, fileId?: string): Promise<void> {
+export async function deleteOutgoingLetterRow(
+  userId: number,
+  letterId: number,
+  fileId?: string,
+  storedSheetRow?: number
+): Promise<void> {
   try {
-    if (fileId) {
-      await deleteUserFile(userId, fileId);
-    }
-
     const sheetId = await ensureUserSpreadsheet(userId, 'outgoing');
     const auth = await getOAuth2ClientForUser(userId);
     const sheets = google.sheets({ version: 'v4', auth });
 
-    const rowIndex = await findRowById(sheets, sheetId, rowNumber)
-      || (fileId ? await findRowByDriveId(sheets, sheetId, fileId) : null);
+    // 1. Try finding row by ID in Column A
+    let rowIndex = await findRowById(sheets, sheetId, letterId);
+
+    // 2. Try stored sheet row verification
+    if (rowIndex === null && storedSheetRow) {
+      rowIndex = await verifyRowBySheetRow(sheets, sheetId, storedSheetRow, letterId);
+    }
+
+    // 3. Try Drive ID in Column G
+    if (rowIndex === null && fileId) {
+      rowIndex = await findRowByDriveId(sheets, sheetId, fileId);
+    }
 
     if (rowIndex === null) {
-      console.warn(`[GoogleSheets] Row with ID ${rowNumber} not found in sheet ${sheetId} for deletion`);
+      console.warn(`[GoogleSheets] Outgoing row with ID ${letterId} not found in sheet ${sheetId} for deletion`);
       return;
     }
 
@@ -660,9 +766,9 @@ export async function deleteOutgoingLetterRow(userId: number, rowNumber: number,
         ],
       },
     });
-    console.log(`[GoogleSheets] Deleted row index ${rowIndex} from sheet ${sheetId}`);
+    console.log(`[GoogleSheets] Deleted row index ${rowIndex} (row ${rowIndex + 1}) from outgoing sheet ${sheetId}`);
   } catch (error: any) {
-    console.error(`[GoogleSheets] Delete outgoing failed for row ${rowNumber}:`, error);
+    console.error(`[GoogleSheets] Delete outgoing failed for letter ID ${letterId}:`, error);
     if (isGoogleErrorInvalidGrant(error)) {
       throw new GoogleReconnectRequiredError();
     }

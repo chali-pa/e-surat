@@ -162,8 +162,7 @@ export default function PdfCompressorPage() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  // ── Render ───────────────────────────────────────────────────────────
-
+  // ── Render 
   const triggerLabel = thresholdInfo?.trigger_label ?? '8 MB';
 
   return (
@@ -352,12 +351,11 @@ export default function PdfCompressorPage() {
             </div>
           )}
 
-          {/* Action buttons — flex-wrap so "Kompres File Lain" falls below on very narrow screens */}
-          <div className="flex flex-wrap items-center gap-3 pt-1">
+              <div className="flex flex-wrap items-center gap-3 pt-1">
             {!result ? (
               /* Before compression */
               <>
-                <button
+                <button 
                   type="button"
                   onClick={handleCompress}
                   disabled={!file || loading}

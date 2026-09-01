@@ -235,9 +235,10 @@ export const store = async (req: AuthRequest, res: Response) => {
 
     console.log('Appending letter record to user Google Sheet...');
     try {
-      const uniqueRowId = await appendIncomingLetterToSheet(userId, surat);
-      surat.id = uniqueRowId;
-      console.log('Google Sheet append successful with ID:', uniqueRowId);
+      const { rowId, sheetRowNumber } = await appendIncomingLetterToSheet(userId, surat);
+      surat.id = rowId;
+      surat.google_sheet_row = sheetRowNumber;
+      console.log('Google Sheet append successful with ID:', rowId, 'row:', sheetRowNumber);
 
       // Save to local DB record as well
       try {
@@ -423,11 +424,12 @@ export const update = async (req: AuthRequest, res: Response) => {
       tanggal_buat,
       google_drive_id: googleDriveId,
       file_path: logicalPath,
+      google_sheet_row: oldSurat.google_sheet_row,
       folder_id: folder_id ? parseInt(folder_id) : undefined,
       updated_at: new Date().toISOString(),
     };
 
-    await updateIncomingLetterInSheet(userId, rowNumber, surat);
+    await updateIncomingLetterInSheet(userId, rowNumber, surat, oldSurat.google_sheet_row, oldSurat.google_drive_id);
 
     try {
       await updateIncomingLetterRecord(rowNumber, userId, surat);
@@ -498,7 +500,7 @@ export const destroy = async (req: AuthRequest, res: Response) => {
     }
 
     // 2. Drive deletion succeeded or file was already missing (404) -> Clean up Sheets & local DB
-    await deleteIncomingLetterRow(userId, rowNumber, undefined);
+    await deleteIncomingLetterRow(userId, rowNumber, driveFileId || undefined, surat.google_sheet_row);
 
     try {
       await deleteIncomingLetterRecord(userId, rowNumber);

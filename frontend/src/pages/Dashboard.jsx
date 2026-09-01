@@ -6,6 +6,7 @@ import MailTable from '../components/mail/MailTable';
 import MailForm from '../components/mail/MailForm';
 import DeleteConfirmDialog from '../components/mail/DeleteConfirmDialog';
 import DocumentScanner from '../components/mail/DocumentScanner';
+import CamScannerModal from '../components/mail/CamScannerModal';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
 
@@ -61,6 +62,17 @@ export default function Dashboard() {
   const [view, setView]             = useState('list'); // 'list' | 'create' | 'edit' | 'scan'
   const [editingId, setEditingId]   = useState(null);
   const [scannedFile, setScannedFile] = useState(null);
+
+  // ── CamScanner modal state ───────────────────────────────────────────
+  const [camScannerOpen, setCamScannerOpen] = useState(false);
+
+  // ── Monthly PDF print state ──────────────────────────────────────────
+  const [printMonthlyModal, setPrintMonthlyModal] = useState({ show: false, blobUrl: null, title: '' });
+  const [loadingPrintPdf, setLoadingPrintPdf] = useState(false);
+
+  // ── Help tooltip state ───────────────────────────────────────────────
+  const [scanHelpOpen, setScanHelpOpen] = useState(false);
+  const [printHelpOpen, setPrintHelpOpen] = useState(false);
 
   // Dedicated Scanner MFP States
   const [scannerMode, setScannerMode] = useState('camera'); // 'camera' | 'mfp'
@@ -410,6 +422,53 @@ export default function Dashboard() {
     }
   };
 
+  // ─── Monthly PDF print (opens preview + autoPrint) ────────────────────
+
+  const handlePrintMonthlyPdf = async () => {
+    if (!activeMonthSel) return;
+    setLoadingPrintPdf(true);
+    try {
+      const endpoint = activeTab === 'incoming' ? '/api/surat/monthly-pdf' : '/api/surat-keluar/monthly-pdf';
+      const response = await api.get(
+        `${endpoint}?year=${activeMonthSel.year}&month=${activeMonthSel.month}`,
+        { responseType: 'blob' }
+      );
+      const blobUrl = URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+      const monthLabel = monthPillLabel(activeMonthSel);
+      const title = `Laporan ${activeTab === 'incoming' ? 'Surat Masuk' : 'Surat Keluar'} — ${monthLabel}`;
+
+      // Use a hidden iframe to print without app chrome
+      const existingIframe = document.getElementById('print-report-iframe');
+      if (existingIframe) document.body.removeChild(existingIframe);
+
+      const iframe = document.createElement('iframe');
+      iframe.id = 'print-report-iframe';
+      iframe.title = title;
+      iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+      iframe.src = blobUrl;
+      document.body.appendChild(iframe);
+
+      iframe.onload = () => {
+        setTimeout(() => {
+          try {
+            iframe.contentWindow.focus();
+            iframe.contentWindow.print();
+          } catch (e) {
+            // Fallback: open in new tab
+            window.open(blobUrl, '_blank', 'noopener,noreferrer');
+          }
+          // Revoke after a delay to allow print dialog to load the PDF
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+        }, 400);
+      };
+    } catch (err) {
+      const msg = err.response?.data?.message || err.response?.data?.error || 'Gagal membuat PDF laporan.';
+      setToast({ show: true, type: 'error', message: typeof msg === 'string' ? msg : 'Tidak ada data untuk bulan tersebut.' });
+    } finally {
+      setLoadingPrintPdf(false);
+    }
+  };
+
   // ─── Xlsx export (incoming only) ─────────────────────────────────────
 
   const handleExportXlsx = async () => {
@@ -526,6 +585,7 @@ export default function Dashboard() {
 
   const handleCapturedDocument = (file) => {
     setScannedFile(file);
+    setCamScannerOpen(false);
     navigateToView('create');
   };
 
@@ -533,6 +593,18 @@ export default function Dashboard() {
     setScannedFile(null);
     navigateToView('list');
   };
+
+  // ─── Help tooltip close-on-outside-click ──────────────────────────────
+
+  useEffect(() => {
+    if (!scanHelpOpen && !printHelpOpen) return;
+    const handler = (e) => {
+      if (!e.target.closest('[data-scan-help-btn]')) setScanHelpOpen(false);
+      if (!e.target.closest('[data-print-help-btn]')) setPrintHelpOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [scanHelpOpen, printHelpOpen]);
 
   const handleSaved = (type, action) => {
     navigateToView('list');
@@ -579,14 +651,55 @@ export default function Dashboard() {
         </div>
         {view === 'list' && (
           <div className="flex flex-wrap gap-2 self-start sm:self-auto">
+            {/* ── Scan dengan Kamera (CamScanner) ── */}
+            <div className="relative" data-scan-help-btn>
+              <button
+                type="button"
+                onClick={() => setCamScannerOpen(true)}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-slate-700 bg-white border border-slate-200 text-sm font-semibold shadow-sm transition hover:bg-purple-50 hover:border-purple-200 hover:text-[#4B164C] cursor-pointer min-h-[44px]"
+                title="Scan dokumen fisik dengan kamera dan ubah ke PDF"
+              >
+                <i className="bi bi-camera-fill text-[#4B164C]" />
+                <span className="hidden sm:inline">Scan Kamera</span>
+                <span className="sm:hidden">Scan</span>
+              </button>
+              {/* Help tooltip */}
+              <button
+                type="button"
+                onClick={() => setScanHelpOpen((v) => !v)}
+                className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-purple-100 text-[#4B164C] text-[10px] font-bold flex items-center justify-center border border-purple-200 hover:bg-purple-200 transition z-10"
+                aria-label="Bantuan Scan Kamera"
+                title="Bantuan"
+              >
+                ?
+              </button>
+              {scanHelpOpen && (
+                <div className="absolute left-0 top-full mt-2 z-50 w-72 bg-white rounded-2xl shadow-2xl border border-gray-100 p-4 text-slate-800">
+                  <h4 className="font-bold text-sm mb-2 flex items-center gap-2 text-[#4B164C]">
+                    <i className="bi bi-camera-fill" /> Scan dengan Kamera
+                  </h4>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Arahkan kamera ke dokumen fisik, ambil foto, sesuaikan sudut jika perlu, lalu pilih Warna atau Hitam-Putih. Anda bisa menambah beberapa halaman sebelum selesai. Dokumen akan tersimpan sebagai PDF dan langsung terlampir ke form surat.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* ── Pindai Dokumen (MFP Scanner) ── */}
             <button
+              type="button"
               onClick={handleScanButtonClick}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-slate-700 bg-white border border-slate-200 text-sm font-semibold shadow-sm transition hover:bg-slate-50 cursor-pointer min-h-[44px]"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-slate-700 bg-white border border-slate-200 text-sm font-semibold shadow-sm transition hover:bg-slate-50 cursor-pointer min-h-[44px]"
+              title={scannerMode === 'mfp' ? 'Pindai dengan printer MFP' : 'Pindai dengan kamera (mode lama)'}
             >
-              <i className={`bi ${scannerMode === 'mfp' ? 'bi-printer-fill' : 'bi-camera-fill'} text-[#4B164C]`} />
-              Pindai Dokumen
+              <i className={`bi ${scannerMode === 'mfp' ? 'bi-printer-fill' : 'bi-camera-video-fill'} text-[#4B164C]`} />
+              <span className="hidden sm:inline">{scannerMode === 'mfp' ? 'Scanner MFP' : 'Pindai Dokumen'}</span>
+              <span className="sm:hidden">MFP</span>
             </button>
+
+            {/* ── Tambah Surat ── */}
             <button
+              type="button"
               onClick={() => navigateToView('create')}
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm font-semibold shadow-sm transition hover:opacity-90 cursor-pointer min-h-[44px]"
               style={{ background: 'linear-gradient(135deg, #4B164C 0%, #DD88CF 100%)' }}
@@ -840,18 +953,56 @@ export default function Dashboard() {
 
               {/* ── Export actions ────────────────────────────────── */}
               {activeMonthSel && (
-                <button
-                  type="button"
-                  onClick={handleDownloadMonthlyPdf}
-                  disabled={loadingPdf || totalCount === 0}
-                  title={totalCount === 0 ? 'Tidak ada data untuk bulan ini' : `Unduh laporan PDF ${monthPillLabel(activeMonthSel)}`}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border border-red-200 bg-red-50 text-red-600 hover:bg-red-500 hover:text-white hover:border-red-500 disabled:opacity-40 disabled:cursor-not-allowed transition min-h-[36px] shrink-0"
-                >
-                  {loadingPdf
-                    ? <svg className="animate-spin w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
-                    : <i className="bi bi-file-earmark-pdf shrink-0" />}
-                  <span className="hidden sm:inline">{loadingPdf ? 'Membuat…' : 'Laporan PDF'}</span>
-                </button>
+                <>
+                  {/* Download PDF */}
+                  <button
+                    type="button"
+                    onClick={handleDownloadMonthlyPdf}
+                    disabled={loadingPdf || totalCount === 0}
+                    title={totalCount === 0 ? 'Tidak ada data untuk bulan ini' : `Unduh laporan PDF ${monthPillLabel(activeMonthSel)}`}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border border-red-200 bg-red-50 text-red-600 hover:bg-red-500 hover:text-white hover:border-red-500 disabled:opacity-40 disabled:cursor-not-allowed transition min-h-[36px] shrink-0"
+                  >
+                    {loadingPdf
+                      ? <svg className="animate-spin w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                      : <i className="bi bi-file-earmark-pdf shrink-0" />}
+                    <span className="hidden sm:inline">{loadingPdf ? 'Membuat…' : 'Laporan PDF'}</span>
+                  </button>
+
+                  {/* Print Laporan — with help tooltip */}
+                  <div className="relative shrink-0" data-print-help-btn>
+                    <button
+                      type="button"
+                      onClick={handlePrintMonthlyPdf}
+                      disabled={loadingPrintPdf || totalCount === 0}
+                      title={totalCount === 0 ? 'Tidak ada data untuk dicetak' : `Cetak laporan ${monthPillLabel(activeMonthSel)}`}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border border-violet-200 bg-violet-50 text-violet-600 hover:bg-violet-500 hover:text-white hover:border-violet-500 disabled:opacity-40 disabled:cursor-not-allowed transition min-h-[36px]"
+                    >
+                      {loadingPrintPdf
+                        ? <svg className="animate-spin w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                        : <i className="bi bi-printer shrink-0" />}
+                      <span className="hidden sm:inline">{loadingPrintPdf ? 'Membuka…' : 'Print'}</span>
+                    </button>
+                    {/* Help ? badge */}
+                    <button
+                      type="button"
+                      onClick={() => setPrintHelpOpen((v) => !v)}
+                      className="absolute -top-2 -right-2 w-4 h-4 rounded-full bg-violet-100 text-violet-700 text-[9px] font-bold flex items-center justify-center border border-violet-200 hover:bg-violet-200 transition z-10"
+                      aria-label="Bantuan Print Laporan"
+                    >
+                      ?
+                    </button>
+                    {printHelpOpen && (
+                      <div className="absolute right-0 top-full mt-2 z-50 w-64 bg-white rounded-2xl shadow-2xl border border-gray-100 p-4 text-slate-800">
+                        <h4 className="font-bold text-sm mb-2 flex items-center gap-2 text-violet-700">
+                          <i className="bi bi-printer" /> Print Laporan
+                        </h4>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Klik Print untuk membuka laporan PDF bulan ini, lalu pilih printer dari dialog yang muncul dan cetak seperti biasa.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
 
               {activeTab === 'incoming' && (
@@ -915,6 +1066,14 @@ export default function Dashboard() {
           onClearFile={() => setScannedFile(null)}
           onSaved={handleSaved}
           onCancel={handleCancelCreate}
+        />
+      )}
+
+      {/* ── CamScanner Modal ──────────────────────────────────────────── */}
+      {camScannerOpen && (
+        <CamScannerModal
+          onComplete={handleCapturedDocument}
+          onCancel={() => setCamScannerOpen(false)}
         />
       )}
 

@@ -236,9 +236,10 @@ export const store = async (req: AuthRequest, res: Response) => {
 
     console.log('Appending outgoing letter record to user Google Sheet...');
     try {
-      const uniqueRowId = await appendOutgoingLetterToSheet(userId, suratKeluar);
-      suratKeluar.id = uniqueRowId;
-      console.log('Google Sheet append successful with ID:', uniqueRowId);
+      const { rowId, sheetRowNumber } = await appendOutgoingLetterToSheet(userId, suratKeluar);
+      suratKeluar.id = rowId;
+      suratKeluar.google_sheet_row = sheetRowNumber;
+      console.log('Google Sheet append successful with ID:', rowId, 'row:', sheetRowNumber);
 
       try {
         await createOutgoingLetterRecord(suratKeluar);
@@ -267,7 +268,7 @@ export const store = async (req: AuthRequest, res: Response) => {
 
       return res.status(500).json({
         error: 'Gagal menyimpan ke Google Sheet',
-        message: sheetError.message || 'Gagal menyimpan data surat keluar ke Google Sheet user',
+        message: sheetError.message || 'Gagal menyimpan data surat ke Google Sheet user',
         details: sheetError.toString(),
       });
     }
@@ -423,11 +424,12 @@ export const update = async (req: AuthRequest, res: Response) => {
       tanggal_buat,
       google_drive_id: googleDriveId,
       file_path: logicalPath,
+      google_sheet_row: oldSurat.google_sheet_row,
       folder_id: folder_id ? parseInt(folder_id) : undefined,
       updated_at: new Date().toISOString(),
     };
 
-    await updateOutgoingLetterInSheet(userId, rowNumber, suratKeluar);
+    await updateOutgoingLetterInSheet(userId, rowNumber, suratKeluar, oldSurat.google_sheet_row, oldSurat.google_drive_id);
 
     try {
       await updateOutgoingLetterRecord(rowNumber, userId, suratKeluar);
@@ -498,7 +500,7 @@ export const destroy = async (req: AuthRequest, res: Response) => {
     }
 
     // 2. Drive deletion succeeded or file was already missing (404) -> Clean up Sheets & local DB
-    await deleteOutgoingLetterRow(userId, rowNumber, undefined);
+    await deleteOutgoingLetterRow(userId, rowNumber, driveFileId || undefined, surat.google_sheet_row);
 
     try {
       await deleteOutgoingLetterRecord(userId, rowNumber);

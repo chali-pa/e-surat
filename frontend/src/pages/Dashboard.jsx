@@ -7,6 +7,7 @@ import MailForm from '../components/mail/MailForm';
 import DeleteConfirmDialog from '../components/mail/DeleteConfirmDialog';
 import DocumentScanner from '../components/mail/DocumentScanner';
 import CamScannerModal from '../components/mail/CamScannerModal';
+import { getSuratDriveUrl } from '../utils/getDriveFileUrl';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
 
@@ -523,11 +524,26 @@ export default function Dashboard() {
   // ─── Table action handlers ────────────────────────────────────────────
 
   const handleView = (surat) => {
-    if (!surat.google_drive_id && !surat.file_path) { alert('File tidak tersedia'); return; }
-    const url = surat.google_drive_id
-      ? getFileUrl(surat.id, activeTab, 'inline')
-      : surat.file_path;
-    window.open(url, '_blank', 'noopener,noreferrer');
+    // Prefer the authenticated backend proxy when we have a Drive ID — it
+    // streams the file through the server and handles auth transparently.
+    if (surat.google_drive_id) {
+      window.open(getFileUrl(surat.id, activeTab, 'inline'), '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    // No Drive ID: attempt to resolve file_path as a Drive URL or raw ID.
+    // getSuratDriveUrl handles full URLs, raw IDs, =HYPERLINK formulas, and
+    // known display labels — returns null for anything unresolvable so we
+    // never pass a plain path string to window.open.
+    const driveUrl = getSuratDriveUrl(surat);
+    if (driveUrl) {
+      window.open(driveUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    // Nothing usable — inform the user instead of silently navigating to a
+    // broken relative URL (which was the original bug).
+    alert('File tidak tersedia atau belum diunggah ke Google Drive.');
   };
 
   const handlePreview = (surat) => {

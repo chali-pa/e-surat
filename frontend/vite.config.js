@@ -20,4 +20,10 @@ export default defineConfig({
       '@': path.resolve(fileURLToPath(import.meta.url), '..', './src'),
     }),
   },
+  // ── Vitest configuration ─────────────────────────────────────────────────
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    include: ['src/**/*.{test,spec}.{js,ts,jsx,tsx}'],
+  },
 })

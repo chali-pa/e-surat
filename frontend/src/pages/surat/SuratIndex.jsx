@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import api from '../../api/axios'
 import DocumentPreviewModal from '../../components/DocumentPreviewModal'
+import { getSuratDriveUrl } from '../../utils/getDriveFileUrl'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
 
@@ -109,16 +110,19 @@ export default function SuratIndex() {
   }
 
   const handleView = (surat) => {
-    if (!surat.google_drive_id && !surat.file_path) {
-      alert('File tidak tersedia')
-      return
-    }
     if (surat.google_drive_id) {
       const url = getFileUrl(surat.id, 'inline')
       window.open(url, '_blank', 'noopener,noreferrer')
-    } else {
-      window.open(surat.file_path, '_blank', 'noopener,noreferrer')
+      return
     }
+
+    const driveUrl = getSuratDriveUrl(surat)
+    if (driveUrl) {
+      window.open(driveUrl, '_blank', 'noopener,noreferrer')
+      return
+    }
+
+    alert('File tidak tersedia atau belum diunggah ke Google Drive.')
   }
 
   const handleDownload = (surat) => {

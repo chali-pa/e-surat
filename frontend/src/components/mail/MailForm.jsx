@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import api from '../../api/axios';
 import FolderSelector from '../drive/FolderSelector';
+import DocumentPreviewModal from '../DocumentPreviewModal';
 import { MAX_MAIL_UPLOAD_SIZE_MB } from '../../config/constants';
 
 /**
@@ -467,7 +468,7 @@ export default function MailForm({ type, id, prepopulatedFile, onClearFile, onSa
             />
 
             {formData.file_surat ? (
-              <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
+              <div className="space-y-3" onClick={(e) => e.stopPropagation()}>
                 <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center mx-auto text-emerald-600">
                   <i className="bi bi-file-earmark-check text-2xl" />
                 </div>
@@ -479,16 +480,28 @@ export default function MailForm({ type, id, prepopulatedFile, onClearFile, onSa
                     {formatBytes(formData.file_surat.size)}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFormData({ ...formData, file_surat: null });
-                    if (onClearFile) onClearFile();
-                  }}
-                  className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-xs font-semibold transition min-h-[36px]"
-                >
-                  Hapus File
-                </button>
+                <div className="flex items-center justify-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setLightboxOpen(true)}
+                    className="px-4 py-2 bg-purple-50 hover:bg-purple-100 text-[#4B164C] rounded-lg text-xs font-semibold transition min-h-[38px] inline-flex items-center gap-1.5 cursor-pointer border border-purple-200"
+                    title="Buka preview dokumen"
+                  >
+                    <i className="bi bi-eye-fill text-sm" />
+                    Pratinjau Dokumen
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormData({ ...formData, file_surat: null });
+                      if (onClearFile) onClearFile();
+                    }}
+                    className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-xs font-semibold transition min-h-[38px] inline-flex items-center gap-1.5 cursor-pointer border border-red-200"
+                  >
+                    <i className="bi bi-trash text-sm" />
+                    Hapus File
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="space-y-1">
@@ -701,36 +714,15 @@ export default function MailForm({ type, id, prepopulatedFile, onClearFile, onSa
         )}
       </form>
 
-      {/* Click to Enlarge Lightbox modal */}
-      {lightboxOpen && objectUrl && (
-        <div className="fixed inset-0 z-[999] bg-black/95 backdrop-blur-sm flex flex-col">
-          <header className="p-4 flex items-center justify-between text-white border-b border-white/10 bg-slate-950">
-            <h3 className="text-sm font-semibold truncate">{formData.file_surat?.name}</h3>
-            <button
-              type="button"
-              onClick={() => setLightboxOpen(false)}
-              className="p-2 rounded-lg hover:bg-white/10 text-white min-w-[44px] min-h-[44px] flex items-center justify-center cursor-pointer transition"
-            >
-              <i className="bi bi-x-lg text-lg" />
-            </button>
-          </header>
-          <div className="flex-1 p-4 flex items-center justify-center overflow-auto">
-            {formData.file_surat?.type === 'application/pdf' ? (
-              <iframe
-                src={objectUrl}
-                title="Full Screen PDF Preview"
-                className="w-full h-full max-w-5xl rounded-lg bg-white shadow-2xl"
-              />
-            ) : (
-              <img
-                src={objectUrl}
-                alt="Full screen view"
-                className="max-w-full max-h-full object-contain shadow-2xl rounded-lg"
-              />
-            )}
-          </div>
-        </div>
-      )}
+      {/* Post-scan / File attachment preview modal */}
+      <DocumentPreviewModal
+        show={lightboxOpen}
+        onClose={() => setLightboxOpen(false)}
+        surat={{
+          nama_surat: formData.nama_surat || formData.file_surat?.name || 'Dokumen',
+          file: formData.file_surat,
+        }}
+      />
     </div>
   );
 }

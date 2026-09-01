@@ -5,6 +5,7 @@ import DocumentPreviewModal from '../../components/DocumentPreviewModal';
 import MailTable from '../../components/mail/MailTable';
 import MailForm from '../../components/mail/MailForm';
 import DeleteConfirmDialog from '../../components/mail/DeleteConfirmDialog';
+import { getSuratDriveUrl } from '../../utils/getDriveFileUrl';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
 
@@ -272,11 +273,20 @@ export default function MailManagementPage() {
   // ─── Table action handlers ────────────────────────────────────────────
 
   const handleView = (surat) => {
-    if (!surat.google_drive_id && !surat.file_path) { alert('File tidak tersedia'); return; }
-    const url = surat.google_drive_id
-      ? getFileUrl(surat.id, activeTab, 'inline')
-      : surat.file_path;
-    window.open(url, '_blank', 'noopener,noreferrer');
+    // Prefer the authenticated backend proxy when we have a Drive ID
+    if (surat.google_drive_id) {
+      window.open(getFileUrl(surat.id, activeTab, 'inline'), '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    // No Drive ID: attempt to resolve file_path as a Drive URL or raw ID
+    const driveUrl = getSuratDriveUrl(surat);
+    if (driveUrl) {
+      window.open(driveUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    alert('File tidak tersedia atau belum diunggah ke Google Drive.');
   };
 
   const handlePreview = (surat) => {

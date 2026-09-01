@@ -170,7 +170,7 @@ export default function DocumentScanner({ onCapture, onCancel }) {
 
         {/* Video feed / Captured preview display */}
         {!error && (
-          <div className="relative w-full max-w-2xl aspect-[4/3] rounded-xl overflow-hidden shadow-inner border border-slate-800 bg-slate-950 flex items-center justify-center">
+          <div className="relative w-full h-full max-w-4xl min-h-[350px] sm:min-h-[450px] rounded-xl overflow-hidden shadow-inner border border-slate-800 bg-slate-950 flex items-center justify-center">
             
             {/* Show static image if captured */}
             {previewUrl ? (

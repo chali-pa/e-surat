@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx'
 import mammoth from 'mammoth'
 import * as pdfjsLib from 'pdfjs-dist'
 import api from '../api/axios'
+import { getDriveFileUrl, getSuratDriveUrl } from '../utils/getDriveFileUrl'
 
 // Configure the pdf.js worker. Vite serves the worker file as a static asset.
 // Using ?url suffix tells Vite to resolve the file URL without bundling it.
@@ -317,7 +318,77 @@ export default function DocumentPreviewModal({ show, onClose, surat, apiEndpoint
     setError(null)
 
     try {
-      // Determine file extension hint
+      // ── Handle local File / Blob directly if provided ──
+      const localFile = surat?.file || (surat?.file_surat instanceof File ? surat.file_surat : null)
+      if (localFile || surat?.blobUrl) {
+        const fileName = localFile?.name || surat?.nama_surat || 'Dokumen'
+        const fileType = (localFile?.type || '').toLowerCase()
+        const nameHint = fileName.toLowerCase()
+
+        let detectedKind = 'pdf'
+        if (
+          fileType.includes('spreadsheet') ||
+          fileType.includes('excel') ||
+          fileType.includes('csv') ||
+          nameHint.endsWith('.xlsx') ||
+          nameHint.endsWith('.xls') ||
+          nameHint.endsWith('.csv')
+        ) {
+          detectedKind = 'excel'
+        } else if (
+          fileType.includes('word') ||
+          nameHint.endsWith('.docx') ||
+          nameHint.endsWith('.doc')
+        ) {
+          detectedKind = 'word'
+        } else if (
+          fileType.startsWith('image/') ||
+          nameHint.endsWith('.jpg') ||
+          nameHint.endsWith('.jpeg') ||
+          nameHint.endsWith('.png') ||
+          nameHint.endsWith('.webp')
+        ) {
+          detectedKind = 'image'
+        } else {
+          detectedKind = 'pdf'
+        }
+
+        setFileKind(detectedKind)
+
+        if (detectedKind === 'pdf' || detectedKind === 'image') {
+          const url = surat?.blobUrl || (localFile ? URL.createObjectURL(localFile) : null)
+          setBlobUrl(url)
+        } else if (detectedKind === 'excel' && localFile) {
+          try {
+            const ab = await localFile.arrayBuffer()
+            const workbook = XLSX.read(ab, { type: 'array' })
+            const sheets = workbook.SheetNames || []
+            setExcelSheets(sheets)
+            const parsedData = {}
+            sheets.forEach((sheetName) => {
+              const worksheet = workbook.Sheets[sheetName]
+              parsedData[sheetName] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' })
+            })
+            setSheetData(parsedData)
+            if (sheets.length > 0) setActiveSheet(sheets[0])
+          } catch (excelErr) {
+            console.error('Failed to parse local Excel file:', excelErr)
+            setError({ type: 'GENERAL', message: 'Gagal membaca isi berkas spreadsheet.' })
+          }
+        } else if (detectedKind === 'word' && localFile) {
+          try {
+            const ab = await localFile.arrayBuffer()
+            const res = await mammoth.convertToHtml({ arrayBuffer: ab })
+            setWordHtml(res.value || '<p>Dokumen kosong.</p>')
+          } catch (wordErr) {
+            console.error('Failed to parse local Word document:', wordErr)
+            setError({ type: 'GENERAL', message: 'Gagal membaca isi berkas dokumen Word.' })
+          }
+        }
+        return
+      }
+
+      // ── Fetch file binary arraybuffer with auth header for server files ──
       const pathHint = (surat.file_path || '').toLowerCase()
       const nameHint = (surat.nama_surat || '').toLowerCase()
       const combinedHint = `${pathHint} ${nameHint}`
@@ -481,10 +552,11 @@ export default function DocumentPreviewModal({ show, onClose, surat, apiEndpoint
   }
 
   const handleOpenGoogleDrive = () => {
-    if (surat?.file_path && surat.file_path.startsWith('http')) {
-      window.open(surat.file_path, '_blank', 'noopener,noreferrer')
-    } else if (surat?.google_drive_id) {
-      window.open(`https://drive.google.com/file/d/${surat.google_drive_id}/view`, '_blank', 'noopener,noreferrer')
+    const driveUrl = getSuratDriveUrl(surat || {})
+    if (driveUrl) {
+      window.open(driveUrl, '_blank', 'noopener,noreferrer')
+    } else {
+      alert('Tautan Google Drive tidak valid atau tidak tersedia.')
     }
   }
 

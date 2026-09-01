@@ -48,6 +48,24 @@ export function buildFilePathFormula(googleDriveId?: string, filePath?: string):
 }
 
 /**
+ * Extract the URL from a Google Sheets =HYPERLINK formula string, or return
+ * the value unchanged if it is already a plain URL / Drive ID.
+ *
+ * When `spreadsheets.values.get` is called with `valueRenderOption: 'FORMULA'`,
+ * cells containing =HYPERLINK formulas are returned as the formula string, e.g.:
+ *   =HYPERLINK("https://drive.google.com/file/d/FILEID/view","Lihat File")
+ *
+ * This function unwraps that string so the `file_path` field always contains
+ * the real URL rather than the display label "Lihat File".
+ */
+export function parseFilePathFromFormula(value: string | undefined): string {
+  if (!value) return '';
+  const match = /=HYPERLINK\(\s*"([^"]+)"/i.exec(value);
+  if (match) return match[1];
+  return value;
+}
+
+/**
  * Ensure user has a Google Spreadsheet for incoming or outgoing letters.
  */
 export async function ensureUserSpreadsheet(
@@ -269,6 +287,10 @@ export async function getAllIncomingLetters(userId: number): Promise<Surat[]> {
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: sheetId,
       range: 'Data!A:I',
+      // FORMULA render option returns the raw formula string for cells that
+      // contain formulas (e.g. =HYPERLINK(...)) instead of the display label.
+      // This prevents the "Lihat File" label from appearing in file_path.
+      valueRenderOption: 'FORMULA',
     });
 
     const rows = response.data.values;
@@ -284,7 +306,8 @@ export async function getAllIncomingLetters(userId: number): Promise<Surat[]> {
       tanggal_masuk: row[4] || '',
       tanggal_buat: row[5] || '',
       google_drive_id: row[6] || '',
-      file_path: row[7] || '',
+      // Parse the =HYPERLINK formula in column H to extract the real URL.
+      file_path: parseFilePathFromFormula(row[7]),
       created_at: row[8] || '',
       user_id: userId,
     }));
@@ -309,6 +332,9 @@ export async function getAllOutgoingLetters(userId: number): Promise<SuratKeluar
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: sheetId,
       range: 'Data!A:I',
+      // FORMULA render option ensures column H returns the =HYPERLINK formula
+      // string rather than the "Lihat File" display label.
+      valueRenderOption: 'FORMULA',
     });
 
     const rows = response.data.values;
@@ -324,7 +350,8 @@ export async function getAllOutgoingLetters(userId: number): Promise<SuratKeluar
       tanggal_keluar: row[4] || '',
       tanggal_buat: row[5] || '',
       google_drive_id: row[6] || '',
-      file_path: row[7] || '',
+      // Parse the =HYPERLINK formula in column H to extract the real URL.
+      file_path: parseFilePathFromFormula(row[7]),
       created_at: row[8] || '',
       user_id: userId,
     }));
@@ -353,6 +380,7 @@ export async function getIncomingLetterByRow(userId: number, rowNumber: number):
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: sheetId,
       range: `Data!A${targetRowIndex}:I${targetRowIndex}`,
+      valueRenderOption: 'FORMULA',
     });
 
     const row = response.data.values?.[0];
@@ -365,7 +393,7 @@ export async function getIncomingLetterByRow(userId: number, rowNumber: number):
         tanggal_masuk: row[4] || '',
         tanggal_buat: row[5] || '',
         google_drive_id: row[6] || '',
-        file_path: row[7] || '',
+        file_path: parseFilePathFromFormula(row[7]),
         created_at: row[8] || '',
         user_id: userId,
       };
@@ -399,6 +427,7 @@ export async function getOutgoingLetterByRow(userId: number, rowNumber: number):
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: sheetId,
       range: `Data!A${targetRowIndex}:I${targetRowIndex}`,
+      valueRenderOption: 'FORMULA',
     });
 
     const row = response.data.values?.[0];
@@ -411,7 +440,7 @@ export async function getOutgoingLetterByRow(userId: number, rowNumber: number):
         tanggal_keluar: row[4] || '',
         tanggal_buat: row[5] || '',
         google_drive_id: row[6] || '',
-        file_path: row[7] || '',
+        file_path: parseFilePathFromFormula(row[7]),
         created_at: row[8] || '',
         user_id: userId,
       };

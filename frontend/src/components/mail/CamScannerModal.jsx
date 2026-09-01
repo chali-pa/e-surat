@@ -284,6 +284,139 @@ function applyPerspectiveTransform(srcCanvas, corners, outW = OUTPUT_WIDTH, outH
  * Removes colour casts and normalises uneven lighting without hard clipping.
  * Returns a new canvas.
  */
+/**
+ * 3×3 median filter on a uint8 grayscale array.
+ * Removes mobile sensor noise and speckles while keeping text edges crisp.
+ */
+function denoiseGrayscaleMedian(gray, w, h) {
+  const out = new Uint8ClampedArray(w * h);
+  const win = new Uint8Array(9);
+  for (let y = 0; y < h; y++) {
+    const y0 = Math.max(0, y - 1), y1 = Math.min(h - 1, y + 1);
+    for (let x = 0; x < w; x++) {
+      const x0 = Math.max(0, x - 1), x1 = Math.min(w - 1, x + 1);
+      let count = 0;
+      for (let ny = y0; ny <= y1; ny++) {
+        for (let nx = x0; nx <= x1; nx++) {
+          win[count++] = gray[ny * w + nx];
+        }
+      }
+      for (let i = 1; i < count; i++) {
+        const val = win[i];
+        let j = i - 1;
+        while (j >= 0 && win[j] > val) {
+          win[j + 1] = win[j];
+          j--;
+        }
+        win[j + 1] = val;
+      }
+      out[y * w + x] = win[Math.floor(count / 2)];
+    }
+  }
+  return out;
+}
+
+/**
+ * Background illumination normalization for Color document mode (flat-field division).
+ * Removes shadows, yellowing, and paper gradients across the page while preserving true color
+ * content (stamps, signatures, colored text).
+ */
+function applyIlluminationNormalization(srcCanvas) {
+  const w = srcCanvas.width, h = srcCanvas.height;
+  const src = srcCanvas.getContext('2d').getImageData(0, 0, w, h).data;
+
+  const gridW = 32, gridH = 32;
+  const stepX = w / gridW;
+  const stepY = h / gridH;
+
+  const cellR = Array.from({ length: gridW * gridH }, () => []);
+  const cellG = Array.from({ length: gridW * gridH }, () => []);
+  const cellB = Array.from({ length: gridW * gridH }, () => []);
+
+  for (let y = 0; y < h; y += 4) {
+    const gy = Math.min(gridH - 1, Math.floor(y / stepY));
+    for (let x = 0; x < w; x += 4) {
+      const gx = Math.min(gridW - 1, Math.floor(x / stepX));
+      const idx = (y * w + x) * 4;
+      const gidx = gy * gridW + gx;
+      cellR[gidx].push(src[idx]);
+      cellG[gidx].push(src[idx + 1]);
+      cellB[gidx].push(src[idx + 2]);
+    }
+  }
+
+  const bgR = new Float32Array(gridW * gridH);
+  const bgG = new Float32Array(gridW * gridH);
+  const bgB = new Float32Array(gridW * gridH);
+
+  for (let i = 0; i < gridW * gridH; i++) {
+    const rArr = cellR[i].sort((a, b) => b - a);
+    const gArr = cellG[i].sort((a, b) => b - a);
+    const bArr = cellB[i].sort((a, b) => b - a);
+    const topCount = Math.max(1, Math.floor(rArr.length * 0.20));
+    let sumR = 0, sumG = 0, sumB = 0;
+    for (let k = 0; k < topCount; k++) {
+      sumR += rArr[k] ?? 255;
+      sumG += gArr[k] ?? 255;
+      sumB += bArr[k] ?? 255;
+    }
+    bgR[i] = Math.max(120, sumR / topCount);
+    bgG[i] = Math.max(120, sumG / topCount);
+    bgB[i] = Math.max(120, sumB / topCount);
+  }
+
+  const dst = document.createElement('canvas');
+  dst.width = w; dst.height = h;
+  const dstCtx = dst.getContext('2d');
+  const out = dstCtx.createImageData(w, h);
+  const o = out.data;
+
+  for (let y = 0; y < h; y++) {
+    const gy = y / stepY - 0.5;
+    const gy0 = Math.max(0, Math.floor(gy));
+    const gy1 = Math.min(gridH - 1, gy0 + 1);
+    const fy = Math.max(0, Math.min(1, gy - gy0));
+
+    for (let x = 0; x < w; x++) {
+      const gx = x / stepX - 0.5;
+      const gx0 = Math.max(0, Math.floor(gx));
+      const gx1 = Math.min(gridW - 1, gx0 + 1);
+      const fx = Math.max(0, Math.min(1, gx - gx0));
+
+      const i00 = gy0 * gridW + gx0;
+      const i10 = gy0 * gridW + gx1;
+      const i01 = gy1 * gridW + gx0;
+      const i11 = gy1 * gridW + gx1;
+
+      const bR = (1 - fx) * (1 - fy) * bgR[i00] + fx * (1 - fy) * bgR[i10] + (1 - fx) * fy * bgR[i01] + fx * fy * bgR[i11];
+      const bG = (1 - fx) * (1 - fy) * bgG[i00] + fx * (1 - fy) * bgG[i10] + (1 - fx) * fy * bgG[i01] + fx * fy * bgG[i11];
+      const bB = (1 - fx) * (1 - fy) * bgB[i00] + fx * (1 - fy) * bgB[i10] + (1 - fx) * fy * bgB[i01] + fx * fy * bgB[i11];
+
+      const idx = (y * w + x) * 4;
+      const r = src[idx], g = src[idx + 1], b = src[idx + 2];
+
+      let nR = Math.min(255, Math.round((r / bR) * 248));
+      let nG = Math.min(255, Math.round((g / bG) * 248));
+      let nB = Math.min(255, Math.round((b / bB) * 248));
+
+      // S-curve contrast boost
+      nR = Math.max(0, Math.min(255, Math.round((nR - 128) * 1.12 + 128)));
+      nG = Math.max(0, Math.min(255, Math.round((nG - 128) * 1.12 + 128)));
+      nB = Math.max(0, Math.min(255, Math.round((nB - 128) * 1.12 + 128)));
+
+      o[idx]     = nR;
+      o[idx + 1] = nG;
+      o[idx + 2] = nB;
+      o[idx + 3] = 255;
+    }
+  }
+  dstCtx.putImageData(out, 0, 0);
+  return dst;
+}
+
+/**
+ * Per-channel auto-levels stretch percentile [2%, 98%] to [0, 255].
+ */
 function applyAutoLevels(srcCanvas) {
   const w = srcCanvas.width, h = srcCanvas.height, n = w * h;
   const src = srcCanvas.getContext('2d').getImageData(0, 0, w, h).data;
@@ -323,21 +456,8 @@ function applyAutoLevels(srcCanvas) {
 
 /**
  * Integral-image adaptive threshold — Bradley/Roth method.
- * Handles local shadows and brightness gradients far better than a global threshold.
- *
- * For each pixel the local mean is computed from a winSize×winSize window using
- * the summed-area table (O(1) per pixel after O(n) table build).
- * A pixel is white if its value > localMean × (1 − k).
- *
- * @param {Uint8ClampedArray} gray    Greyscale values, length w*h
- * @param {number}            w
- * @param {number}            h
- * @param {number}            winSize Neighbourhood size in pixels (default 71)
- * @param {number}            k       Sensitivity [0,1] (default 0.12)
- * @returns {Uint8ClampedArray} Binary output (0 or 255), length w*h
  */
 function adaptiveThreshold(gray, w, h, winSize = 71, k = 0.12) {
-  // Summed-area table, (w+1)×(h+1) to simplify boundary handling
   const sat = new Float64Array((w + 1) * (h + 1));
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
@@ -369,13 +489,13 @@ function adaptiveThreshold(gray, w, h, winSize = 71, k = 0.12) {
 
 /**
  * Apply document enhancement:
- *   'color' → auto-levels (lighting normalisation, preserves colour)
- *   'bw'    → greyscale → integral-image adaptive threshold
- * Returns a new canvas.
+ *   'color' → illumination normalization + auto-levels (clean white background + vivid colors)
+ *   'bw'    → greyscale → 3x3 median denoising → integral-image adaptive threshold (crisp text, zero speckles)
  */
 function applyFilter(srcCanvas, mode) {
   if (mode === 'color') {
-    return applyAutoLevels(srcCanvas);
+    const illuminated = applyIlluminationNormalization(srcCanvas);
+    return applyAutoLevels(illuminated);
   }
 
   // B&W path
@@ -386,7 +506,12 @@ function applyFilter(srcCanvas, mode) {
   for (let i = 0; i < w * h; i++) {
     gray[i] = Math.round(0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2]);
   }
-  const bw = adaptiveThreshold(gray, w, h);
+
+  // Pre-denoise grayscale image to eliminate sensor grain before thresholding
+  const denoised = denoiseGrayscaleMedian(gray, w, h);
+
+  const winSize = Math.max(31, Math.floor(Math.min(w, h) / 18)) | 1;
+  const bw = adaptiveThreshold(denoised, w, h, winSize, 0.12);
 
   const dst    = document.createElement('canvas');
   dst.width    = w; dst.height = h;
@@ -402,11 +527,7 @@ function applyFilter(srcCanvas, mode) {
 }
 
 /**
- * Unsharp mask sharpening using a 3×3 Laplacian-style kernel.
- * Applied to the perspective-corrected canvas before the enhancement filter.
- * Returns a new canvas.
- *
- * Kernel: centre = 1.5, orthogonal neighbours = −0.125 each (sum = 1)
+ * Unsharp mask sharpening using a 3×3 Laplacian kernel.
  */
 function applySharpening(srcCanvas) {
   const w = srcCanvas.width, h = srcCanvas.height;
@@ -418,7 +539,7 @@ function applySharpening(srcCanvas) {
   const outImgData = dstCtx.createImageData(w, h);
   const o = outImgData.data;
 
-  const KC = 1.5, KN = -0.125; // centre + 4 neighbours; KN×4 + KC = 1 (neutral sum)
+  const KC = 1.5, KN = -0.125;
 
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
@@ -576,11 +697,26 @@ export default function CamScannerModal({ onComplete, onCancel }) {
   const streamRef         = useRef(null);
   const capturedCanvasRef = useRef(null); // raw captured image canvas
 
-  // ── Live edge-detection overlay (Issue B) ────────────────────────────────
+  // ── Tracks whether the active camera is front-facing ('user') ────────────
+  // Used to:
+  //   (a) apply CSS scaleX(-1) on the <video> preview so it looks natural
+  //       (mirror-like) for the user — purely cosmetic, does NOT affect drawImage.
+  //   (b) flip the captured canvas horizontally at the raw-capture stage so
+  //       the saved image is never mirrored regardless of which camera is used.
+  //   (c) flip the live-detection scratch canvas the same way so the overlay
+  //       corner coords always match the corrected capture orientation.
+  const [isFrontCamera, setIsFrontCamera] = useState(false);
+
+  // Keep a ref in sync so the live-detection interval can always read the
+  // current value without the interval needing to be re-registered on change.
+  useEffect(() => { isFrontCameraRef.current = isFrontCamera; }, [isFrontCamera]);
+
+  // ── Live edge-detection overlay ────────────────────────────────────────────
   // A canvas rendered on top of the video, updated every LIVE_DETECT_INTERVAL_MS.
   // Only drawn when detection is confident (all 4 corners found, not fallback).
   const liveOverlayCanvasRef = useRef(null);
   const liveDetectTimerRef   = useRef(null);
+  const isFrontCameraRef     = useRef(false); // mirror of isFrontCamera state for interval access
   const [liveDetected, setLiveDetected] = useState(false); // true when confident outline visible
 
   const [cameras, setCameras]               = useState([]);
@@ -641,12 +777,31 @@ export default function CamScannerModal({ onComplete, onCancel }) {
       streamRef.current = stream;
       if (videoRef.current) videoRef.current.srcObject = stream;
 
-      const devices     = await navigator.mediaDevices.enumerateDevices();
+      // Detect facing mode from the active video track's capabilities/settings.
+      // getSettings() is the most reliable cross-browser method; getCapabilities()
+      // is a fallback for browsers that expose it there instead.
+      // If neither reports 'user', default to non-front (environment/unknown).
+      const videoTrack = stream.getVideoTracks()[0];
+      let detectedFacing = 'environment';
+      if (videoTrack) {
+        const settings     = videoTrack.getSettings?.()     || {};
+        const capabilities = videoTrack.getCapabilities?.() || {};
+        const facing = settings.facingMode || capabilities.facingMode;
+        // capabilities.facingMode can be an array of possible values; settings is a scalar
+        if (Array.isArray(facing)) {
+          detectedFacing = facing[0] ?? 'environment';
+        } else if (facing) {
+          detectedFacing = facing;
+        }
+      }
+      setIsFrontCamera(detectedFacing === 'user');
+
+      const devices      = await navigator.mediaDevices.enumerateDevices();
       const videoDevices = devices.filter((d) => d.kind === 'videoinput');
       setCameras(videoDevices);
 
       if (!deviceId && videoDevices.length > 0) {
-        const activeLabel = stream.getVideoTracks()[0]?.label;
+        const activeLabel = videoTrack?.label;
         const match = videoDevices.find((d) => d.label === activeLabel);
         setSelectedCamera(match?.deviceId || videoDevices[0].deviceId);
       }
@@ -714,7 +869,18 @@ export default function CamScannerModal({ onComplete, onCancel }) {
       scratch.height = sh;
 
       const sCtx = scratch.getContext('2d');
+
+      // Apply the same horizontal flip used at capture time so that the
+      // detected corner coordinates are in the same (corrected) coordinate
+      // space as the actual captured canvas — keeping overlay and capture aligned.
+      if (isFrontCameraRef.current) {
+        sCtx.translate(sw, 0);
+        sCtx.scale(-1, 1);
+      }
       sCtx.drawImage(video, 0, 0, sw, sh);
+      if (isFrontCameraRef.current) {
+        sCtx.setTransform(1, 0, 0, 1, 0, 0);
+      }
 
       const { corners, confident } = detectDocumentCorners(scratch);
       setLiveDetected(confident);
@@ -729,10 +895,34 @@ export default function CamScannerModal({ onComplete, onCancel }) {
 
       if (!confident) return;
 
-      // Map corners from scratch-canvas pixel space → overlay CSS pixel space
-      const ox = dispW / sw;
-      const oy = dispH / sh;
-      const pts = corners.map((c) => ({ x: c.x * ox, y: c.y * oy }));
+      // Compute exact object-fit: cover scaling and cropping offsets
+      const videoRatio = vw / vh;
+      const elementRatio = dispW / dispH;
+
+      let scaleRatio, renderW, renderH, offsetX, offsetY;
+      if (videoRatio > elementRatio) {
+        scaleRatio = dispH / vh;
+        renderW = vw * scaleRatio;
+        renderH = dispH;
+        offsetX = (renderW - dispW) / 2;
+        offsetY = 0;
+      } else {
+        scaleRatio = dispW / vw;
+        renderW = dispW;
+        renderH = vh * scaleRatio;
+        offsetX = 0;
+        offsetY = (renderH - dispH) / 2;
+      }
+
+      // Map corners from scratch-canvas coords (sw, sh) -> overlay CSS coords (dispW, dispH)
+      const pts = corners.map((c) => {
+        const rawX = c.x / scale;
+        const rawY = c.y / scale;
+        return {
+          x: rawX * scaleRatio - offsetX,
+          y: rawY * scaleRatio - offsetY,
+        };
+      });
 
       // Draw filled polygon with semi-transparent purple fill
       oCtx.beginPath();
@@ -774,14 +964,49 @@ export default function CamScannerModal({ onComplete, onCancel }) {
   }, [step]);
 
   // ─── Capture photo ────────────────────────────────────────────────────────
+  //
+  // Draws the current video frame onto an off-screen canvas at full native
+  // resolution, then runs corner detection on that canvas.
+  //
+  // Mirror correction:
+  //   Mobile browsers deliver the front camera's video stream in its hardware-
+  //   native orientation, which is typically already horizontally mirrored
+  //   (the physical sensor sees the world normally, but the OS flips it so it
+  //   matches "what you'd see in a mirror").  drawImage() reads from that raw
+  //   stream, so without correction the captured frame is mirrored for the
+  //   front camera.  We fix this by flipping the canvas horizontally when the
+  //   active camera is front-facing — the captured pixel data is then always in
+  //   the correct, unmirrored orientation regardless of which camera is used.
+  //
+  //   The live-preview <video> element is also flipped via CSS (see below) so
+  //   it looks natural for the user while framing, but that CSS transform has
+  //   zero effect on the drawImage output — the flip here is independent and
+  //   specifically for the saved pixel data.
 
   const handleCapture = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
     const w = video.videoWidth || 1280, h = video.videoHeight || 720;
     const canvas = document.createElement('canvas');
-    canvas.width = w; canvas.height = h;
-    canvas.getContext('2d').drawImage(video, 0, 0, w, h);
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+
+    if (isFrontCamera) {
+      // Flip horizontally: translate to the right edge, then scale x by -1.
+      // This produces a correct (un-mirrored) image from the front camera stream.
+      ctx.translate(w, 0);
+      ctx.scale(-1, 1);
+    }
+
+    ctx.drawImage(video, 0, 0, w, h);
+
+    // Reset transform so any subsequent canvas reads are in normal coordinates.
+    // (ctx.getImageData is not affected by the current transform, but this is
+    //  defensive housekeeping.)
+    if (isFrontCamera) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+    }
 
     capturedCanvasRef.current = canvas;
     setImageNaturalSize({ w, h });
@@ -791,7 +1016,7 @@ export default function CamScannerModal({ onComplete, onCancel }) {
 
     stopCamera();
     setStep('adjust');
-  }, [stopCamera]);
+  }, [stopCamera, isFrontCamera]);
 
   // ─── Adjust step: measure rendered size for SVG overlay ──────────────────
 
@@ -843,17 +1068,17 @@ export default function CamScannerModal({ onComplete, onCancel }) {
       // Yield between heavy steps to avoid complete UI lock
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      // 2. Sharpening (applied before the filter so both modes benefit)
-      const sharpened = applySharpening(corrected);
+      // 2. Enhancement filter (illumination normalization for color, median denoising + adaptive threshold for B&W)
+      const filtered = applyFilter(corrected, filter);
 
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      // 3. Enhancement filter (auto-levels for color, adaptive threshold for B&W)
-      const filtered = applyFilter(sharpened, filter);
+      // 3. Post-enhancement sharpening for text crispness
+      const finalResult = applySharpening(filtered);
 
       // Store result and advance to preview step
-      setPreviewCanvas(filtered);
-      setPreviewDataUrl(filtered.toDataURL('image/jpeg', 0.88));
+      setPreviewCanvas(finalResult);
+      setPreviewDataUrl(finalResult.toDataURL('image/jpeg', 0.88));
       setStep('preview');
     } finally {
       setProcessing(false);
@@ -1093,14 +1318,19 @@ export default function CamScannerModal({ onComplete, onCancel }) {
 
               {!cameraError && (
                 <div className="relative w-full h-full">
-                  {/* Live video feed — object-cover fills the container without distortion */}
+                  {/* Live video feed — object-cover fills the container without distortion.
+                      scaleX(-1) mirrors the preview for front camera only — purely cosmetic
+                      (makes it feel like a mirror while framing), has zero effect on drawImage. */}
                   <video
                     ref={videoRef}
                     autoPlay
                     playsInline
                     muted
                     className="w-full h-full object-cover"
-                    style={{ display: 'block' }}
+                    style={{
+                      display: 'block',
+                      transform: isFrontCamera ? 'scaleX(-1)' : 'none',
+                    }}
                   />
 
                   {/* ── Issue B: live edge-detection overlay canvas ───────

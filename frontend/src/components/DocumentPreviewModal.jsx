@@ -1,9 +1,214 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import * as XLSX from 'xlsx'
 import mammoth from 'mammoth'
+import * as pdfjsLib from 'pdfjs-dist'
 import api from '../api/axios'
 
+// Configure the pdf.js worker. Vite serves the worker file as a static asset.
+// Using ?url suffix tells Vite to resolve the file URL without bundling it.
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+
+// ─── PdfCanvasViewer ──────────────────────────────────────────────────────────
+//
+// Renders a PDF blob URL onto a <canvas> using pdf.js.
+// Works identically on mobile and desktop — no dependency on the browser's
+// native PDF plugin, which is absent or broken on many mobile browsers.
+//
+// Props:
+//   url          — blob URL for the PDF (string)
+//   fileName     — used for the "open in new tab" title attribute
+//   onLoadDone() — called when the first page has rendered (for autoPrint timing)
+
+function PdfCanvasViewer({ url, fileName, onLoadDone }) {
+  const canvasRef        = useRef(null)
+  const pdfDocRef        = useRef(null)
+  const renderTaskRef    = useRef(null)  // tracks in-flight render task so we can cancel
+
+  const [totalPages,    setTotalPages]    = useState(0)
+  const [currentPage,   setCurrentPage]   = useState(1)
+  const [pageRendering, setPageRendering] = useState(false)
+  const [pdfError,      setPdfError]      = useState(null)
+
+  // ── Load the PDF document once when url changes ───────────────────────────
+  useEffect(() => {
+    if (!url) return
+
+    let cancelled = false
+    setPdfError(null)
+    setPageRendering(true)
+    setTotalPages(0)
+    setCurrentPage(1)
+
+    const loadTask = pdfjsLib.getDocument({ url, disableStream: false, disableAutoFetch: false })
+
+    loadTask.promise
+      .then((pdfDoc) => {
+        if (cancelled) return
+        pdfDocRef.current = pdfDoc
+        setTotalPages(pdfDoc.numPages)
+        // renderPage is called via the currentPage effect below
+      })
+      .catch((err) => {
+        if (cancelled) return
+        console.error('[PdfCanvasViewer] load error', err)
+        setPdfError('Gagal memuat PDF. Coba buka di tab baru.')
+        setPageRendering(false)
+      })
+
+    return () => {
+      cancelled = true
+      loadTask.destroy?.()
+      renderTaskRef.current?.cancel?.()
+    }
+  }, [url])
+
+  // ── Render whenever currentPage or totalPages changes ────────────────────
+  const renderPage = useCallback(async (pageNum) => {
+    const pdfDoc = pdfDocRef.current
+    const canvas = canvasRef.current
+    if (!pdfDoc || !canvas || pageNum < 1 || pageNum > pdfDoc.numPages) return
+
+    // Cancel any in-flight render from a previous page
+    renderTaskRef.current?.cancel?.()
+    setPageRendering(true)
+
+    try {
+      const page    = await pdfDoc.getPage(pageNum)
+      const dpr     = Math.min(window.devicePixelRatio || 1, 2)  // cap at 2× — enough for retina
+      const viewport = page.getViewport({ scale: dpr })
+
+      canvas.width  = viewport.width
+      canvas.height = viewport.height
+      // CSS size stays at 1× (the container controls visible width)
+      canvas.style.width  = `${viewport.width  / dpr}px`
+      canvas.style.height = `${viewport.height / dpr}px`
+
+      const ctx = canvas.getContext('2d')
+      const task = page.render({ canvasContext: ctx, viewport })
+      renderTaskRef.current = task
+      await task.promise
+
+      setPageRendering(false)
+      if (pageNum === 1) onLoadDone?.()
+    } catch (err) {
+      if (err?.name === 'RenderingCancelledException') return  // expected on page change
+      console.error('[PdfCanvasViewer] render error', err)
+      setPdfError('Gagal merender halaman PDF.')
+      setPageRendering(false)
+    }
+  }, [onLoadDone])
+
+  useEffect(() => {
+    if (totalPages > 0) renderPage(currentPage)
+  }, [currentPage, totalPages, renderPage])
+
+  // ── Keyboard navigation ───────────────────────────────────────────────────
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        setCurrentPage((p) => Math.min(p + 1, totalPages))
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        setCurrentPage((p) => Math.max(p - 1, 1))
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [totalPages])
+
+  if (pdfError) {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center gap-4 text-slate-500 p-6">
+        <i className="bi bi-file-earmark-x text-5xl text-red-400" />
+        <p className="text-sm text-center text-slate-600">{pdfError}</p>
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-xs font-semibold shadow transition hover:opacity-90"
+          style={{ background: 'linear-gradient(135deg, #4B164C 0%, #DD88CF 100%)' }}
+        >
+          <i className="bi bi-box-arrow-up-right" />
+          Buka di Tab Baru
+        </a>
+      </div>
+    )
+  }
+
+  return (
+    <div className="w-full h-full flex flex-col bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
+
+      {/* ── Page canvas area ─────────────────────────────────────────── */}
+      <div className="flex-1 overflow-auto bg-slate-200 flex flex-col items-center py-4 px-2 gap-4 relative">
+
+        {/* Loading spinner (first load or page change) */}
+        {pageRendering && (
+          <div className="absolute inset-0 flex items-center justify-center bg-slate-100/80 backdrop-blur-sm z-10">
+            <div className="flex flex-col items-center gap-2 text-slate-500">
+              <i className="bi bi-arrow-repeat text-4xl animate-spin text-[#4B164C]" />
+              <span className="text-xs font-medium">Merender halaman {currentPage}…</span>
+            </div>
+          </div>
+        )}
+
+        {/* The actual rendered page */}
+        <canvas
+          ref={canvasRef}
+          className="shadow-2xl rounded-sm max-w-full"
+          style={{ display: totalPages > 0 ? 'block' : 'none' }}
+        />
+
+        {/* Open in new tab link — always accessible, small and unobtrusive */}
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={`Buka ${fileName || 'PDF'} di tab baru`}
+          className="text-[11px] text-slate-400 hover:text-[#4B164C] flex items-center gap-1 transition shrink-0"
+        >
+          <i className="bi bi-box-arrow-up-right text-[10px]" />
+          Buka di tab baru
+        </a>
+      </div>
+
+      {/* ── Page navigation bar (only shown for multi-page PDFs) ──── */}
+      {totalPages > 1 && (
+        <div className="flex-none flex items-center justify-between gap-2 px-4 py-3 bg-white border-t border-gray-200">
+          <button
+            type="button"
+            onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+            disabled={currentPage <= 1 || pageRendering}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition min-h-[36px]"
+            aria-label="Halaman sebelumnya"
+          >
+            <i className="bi bi-chevron-left" />
+            <span className="hidden sm:inline">Sebelumnya</span>
+          </button>
+
+          <div className="flex items-center gap-2 text-xs text-slate-600">
+            <span className="font-semibold text-[#4B164C]">{currentPage}</span>
+            <span className="text-slate-400">/</span>
+            <span>{totalPages}</span>
+            <span className="text-slate-400 hidden sm:inline">halaman</span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
+            disabled={currentPage >= totalPages || pageRendering}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition min-h-[36px]"
+            aria-label="Halaman berikutnya"
+          >
+            <span className="hidden sm:inline">Berikutnya</span>
+            <i className="bi bi-chevron-right" />
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function DocumentPreviewModal({ show, onClose, surat, apiEndpoint, autoPrint = false }) {
   const [loading, setLoading] = useState(true)
@@ -28,6 +233,9 @@ export default function DocumentPreviewModal({ show, onClose, surat, apiEndpoint
   const autoPrintedRef = useRef(false)
   const closeButtonRef = useRef(null)
   const previousActiveElementRef = useRef(null)
+  // Fired by PdfCanvasViewer when the first page has rendered — used to
+  // delay autoPrint until the PDF is actually visible (not just loaded).
+  const pdfCanvasReadyRef = useRef(false)
 
   useEffect(() => {
     if (!show || !surat) {
@@ -71,12 +279,15 @@ export default function DocumentPreviewModal({ show, onClose, surat, apiEndpoint
 
   useEffect(() => {
     if (!loading && !error && autoPrint && !autoPrintedRef.current) {
+      // PDFs: autoPrint is triggered by PdfCanvasViewer's onLoadDone callback
+      // instead of here, because the canvas isn't ready until the first page renders.
+      if (fileKind === 'pdf') return
       autoPrintedRef.current = true
       setTimeout(() => {
         handlePrint()
       }, 400)
     }
-  }, [loading, error, autoPrint])
+  }, [loading, error, autoPrint, fileKind])
 
   const cleanup = () => {
     if (blobUrl) {
@@ -98,6 +309,7 @@ export default function DocumentPreviewModal({ show, onClose, surat, apiEndpoint
     setZoomLevel(1)
     setRotation(0)
     autoPrintedRef.current = false
+    pdfCanvasReadyRef.current = false
   }
 
   const loadFile = async () => {
@@ -609,13 +821,20 @@ export default function DocumentPreviewModal({ show, onClose, surat, apiEndpoint
             </div>
           )}
 
-          {/* 3. PDF Renderer */}
+          {/* 3. PDF Renderer — canvas-based via pdf.js (works on all mobile browsers) */}
           {!loading && !error && fileKind === 'pdf' && blobUrl && (
-            <div className="w-full h-full rounded-2xl overflow-hidden shadow-xl bg-white border border-gray-200">
-              <iframe
-                src={blobUrl}
-                className="w-full h-full border-0"
-                title={`PDF: ${surat.nama_surat}`}
+            <div className="w-full h-full">
+              <PdfCanvasViewer
+                url={blobUrl}
+                fileName={surat?.nama_surat}
+                onLoadDone={() => {
+                  pdfCanvasReadyRef.current = true
+                  // Trigger autoPrint if it was requested but deferred
+                  if (autoPrint && !autoPrintedRef.current) {
+                    autoPrintedRef.current = true
+                    setTimeout(() => handlePrint(), 300)
+                  }
+                }}
               />
             </div>
           )}

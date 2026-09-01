@@ -39,6 +39,13 @@ const OUTPUT_WIDTH  = 1240; // A4-ish @ ~150 DPI
 const OUTPUT_HEIGHT = 1754;
 const TIP_SEEN_KEY  = 'camscanner_capture_tip_seen';
 
+/**
+ * How often (ms) to sample a frame from the live video and run edge detection.
+ * 350 ms gives ~2–3 detections/second — responsive enough to feel live,
+ * light enough not to saturate a mid-range mobile CPU.
+ */
+const LIVE_DETECT_INTERVAL_MS = 350;
+
 // ─── Image-processing pure functions ─────────────────────────────────────────
 
 /**
@@ -70,8 +77,13 @@ function computeEdgeMagnitude(grayData, w, h) {
  * and picks the winner, producing true quadrilateral corners rather than an
  * axis-aligned bounding box.
  *
- * Returns [{x,y}×4] as [tl, tr, br, bl] in original-image pixel coordinates.
- * Falls back to a 10 % inset rectangle when detection fails.
+ * @returns {{ corners: [{x,y}×4], confident: boolean }}
+ *   corners   — [tl, tr, br, bl] in original-image pixel coordinates.
+ *   confident — true when all 4 corners were genuinely detected (not fallback).
+ *               Used by the live overlay to suppress jittery/wrong outlines.
+ *
+ * Falls back to a 10 % inset rectangle when detection fails
+ * (confident = false in that case).
  */
 function detectDocumentCorners(canvas) {
   const w = canvas.width;
@@ -131,13 +143,24 @@ function detectDocumentCorners(canvas) {
   }
 
   if (found.some((c) => c === null)) {
-    // Fallback: 10 % inset rectangle
-    return [
-      { x: w * 0.1, y: h * 0.1 }, { x: w * 0.9, y: h * 0.1 },
-      { x: w * 0.9, y: h * 0.9 }, { x: w * 0.1, y: h * 0.9 },
-    ];
+    // Fallback: 10 % inset rectangle — confident = false so live overlay stays hidden
+    return {
+      corners: [
+        { x: w * 0.1, y: h * 0.1 }, { x: w * 0.9, y: h * 0.1 },
+        { x: w * 0.9, y: h * 0.9 }, { x: w * 0.1, y: h * 0.9 },
+      ],
+      confident: false,
+    };
   }
-  return found;
+  return { corners: found, confident: true };
+}
+
+/**
+ * Thin wrapper used by handleCapture (which still needs the raw corners array).
+ * Returns just the corners array, matching the old call-site signature.
+ */
+function detectDocumentCornersForCapture(canvas) {
+  return detectDocumentCorners(canvas).corners;
 }
 
 /**
@@ -553,6 +576,13 @@ export default function CamScannerModal({ onComplete, onCancel }) {
   const streamRef         = useRef(null);
   const capturedCanvasRef = useRef(null); // raw captured image canvas
 
+  // ── Live edge-detection overlay (Issue B) ────────────────────────────────
+  // A canvas rendered on top of the video, updated every LIVE_DETECT_INTERVAL_MS.
+  // Only drawn when detection is confident (all 4 corners found, not fallback).
+  const liveOverlayCanvasRef = useRef(null);
+  const liveDetectTimerRef   = useRef(null);
+  const [liveDetected, setLiveDetected] = useState(false); // true when confident outline visible
+
   const [cameras, setCameras]               = useState([]);
   const [selectedCamera, setSelectedCamera] = useState('');
   const [cameraError, setCameraError]       = useState(null);
@@ -638,6 +668,111 @@ export default function CamScannerModal({ onComplete, onCancel }) {
 
   useEffect(() => () => stopCamera(), [stopCamera]);
 
+  // ─── Live document-boundary overlay (Issue B) ────────────────────────────
+  //
+  // While the camera step is active and the video is playing, sample one frame
+  // every LIVE_DETECT_INTERVAL_MS, run detectDocumentCorners on a small canvas,
+  // and draw the detected quad onto liveOverlayCanvasRef when confident.
+  //
+  // Performance notes:
+  //   • Detection runs on a 320-wide thumbnail (not full 1080p), taking < 30 ms
+  //     on a mid-range phone.
+  //   • We use setInterval rather than requestAnimationFrame so we don't
+  //     compete with the browser's own video rendering loop.
+  //   • The overlay canvas is drawn with ctx.clearRect each tick; no retained
+  //     state leaks between frames.
+  //   • The interval is fully cleared when the component leaves camera step or
+  //     unmounts, ensuring zero background work in other steps.
+
+  useEffect(() => {
+    if (step !== 'camera') {
+      // Clear any existing interval when we leave the camera step
+      if (liveDetectTimerRef.current) {
+        clearInterval(liveDetectTimerRef.current);
+        liveDetectTimerRef.current = null;
+      }
+      setLiveDetected(false);
+      return;
+    }
+
+    // Offscreen scratch canvas — reused every tick to avoid GC pressure
+    const scratch = document.createElement('canvas');
+
+    const runDetection = () => {
+      const video   = videoRef.current;
+      const overlay = liveOverlayCanvasRef.current;
+      if (!video || !overlay || video.readyState < 2 || video.videoWidth === 0) return;
+
+      const vw = video.videoWidth;
+      const vh = video.videoHeight;
+
+      // Downscale to at most 320px wide for speed; detection still accurate enough
+      const scale  = Math.min(1, 320 / vw);
+      const sw     = Math.round(vw * scale);
+      const sh     = Math.round(vh * scale);
+      scratch.width  = sw;
+      scratch.height = sh;
+
+      const sCtx = scratch.getContext('2d');
+      sCtx.drawImage(video, 0, 0, sw, sh);
+
+      const { corners, confident } = detectDocumentCorners(scratch);
+      setLiveDetected(confident);
+
+      const oCtx = overlay.getContext('2d');
+      // Match overlay canvas pixel dimensions to the video element's CSS size
+      const dispW = overlay.clientWidth  || vw;
+      const dispH = overlay.clientHeight || vh;
+      overlay.width  = dispW;
+      overlay.height = dispH;
+      oCtx.clearRect(0, 0, dispW, dispH);
+
+      if (!confident) return;
+
+      // Map corners from scratch-canvas pixel space → overlay CSS pixel space
+      const ox = dispW / sw;
+      const oy = dispH / sh;
+      const pts = corners.map((c) => ({ x: c.x * ox, y: c.y * oy }));
+
+      // Draw filled polygon with semi-transparent purple fill
+      oCtx.beginPath();
+      oCtx.moveTo(pts[0].x, pts[0].y);
+      pts.slice(1).forEach((p) => oCtx.lineTo(p.x, p.y));
+      oCtx.closePath();
+      oCtx.fillStyle   = 'rgba(75, 22, 76, 0.18)';
+      oCtx.fill();
+
+      // Draw stroke edges — bright lime / emerald so it's readable on any doc colour
+      oCtx.beginPath();
+      oCtx.moveTo(pts[0].x, pts[0].y);
+      pts.forEach((p) => oCtx.lineTo(p.x, p.y));
+      oCtx.closePath();
+      oCtx.strokeStyle = 'rgba(74, 222, 128, 0.90)'; // emerald-400
+      oCtx.lineWidth   = 2.5;
+      oCtx.setLineDash([]);
+      oCtx.stroke();
+
+      // Corner dots
+      pts.forEach((p) => {
+        oCtx.beginPath();
+        oCtx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+        oCtx.fillStyle   = '#4ade80'; // emerald-400
+        oCtx.fill();
+        oCtx.strokeStyle = 'white';
+        oCtx.lineWidth   = 2;
+        oCtx.stroke();
+      });
+    };
+
+    liveDetectTimerRef.current = setInterval(runDetection, LIVE_DETECT_INTERVAL_MS);
+
+    return () => {
+      clearInterval(liveDetectTimerRef.current);
+      liveDetectTimerRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
+
   // ─── Capture photo ────────────────────────────────────────────────────────
 
   const handleCapture = useCallback(() => {
@@ -651,7 +786,7 @@ export default function CamScannerModal({ onComplete, onCancel }) {
     capturedCanvasRef.current = canvas;
     setImageNaturalSize({ w, h });
 
-    const detectedCorners = detectDocumentCorners(canvas);
+    const detectedCorners = detectDocumentCornersForCapture(canvas);
     setCorners(detectedCorners);
 
     stopCamera();
@@ -922,8 +1057,17 @@ export default function CamScannerModal({ onComplete, onCancel }) {
         {/* ════════ STEP: CAMERA ════════ */}
         {step === 'camera' && (
           <>
-            {/* Camera viewport */}
-            <div className="flex-1 relative bg-black flex items-center justify-center overflow-hidden">
+            {/*
+              Layout strategy:
+              ─ lg+ (desktop): flex-row — video fills left flex-1, controls in right w-64 panel.
+              ─ < lg (mobile): video + overlay fill the entire flex-1 area; the controls panel
+                is hidden from flow and replaced by an absolutely-positioned overlay bar at the
+                bottom of the viewport area. This maximises the viewfinder on small screens and
+                keeps all controls reachable without scrolling.
+            */}
+
+            {/* Camera viewport — fills ALL available space on mobile */}
+            <div className="flex-1 relative bg-black flex items-center justify-center overflow-hidden min-h-0">
               {cameraLoading && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-20 gap-3">
                   <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500" />
@@ -949,19 +1093,134 @@ export default function CamScannerModal({ onComplete, onCancel }) {
 
               {!cameraError && (
                 <div className="relative w-full h-full">
-                  <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+                  {/* Live video feed — object-cover fills the container without distortion */}
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full h-full object-cover"
+                    style={{ display: 'block' }}
+                  />
 
-                  {/* Document frame guide */}
-                  <div className="absolute inset-0 pointer-events-none flex items-center justify-center p-6 sm:p-12">
-                    <div className="w-full h-full border-2 border-dashed border-purple-400/40 rounded-lg relative max-w-3xl">
+                  {/* ── Issue B: live edge-detection overlay canvas ───────
+                      Sits directly on top of the video, pointer-events:none
+                      so it never blocks touch events on the capture button.
+                      Updated every LIVE_DETECT_INTERVAL_MS by the detection
+                      effect above. Only shows content when confident=true.    */}
+                  <canvas
+                    ref={liveOverlayCanvasRef}
+                    className="absolute inset-0 w-full h-full pointer-events-none"
+                    style={{ display: 'block' }}
+                    aria-hidden="true"
+                  />
+
+                  {/* Document frame guide — subtle dashed border for framing */}
+                  <div className="absolute inset-0 pointer-events-none flex items-center justify-center p-6 sm:p-12 lg:p-8">
+                    <div className="w-full h-full border-2 border-dashed border-white/20 rounded-lg relative max-w-3xl">
                       <div className="absolute -top-1 -left-1 w-8 h-8 border-t-4 border-l-4 border-purple-400 rounded-tl" />
                       <div className="absolute -top-1 -right-1 w-8 h-8 border-t-4 border-r-4 border-purple-400 rounded-tr" />
                       <div className="absolute -bottom-1 -left-1 w-8 h-8 border-b-4 border-l-4 border-purple-400 rounded-bl" />
                       <div className="absolute -bottom-1 -right-1 w-8 h-8 border-b-4 border-r-4 border-purple-400 rounded-br" />
-                      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-sm px-4 py-1.5 rounded-full border border-white/10">
-                        <p className="text-xs text-purple-300 font-medium tracking-wide whitespace-nowrap">
-                          Posisikan dokumen di dalam bingkai
-                        </p>
+                      {/* Framing hint — only shown when no doc detected yet */}
+                      {!liveDetected && (
+                        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-sm px-4 py-1.5 rounded-full border border-white/10">
+                          <p className="text-xs text-purple-300 font-medium tracking-wide whitespace-nowrap">
+                            Posisikan dokumen di dalam bingkai
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Live detection status badge (shown when document detected) */}
+                  {liveDetected && (
+                    <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
+                      <div className="flex items-center gap-1.5 bg-emerald-600/90 backdrop-blur-sm text-white text-xs font-semibold px-3 py-1.5 rounded-full shadow-lg">
+                        <span className="w-2 h-2 rounded-full bg-white animate-pulse shrink-0" />
+                        Dokumen terdeteksi
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Mobile overlay controls bar (hidden on lg+) ─────────
+                      Replaces the side panel for all viewports below lg.
+                      Uses a gradient backdrop for legibility over any camera feed. */}
+                  <div className="absolute bottom-0 left-0 right-0 lg:hidden z-10">
+                    <div className="bg-gradient-to-t from-black/90 via-black/60 to-transparent px-5 pt-8 pb-safe-or-5 pb-5 flex flex-col gap-3">
+
+                      {/* Camera selector (compact) */}
+                      {cameras.length > 1 && (
+                        <div className="flex justify-center">
+                          <select
+                            value={selectedCamera}
+                            onChange={(e) => { setSelectedCamera(e.target.value); startCamera(e.target.value); }}
+                            className="bg-black/70 backdrop-blur-sm border border-white/20 text-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-purple-400 max-w-xs w-full"
+                            aria-label="Pilih kamera"
+                          >
+                            {cameras.map((d, i) => (
+                              <option key={d.deviceId} value={d.deviceId}>
+                                {d.label || `Kamera ${i + 1}`}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Pages saved indicator */}
+                      {pages.length > 0 && (
+                        <div className="flex justify-center">
+                          <span className="text-xs text-purple-300 font-semibold bg-purple-950/70 backdrop-blur-sm border border-purple-700/60 px-3 py-1.5 rounded-full">
+                            {pages.length} halaman tersimpan
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Main action row */}
+                      <div className="flex items-center justify-center gap-4">
+
+                        {/* Cancel / back */}
+                        <button
+                          type="button"
+                          onClick={onCancel}
+                          className="w-12 h-12 rounded-full bg-black/50 backdrop-blur-sm border border-white/20 text-white flex items-center justify-center transition hover:bg-white/10"
+                          aria-label="Batal"
+                          title="Batal"
+                        >
+                          <i className="bi bi-x-lg text-lg" />
+                        </button>
+
+                        {/* Capture button — large, easy to tap */}
+                        <button
+                          type="button"
+                          onClick={handleCapture}
+                          disabled={cameraLoading || !!cameraError}
+                          className="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center shadow-2xl transition active:scale-95 disabled:opacity-40"
+                          style={{ background: 'linear-gradient(135deg, #4B164C 0%, #DD88CF 100%)' }}
+                          aria-label="Ambil foto"
+                          title="Ambil Foto"
+                        >
+                          <i className="bi bi-camera-fill text-3xl text-white" />
+                        </button>
+
+                        {/* Go to pages (if any) */}
+                        {pages.length > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => setStep('pages')}
+                            className="w-12 h-12 rounded-full bg-emerald-700/80 backdrop-blur-sm border border-emerald-500/60 text-white flex items-center justify-center transition hover:bg-emerald-600/80 relative"
+                            aria-label={`Selesai — ${pages.length} halaman`}
+                            title={`Selesai (${pages.length})`}
+                          >
+                            <i className="bi bi-check2-circle text-xl" />
+                            <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-emerald-500 text-white text-[10px] font-bold flex items-center justify-center shadow">
+                              {pages.length}
+                            </span>
+                          </button>
+                        ) : (
+                          /* Empty placeholder to keep capture button centred */
+                          <div className="w-12 h-12" aria-hidden="true" />
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1009,8 +1268,8 @@ export default function CamScannerModal({ onComplete, onCancel }) {
               )}
             </div>
 
-            {/* Camera controls panel */}
-            <div className="flex-none bg-slate-900 border-t lg:border-t-0 lg:border-l border-slate-800 p-4 sm:p-6 flex flex-col gap-4 lg:w-64">
+            {/* Camera controls panel — desktop only (lg+), hidden on mobile */}
+            <div className="hidden lg:flex flex-none bg-slate-900 border-l border-slate-800 p-6 flex-col gap-4 w-64">
               <div>
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Langkah 1</p>
                 <h3 className="text-base font-bold text-white">Ambil Foto Dokumen</h3>

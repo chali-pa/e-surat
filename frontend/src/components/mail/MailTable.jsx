@@ -56,7 +56,7 @@ function ActionButtons({ surat, onView, onPreview, onDownload, onPrint, onEdit, 
       </button>
       <button
         onClick={() => onPrint(surat)}
-        title="Print dokumen"
+        title="Print dokumen ke printer MFP kantor"
         aria-label="Print document"
         className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-green-50 text-green-600 border border-green-200 hover:bg-green-500 hover:text-white hover:border-green-500 transition"
       >

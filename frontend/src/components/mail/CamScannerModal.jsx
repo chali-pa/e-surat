@@ -327,8 +327,9 @@ function CornerHandle({ cx, cy, onDrag, label }) {
 /**
  * Page thumbnail card in the page list.
  */
-function PageThumbnail({ canvas, index, onRemove }) {
+function PageThumbnail({ canvas, index, totalPages, onRemove, onMoveLeft, onMoveRight }) {
   const canvasRef = useRef(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
     const el = canvasRef.current;
@@ -340,26 +341,75 @@ function PageThumbnail({ canvas, index, onRemove }) {
   }, [canvas]);
 
   return (
-    <div className="relative group flex-shrink-0 w-20 sm:w-24">
-      <div className="rounded-lg overflow-hidden border-2 border-purple-200 shadow-md bg-white aspect-[210/297]">
+    <div className="relative flex flex-col items-center flex-shrink-0 w-28 sm:w-32 bg-slate-900/80 p-2 rounded-xl border border-slate-800 shadow-lg">
+      <div className="relative w-full rounded-lg overflow-hidden border-2 border-purple-300/40 shadow-md bg-white aspect-[210/297]">
         <canvas
           ref={canvasRef}
           className="w-full h-full object-cover"
           style={{ display: 'block' }}
         />
+        {/* Page badge */}
+        <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-[#4B164C]/90 backdrop-blur-xs text-white text-[10px] font-bold shadow">
+          {index + 1}
+        </div>
       </div>
-      <div className="absolute -top-2 -left-2 w-6 h-6 rounded-full bg-[#4B164C] text-white text-xs font-bold flex items-center justify-center shadow-md">
-        {index + 1}
+
+      {/* Reorder and Delete controls */}
+      <div className="flex items-center justify-between w-full mt-2 pt-1 border-t border-slate-800/80 gap-1">
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={onMoveLeft}
+            disabled={index === 0}
+            className="w-6 h-6 rounded bg-slate-800 hover:bg-purple-900/60 disabled:opacity-30 disabled:hover:bg-slate-800 text-slate-300 hover:text-white flex items-center justify-center text-xs transition"
+            title="Geser ke kiri / ke atas"
+            aria-label={`Geser halaman ${index + 1} ke kiri`}
+          >
+            <i className="bi bi-chevron-left" />
+          </button>
+          <button
+            type="button"
+            onClick={onMoveRight}
+            disabled={index === totalPages - 1}
+            className="w-6 h-6 rounded bg-slate-800 hover:bg-purple-900/60 disabled:opacity-30 disabled:hover:bg-slate-800 text-slate-300 hover:text-white flex items-center justify-center text-xs transition"
+            title="Geser ke kanan / ke bawah"
+            aria-label={`Geser halaman ${index + 1} ke kanan`}
+          >
+            <i className="bi bi-chevron-right" />
+          </button>
+        </div>
+
+        {confirmDelete ? (
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={onRemove}
+              className="px-1.5 py-0.5 rounded bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold transition"
+              title="Konfirmasi hapus"
+            >
+              Hapus
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmDelete(false)}
+              className="px-1 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-slate-300 text-[10px] transition"
+              title="Batal"
+            >
+              Batal
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setConfirmDelete(true)}
+            className="w-6 h-6 rounded bg-slate-800 hover:bg-red-900/60 text-slate-400 hover:text-red-400 flex items-center justify-center text-xs transition"
+            title="Hapus halaman ini"
+            aria-label={`Hapus halaman ${index + 1}`}
+          >
+            <i className="bi bi-trash" />
+          </button>
+        )}
       </div>
-      <button
-        type="button"
-        onClick={onRemove}
-        className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 text-white text-xs flex items-center justify-center shadow-md opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
-        title="Hapus halaman ini"
-        aria-label={`Hapus halaman ${index + 1}`}
-      >
-        <i className="bi bi-x" />
-      </button>
     </div>
   );
 }
@@ -549,6 +599,16 @@ export default function CamScannerModal({ onComplete, onCancel }) {
 
   const handleRemovePage = useCallback((idx) => {
     setPages((prev) => prev.filter((_, i) => i !== idx));
+  }, []);
+
+  const handleMovePage = useCallback((fromIndex, toIndex) => {
+    setPages((prev) => {
+      if (toIndex < 0 || toIndex >= prev.length) return prev;
+      const updated = [...prev];
+      const [movedItem] = updated.splice(fromIndex, 1);
+      updated.splice(toIndex, 0, movedItem);
+      return updated;
+    });
   }, []);
 
   // ─── Add another page ─────────────────────────────────────────────────────
@@ -990,7 +1050,10 @@ export default function CamScannerModal({ onComplete, onCancel }) {
                       key={idx}
                       canvas={canvas}
                       index={idx}
+                      totalPages={pages.length}
                       onRemove={() => handleRemovePage(idx)}
+                      onMoveLeft={() => handleMovePage(idx, idx - 1)}
+                      onMoveRight={() => handleMovePage(idx, idx + 1)}
                     />
                   ))}
                 </div>

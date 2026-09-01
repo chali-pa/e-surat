@@ -437,6 +437,12 @@ export default function Dashboard() {
       const monthLabel = monthPillLabel(activeMonthSel);
       const title = `Laporan ${activeTab === 'incoming' ? 'Surat Masuk' : 'Surat Keluar'} — ${monthLabel}`;
 
+      setToast({
+        show: true,
+        type: 'success',
+        message: 'Perintah cetak dikirim. Pilih printer MFP kantor pada dialog browser yang muncul, lalu ambil dokumen fisik Anda di printer.',
+      });
+
       // Use a hidden iframe to print without app chrome
       const existingIframe = document.getElementById('print-report-iframe');
       if (existingIframe) document.body.removeChild(existingIframe);
@@ -550,6 +556,11 @@ export default function Dashboard() {
   const handlePrint = (surat) => {
     if (!surat.google_drive_id && !surat.file_path) { alert('File tidak tersedia untuk print'); return; }
     window.dispatchEvent(new CustomEvent('collapseSidebar'));
+    setToast({
+      show: true,
+      type: 'success',
+      message: 'Perintah cetak dikirim. Pilih printer MFP kantor pada dialog browser yang muncul, lalu ambil dokumen fisik Anda di printer.',
+    });
     setPreviewModal({ show: true, surat, autoPrint: true, letterType: activeTab });
   };
 
@@ -997,7 +1008,7 @@ export default function Dashboard() {
                           <i className="bi bi-printer" /> Print Laporan
                         </h4>
                         <p className="text-xs text-slate-600 leading-relaxed">
-                          Klik Print untuk membuka laporan PDF bulan ini, lalu pilih printer dari dialog yang muncul dan cetak seperti biasa.
+                          Klik **Print**, pilih nama printer MFP kantor Anda di daftar printer dialog browser yang muncul, kemudian ambil hasil cetak di mesin printer.
                         </p>
                       </div>
                     )}

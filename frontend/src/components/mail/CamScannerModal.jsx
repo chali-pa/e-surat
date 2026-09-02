@@ -326,9 +326,9 @@ function denoiseGrayscaleMedian(gray, w, h) {
 }
 
 /**
- * Background illumination normalization for Color document mode (flat-field division).
- * Removes shadows, yellowing, and paper gradients across the page while preserving true color
- * content (stamps, signatures, colored text).
+ * Background illumination normalization and document paper whitening for Color mode.
+ * Removes shadows, yellowing, and ambient lighting casts to make the paper background clean white,
+ * while strictly preserving rich colors (stamps, signatures, logos) and deep text contrast.
  */
 function applyIlluminationNormalization(srcCanvas) {
   const w = srcCanvas.width, h = srcCanvas.height;
@@ -362,16 +362,16 @@ function applyIlluminationNormalization(srcCanvas) {
     const rArr = cellR[i].sort((a, b) => b - a);
     const gArr = cellG[i].sort((a, b) => b - a);
     const bArr = cellB[i].sort((a, b) => b - a);
-    const topCount = Math.max(1, Math.floor(rArr.length * 0.20));
+    const topCount = Math.max(1, Math.floor(rArr.length * 0.15));
     let sumR = 0, sumG = 0, sumB = 0;
     for (let k = 0; k < topCount; k++) {
       sumR += rArr[k] ?? 255;
       sumG += gArr[k] ?? 255;
       sumB += bArr[k] ?? 255;
     }
-    bgR[i] = Math.max(120, sumR / topCount);
-    bgG[i] = Math.max(120, sumG / topCount);
-    bgB[i] = Math.max(120, sumB / topCount);
+    bgR[i] = Math.max(110, sumR / topCount);
+    bgG[i] = Math.max(110, sumG / topCount);
+    bgB[i] = Math.max(110, sumB / topCount);
   }
 
   const dst = document.createElement('canvas');
@@ -404,18 +404,42 @@ function applyIlluminationNormalization(srcCanvas) {
       const idx = (y * w + x) * 4;
       const r = src[idx], g = src[idx + 1], b = src[idx + 2];
 
-      let nR = Math.min(255, Math.round((r / bR) * 248));
-      let nG = Math.min(255, Math.round((g / bG) * 248));
-      let nB = Math.min(255, Math.round((b / bB) * 248));
+      const normR = r / Math.max(1, bR);
+      const normG = g / Math.max(1, bG);
+      const normB = b / Math.max(1, bB);
 
-      // S-curve contrast boost
-      nR = Math.max(0, Math.min(255, Math.round((nR - 128) * 1.12 + 128)));
-      nG = Math.max(0, Math.min(255, Math.round((nG - 128) * 1.12 + 128)));
-      nB = Math.max(0, Math.min(255, Math.round((nB - 128) * 1.12 + 128)));
+      const lum = 0.299 * normR + 0.587 * normG + 0.114 * normB;
+      const maxC = Math.max(r, g, b);
+      const minC = Math.min(r, g, b);
+      const chroma = maxC - minC;
 
-      o[idx]     = nR;
-      o[idx + 1] = nG;
-      o[idx + 2] = nB;
+      let outR, outG, outB;
+
+      // Paper background zone: if bright and neutral, smoothly map to true white 255
+      if (lum >= 0.80 && chroma < 28) {
+        const whiteFactor = Math.min(1, (lum - 0.80) / 0.15);
+        const targetR = normR * 255;
+        const targetG = normG * 255;
+        const targetB = normB * 255;
+        outR = Math.min(255, Math.round(targetR + (255 - targetR) * whiteFactor));
+        outG = Math.min(255, Math.round(targetG + (255 - targetG) * whiteFactor));
+        outB = Math.min(255, Math.round(targetB + (255 - targetB) * whiteFactor));
+      } else if (chroma >= 25) {
+        // High saturation (stamps, signatures, colored headings) -> preserve rich color
+        outR = Math.min(255, Math.max(0, Math.round(normR * 250)));
+        outG = Math.min(255, Math.max(0, Math.round(normG * 250)));
+        outB = Math.min(255, Math.max(0, Math.round(normB * 250)));
+      } else {
+        // Text / lines / dark regions -> contrast enhancement
+        const factor = Math.pow(Math.min(1, lum), 1.2);
+        outR = Math.min(255, Math.max(0, Math.round((r / bR) * 255 * factor)));
+        outG = Math.min(255, Math.max(0, Math.round((g / bG) * 255 * factor)));
+        outB = Math.min(255, Math.max(0, Math.round((b / bB) * 255 * factor)));
+      }
+
+      o[idx]     = outR;
+      o[idx + 1] = outG;
+      o[idx + 2] = outB;
       o[idx + 3] = 255;
     }
   }
@@ -589,6 +613,35 @@ async function assemblePagesToPdf(canvases) {
   return new File([pdfBytes], `scan_${timestamp}.pdf`, { type: 'application/pdf' });
 }
 
+// ─── Canvas rotation utility ───────────────────────────────────────────────
+
+/**
+ * Returns a new canvas with the source rotated by steps × 90° clockwise.
+ * steps: 1 = 90° CW, 2 = 180°, 3 = 270° CW (= 90° CCW).
+ */
+function rotateCanvas90(srcCanvas, steps = 1) {
+  const s = ((steps % 4) + 4) % 4; // normalise to 0-3
+  if (s === 0) {
+    // No-op: return a copy
+    const dst = document.createElement('canvas');
+    dst.width = srcCanvas.width; dst.height = srcCanvas.height;
+    dst.getContext('2d').drawImage(srcCanvas, 0, 0);
+    return dst;
+  }
+  const landscape = s === 1 || s === 3;
+  const dst = document.createElement('canvas');
+  dst.width  = landscape ? srcCanvas.height : srcCanvas.width;
+  dst.height = landscape ? srcCanvas.width  : srcCanvas.height;
+  const ctx  = dst.getContext('2d');
+  ctx.save();
+  if (s === 1)      { ctx.translate(dst.width, 0);              ctx.rotate(Math.PI / 2); }
+  else if (s === 2) { ctx.translate(dst.width, dst.height);     ctx.rotate(Math.PI); }
+  else              { ctx.translate(0, dst.height);             ctx.rotate(-Math.PI / 2); }
+  ctx.drawImage(srcCanvas, 0, 0);
+  ctx.restore();
+  return dst;
+}
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 /** Draggable SVG corner handle for perspective corner adjustment. */
@@ -748,7 +801,9 @@ export default function CamScannerModal({ onComplete, onCancel }) {
   const [filter, setFilter]                 = useState('color'); // 'color' | 'bw'
   const [processing, setProcessing]         = useState(false);
   const [imageNaturalSize, setImageNaturalSize] = useState({ w: 1, h: 1 });
+  const [rotationSteps, setRotationSteps]   = useState(0); // 0–3, clockwise 90° increments
   const adjustContainerRef = useRef(null);
+
 
   // ── Preview step ─────────────────────────────────────────────────────────
   const [previewCanvas, setPreviewCanvas] = useState(null);
@@ -1022,6 +1077,7 @@ export default function CamScannerModal({ onComplete, onCancel }) {
 
     const detectedCorners = detectDocumentCornersForCapture(canvas);
     setCorners(detectedCorners);
+    setRotationSteps(0);
 
     stopCamera();
     setStep('adjust');
@@ -1090,11 +1146,15 @@ export default function CamScannerModal({ onComplete, onCancel }) {
         target.outH
       );
 
+      // 1b. Manual orientation rotation (0/90/180/270° CW) — applied immediately
+      //     after perspective warp so the output is always upright.
+      const rotated = rotationSteps !== 0 ? rotateCanvas90(corrected, rotationSteps) : corrected;
+
       // Yield between heavy steps to avoid complete UI lock
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       // 2. Enhancement filter (illumination normalization for color, median denoising + adaptive threshold for B&W)
-      const filtered = applyFilter(corrected, filter);
+      const filtered = applyFilter(rotated, filter);
 
       await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -1108,7 +1168,18 @@ export default function CamScannerModal({ onComplete, onCancel }) {
     } finally {
       setProcessing(false);
     }
-  }, [corners, filter]);
+  }, [corners, filter, rotationSteps]);
+
+  // ─── Rotate preview in-place (from preview step) ─────────────────────────
+
+  const handleRotatePreview = useCallback((steps) => {
+    setPreviewCanvas((prev) => {
+      if (!prev) return prev;
+      const rotated = rotateCanvas90(prev, steps);
+      setPreviewDataUrl(rotated.toDataURL('image/jpeg', 0.88));
+      return rotated;
+    });
+  }, []);
 
   // ─── Accept preview → add to pages list ──────────────────────────────────
 
@@ -1686,6 +1757,38 @@ export default function CamScannerModal({ onComplete, onCancel }) {
                 </p>
               </div>
 
+              {/* Rotation controls */}
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider">Putar Gambar</label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setRotationSteps((s) => (s + 3) % 4)}
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 transition min-h-[44px]"
+                    title="Putar 90° berlawanan arum jam"
+                    aria-label="Putar 90° berlawanan arum jam"
+                  >
+                    <i className="bi bi-arrow-counterclockwise text-base" />
+                    90° CCW
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRotationSteps((s) => (s + 1) % 4)}
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 transition min-h-[44px]"
+                    title="Putar 90° searah jarum jam"
+                    aria-label="Putar 90° searah jarum jam"
+                  >
+                    <i className="bi bi-arrow-clockwise text-base" />
+                    90° CW
+                  </button>
+                </div>
+                {rotationSteps !== 0 && (
+                  <p className="text-[10px] text-purple-400 font-semibold">
+                    Rotasi aktif: {rotationSteps * 90}° searah jarum jam
+                  </p>
+                )}
+              </div>
+
               <div className="flex flex-col gap-2 mt-auto">
                 <button
                   type="button"
@@ -1712,7 +1815,7 @@ export default function CamScannerModal({ onComplete, onCancel }) {
 
                 <button
                   type="button"
-                  onClick={() => { capturedCanvasRef.current = null; setCorners(null); setStep('camera'); }}
+                  onClick={() => { capturedCanvasRef.current = null; setCorners(null); setRotationSteps(0); setStep('camera'); }}
                   className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-semibold border border-slate-700 transition min-h-[44px]"
                 >
                   <i className="bi bi-arrow-repeat" />
@@ -1722,6 +1825,7 @@ export default function CamScannerModal({ onComplete, onCancel }) {
             </div>
           </>
         )}
+
 
         {/* ════════ STEP: PREVIEW ════════ */}
         {step === 'preview' && (
@@ -1781,6 +1885,33 @@ export default function CamScannerModal({ onComplete, onCancel }) {
                 ))}
               </div>
 
+              {/* Fine-tune rotation (in case result is still sideways) */}
+              <div className="space-y-1.5">
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Koreksi Orientasi</p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleRotatePreview(3)}
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 transition min-h-[44px]"
+                    title="Putar 90° berlawanan arum jam"
+                    aria-label="Putar 90° berlawanan arum jam"
+                  >
+                    <i className="bi bi-arrow-counterclockwise text-base" />
+                    CCW
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRotatePreview(1)}
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 transition min-h-[44px]"
+                    title="Putar 90° searah jarum jam"
+                    aria-label="Putar 90° searah jarum jam"
+                  >
+                    <i className="bi bi-arrow-clockwise text-base" />
+                    CW
+                  </button>
+                </div>
+              </div>
+
               <div className="flex flex-col gap-2 mt-auto">
                 <button
                   type="button"
@@ -1803,7 +1934,7 @@ export default function CamScannerModal({ onComplete, onCancel }) {
 
                 <button
                   type="button"
-                  onClick={() => { capturedCanvasRef.current = null; setCorners(null); setPreviewCanvas(null); setPreviewDataUrl(null); setStep('camera'); }}
+                  onClick={() => { capturedCanvasRef.current = null; setCorners(null); setPreviewCanvas(null); setPreviewDataUrl(null); setRotationSteps(0); setStep('camera'); }}
                   className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-transparent hover:bg-slate-800 text-slate-500 hover:text-slate-300 text-sm font-semibold transition min-h-[44px]"
                 >
                   <i className="bi bi-arrow-repeat" />
@@ -1813,6 +1944,8 @@ export default function CamScannerModal({ onComplete, onCancel }) {
             </div>
           </>
         )}
+
+
 
         {/* ════════ STEP: PAGES ════════ */}
         {step === 'pages' && (

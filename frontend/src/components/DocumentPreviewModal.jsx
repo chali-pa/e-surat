@@ -4,6 +4,7 @@ import mammoth from 'mammoth'
 import * as pdfjsLib from 'pdfjs-dist'
 import api from '../api/axios'
 import { getDriveFileUrl, getSuratDriveUrl } from '../utils/getDriveFileUrl'
+import { getImageDimensions, generateSinglePagePrintHtml } from '../utils/printDimensionUtils'
 
 // Configure the pdf.js worker. Vite serves the worker file as a static asset.
 // Using ?url suffix tells Vite to resolve the file URL without bundling it.
@@ -636,20 +637,32 @@ export default function DocumentPreviewModal({ show, onClose, surat, apiEndpoint
         }, 300)
       }
     } else if (fileKind === 'image' && blobUrl) {
-      const content = `<img src="${blobUrl}" alt="${printTitle}" />`
-      const styles = `
-        <style>
-          @page { size: auto; margin: 0; }
-          * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #fff; margin: 0; padding: 0; }
-          img { max-width: 100%; max-height: 100vh; object-fit: contain; }
-          @media print {
-            body { padding: 0; margin: 0; }
-            img { max-width: 100%; max-height: 100%; page-break-inside: avoid; }
+      getImageDimensions(blobUrl)
+        .then((dims) => {
+          const printHtml = generateSinglePagePrintHtml(blobUrl, printTitle, {
+            width: dims.width,
+            height: dims.height,
+            orientation: dims.orientation === 'landscape' ? 'landscape' : 'portrait',
+          })
+          const printWin = window.open('', '_blank', 'width=800,height=600,left=100,top=100')
+          if (!printWin) {
+            alert('Popup window blocked. Please allow popups for this site.')
+            return
           }
-        </style>
-      `
-      printWithPopupWindow(content, styles)
+          printWin.document.open()
+          printWin.document.write(printHtml)
+          printWin.document.close()
+        })
+        .catch((err) => {
+          console.warn('Could not extract image dimensions for print:', err)
+          const fallbackHtml = generateSinglePagePrintHtml(blobUrl, printTitle)
+          const printWin = window.open('', '_blank', 'width=800,height=600,left=100,top=100')
+          if (printWin) {
+            printWin.document.open()
+            printWin.document.write(fallbackHtml)
+            printWin.document.close()
+          }
+        })
     } else if (fileKind === 'excel' && activeSheet && sheetData[activeSheet]) {
       const rows = sheetData[activeSheet] || []
       let tableRowsHtml = ''

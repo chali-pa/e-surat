@@ -32,6 +32,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { PDFDocument } from 'pdf-lib';
 import { MAX_MAIL_UPLOAD_SIZE_MB } from '../../config/constants';
+import { calculateTargetOutputDimensions, validateQuadGeometry } from '../../utils/documentGeometryUtils';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -224,9 +225,17 @@ function applyHomography(H, x, y) {
  * @param {number}            outH      Output height (default OUTPUT_HEIGHT)
  * @returns {HTMLCanvasElement}
  */
-function applyPerspectiveTransform(srcCanvas, corners, outW = OUTPUT_WIDTH, outH = OUTPUT_HEIGHT) {
+function applyPerspectiveTransform(srcCanvas, corners, outW, outH) {
   const [tl, tr, br, bl] = corners;
   const srcW = srcCanvas.width, srcH = srcCanvas.height;
+
+  // If explicit dimensions are not provided, dynamically compute target output dimensions
+  // that strictly preserve the document's true natural aspect ratio.
+  if (!outW || !outH) {
+    const target = calculateTargetOutputDimensions(corners, OUTPUT_HEIGHT);
+    outW = target.outW;
+    outH = target.outH;
+  }
 
   // H maps dst-rect pixel → src-quad pixel (inverse direction for scanline rendering)
   const dstRect = [
@@ -1062,8 +1071,24 @@ export default function CamScannerModal({ onComplete, onCancel }) {
       // Yield to let the spinner render
       await new Promise((resolve) => setTimeout(resolve, 30));
 
-      // 1. Perspective correction (true homography)
-      const corrected = applyPerspectiveTransform(capturedCanvasRef.current, corners);
+      // Validate quadrilateral geometry before transform
+      const geomVal = validateQuadGeometry(
+        corners,
+        capturedCanvasRef.current.width,
+        capturedCanvasRef.current.height
+      );
+      if (!geomVal.isValid) {
+        console.warn('[CamScanner] Quad geometry validation warning:', geomVal.errors);
+      }
+
+      // 1. Perspective correction (true homography preserving natural aspect ratio)
+      const target = calculateTargetOutputDimensions(corners, OUTPUT_HEIGHT);
+      const corrected = applyPerspectiveTransform(
+        capturedCanvasRef.current,
+        corners,
+        target.outW,
+        target.outH
+      );
 
       // Yield between heavy steps to avoid complete UI lock
       await new Promise((resolve) => setTimeout(resolve, 0));

@@ -43,6 +43,18 @@ export default function Profile() {
         text: location.state?.success || 'Akun Google berhasil dihubungkan! Folder Drive dan Google Sheets pribadi Anda telah disiapkan.',
       })
       window.history.replaceState({}, document.title, window.location.pathname)
+    } else if (params.get('google_link_error')) {
+      setGoogleBanner({
+        type: 'error',
+        text: decodeURIComponent(params.get('google_link_error')),
+      })
+      window.history.replaceState({}, document.title, window.location.pathname)
+    } else if (params.get('error') || location.state?.error) {
+      setGoogleBanner({
+        type: 'error',
+        text: decodeURIComponent(params.get('error') || '') || location.state?.error,
+      })
+      window.history.replaceState({}, document.title, window.location.pathname)
     }
 
     const fetchLatestProfile = async () => {

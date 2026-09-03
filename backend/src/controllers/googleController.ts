@@ -65,6 +65,24 @@ export const callback = async (req: AuthRequest, res: Response) => {
     if (isLinkingFlow) {
       user = await findUserById(parseInt(state as string));
       console.log(`[GoogleCallback] Linking flow detected for existing user ID: ${state}`);
+
+      // Safety check (§5): ensure this Google account is not already linked to a DIFFERENT user.
+      // Allow re-linking by the same user (idempotent), but reject if it belongs to another account.
+      if (googleSub) {
+        const existingGoogleUser = await findUserByGoogleSub(googleSub);
+        if (existingGoogleUser && existingGoogleUser.id !== user?.id) {
+          console.warn(
+            `[GoogleCallback] Conflict: Google sub ${googleSub} already linked to user ${existingGoogleUser.id}, ` +
+            `but linking was requested for user ${state}`
+          );
+          return res.redirect(
+            `${frontendUrl}/profile?google_link_error=${encodeURIComponent(
+              'Akun Google ini sudah terhubung ke pengguna lain. Gunakan akun Google yang berbeda atau hubungi administrator.'
+            )}`
+          );
+        }
+      }
+      // ── End conflict guard ────────────────────────────────────────────────
     }
 
     // Otherwise find user by Google sub first (more stable), then by email

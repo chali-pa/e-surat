@@ -53,7 +53,9 @@ export default function Login() {
     e.preventDefault()
     setErrors({})
 
-    if (!captchaToken) {
+    // CAPTCHA guard — only block if widget has loaded and produced a token.
+    // Backend enforces CAPTCHA independently when RECAPTCHA_SECRET_KEY is set.
+    if (window.grecaptcha && !captchaToken) {
       setErrors({ general: 'Harap selesaikan CAPTCHA.' })
       return
     }
@@ -65,7 +67,7 @@ export default function Login() {
         email: formData.email,
         password: formData.password,
         remember: formData.remember,
-        'g-recaptcha-response': captchaToken
+        captchaToken,
       })
 
       if (response.data.success || response.data.token) {
@@ -80,7 +82,7 @@ export default function Login() {
       } else if (error.response?.data?.error) {
         setErrors({ general: error.response.data.error })
       } else {
-        setErrors({ general: 'Login failed. Please try again.' })
+        setErrors({ general: 'Login gagal. Silakan coba lagi.' })
       }
       // Reset CAPTCHA on error
       if (window.grecaptcha) {

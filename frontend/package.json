@@ -12,9 +12,11 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@techstark/opencv-js": "5.0.0-release.1",
     "axios": "^1.19.0",
     "lucide-react": "^1.28.0",
     "mammoth": "^1.12.1",
+    "opencv-document-scanner": "1.2.2",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "4.9.155",
     "react": "^19.2.8",

@@ -54,7 +54,26 @@ export default function Register() {
     e.preventDefault()
     setErrors({})
 
-    if (!captchaToken) {
+    // Client-side validation
+    const clientErrors = {}
+    if (!formData.name.trim()) clientErrors.name = 'Nama lengkap wajib diisi.'
+    if (!formData.email.trim()) clientErrors.email = 'Alamat email wajib diisi.'
+    if (!formData.password) {
+      clientErrors.password = 'Password wajib diisi.'
+    } else if (formData.password.length < 8) {
+      clientErrors.password = 'Password minimal 8 karakter.'
+    }
+    if (formData.password && formData.password_confirmation && formData.password !== formData.password_confirmation) {
+      clientErrors.password = 'Konfirmasi password tidak cocok.'
+    }
+    if (Object.keys(clientErrors).length > 0) {
+      setErrors(clientErrors)
+      return
+    }
+
+    // CAPTCHA is optional when the widget hasn't loaded (dev/unconfigured env).
+    // The backend enforces CAPTCHA only when RECAPTCHA_SECRET_KEY is set.
+    if (process.env.NODE_ENV !== 'development' && !captchaToken) {
       setErrors({ general: 'Harap selesaikan CAPTCHA.' })
       return
     }
@@ -63,8 +82,11 @@ export default function Register() {
 
     try {
       const response = await api.post('/api/register', {
-        ...formData,
-        'g-recaptcha-response': captchaToken
+        name: formData.name.trim(),
+        email: formData.email.trim(),
+        password: formData.password,
+        password_confirmation: formData.password_confirmation,
+        captchaToken,
       })
 
       if (response.data.success || response.data.token) {
@@ -79,7 +101,7 @@ export default function Register() {
       } else if (error.response?.data?.error) {
         setErrors({ general: error.response.data.error })
       } else {
-        setErrors({ general: 'Registration failed. Please try again.' })
+        setErrors({ general: 'Pendaftaran gagal. Silakan coba lagi.' })
       }
       // Reset CAPTCHA on error
       if (window.grecaptcha) {
@@ -191,13 +213,16 @@ export default function Register() {
                 type="password"
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                placeholder="Masukkan password"
+                placeholder="Minimal 8 karakter"
                 className={`w-full p-3 border rounded-xl text-sm outline-none transition ${errors.password ? 'border-red-400' : 'border-gray-200'}`}
                 style={{ background: '#fafafa', color: '#1a1a2e' }}
                 required
               />
             </div>
-            {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password}</p>}
+            {errors.password
+              ? <p className="text-red-500 text-xs mt-1">{errors.password}</p>
+              : <p className="text-gray-400 text-xs mt-1">Minimal 8 karakter</p>
+            }
           </div>
 
           <div className="mb-6">
@@ -210,12 +235,18 @@ export default function Register() {
                 value={formData.password_confirmation}
                 onChange={(e) => setFormData({ ...formData, password_confirmation: e.target.value })}
                 placeholder="Ulangi password"
-                className={`w-full p-3 border rounded-xl text-sm outline-none transition ${errors.password ? 'border-red-400' : 'border-gray-200'}`}
+                className={`w-full p-3 border rounded-xl text-sm outline-none transition ${
+                  errors.password && formData.password_confirmation && formData.password !== formData.password_confirmation
+                    ? 'border-red-400'
+                    : 'border-gray-200'
+                }`}
                 style={{ background: '#fafafa', color: '#1a1a2e' }}
                 required
               />
             </div>
-            {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password}</p>}
+            {formData.password_confirmation && formData.password !== formData.password_confirmation && (
+              <p className="text-red-500 text-xs mt-1">Password tidak cocok.</p>
+            )}
           </div>
 
           {/* reCAPTCHA */}

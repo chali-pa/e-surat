@@ -6,38 +6,49 @@
  * Pipeline (all client-side, no server round-trips):
  *   camera → adjust (corner handles) → preview (corrected result) → page-list → finish → PDF blob
  *
- *  Step 1 — Edge/corner detection
- *            Sobel edge map on a down-scaled image, then per-quadrant strongest-edge
- *            corner finder (replaces the old axis-aligned bounding-box approach).
+ * Processing engine: OpenCV.js (@techstark/opencv-js v5 WASM build)
+ *   Loaded lazily (only when this modal mounts) via useOpenCV() hook.
+ *   A loading overlay blocks capture interactions until OpenCV is ready.
+ *
+ *  Step 1 — Edge/boundary detection
+ *            detectCorners() from opencvPipeline.js:
+ *            grayscale → GaussianBlur → Canny → findContours → approxPolyDP
+ *            (via opencv-document-scanner@1.2.2 DocumentScanner.detect())
  *
  *  Step 2 — Perspective correction
- *            True inverse projective homography via 4-point DLT (Direct Linear Transform).
- *            Replaces the previous bilinear UV-blend which only worked for rectangular input.
+ *            perspectiveCorrect() from opencvPipeline.js:
+ *            OpenCV getPerspectiveTransform + warpPerspective
  *
  *  Step 3 — Sharpening
- *            3×3 Laplacian unsharp mask applied to the warped canvas.
+ *            sharpen() via applyEnhancement(): cv.filter2D with 3×3 unsharp kernel
  *
- *  Step 4 — Lighting normalisation
- *            Per-channel 2–98 percentile histogram stretch (auto-levels / white-balance).
- *            Removes shadow cast and uneven lighting from the original photo.
+ *  Step 4 — Lighting normalization / Enhancement
+ *            Color → enhanceColor(): CLAHE on L channel (LAB) + NORM_MINMAX auto-levels
+ *            B&W   → enhanceBW(): cv.medianBlur denoising + cv.adaptiveThreshold
  *
- *  Step 5 — Enhancement modes
- *            • Color  → auto-levels only (preserves colour content)
- *            • B&W    → integral-image adaptive threshold, Bradley method
- *                       (handles local shadows; replaces previous global mean threshold)
+ *  Step 5 — Multi-page PDF via pdf-lib (unchanged)
  *
- *  Step 6 — Multi-page PDF via pdf-lib
+ * Integration approach used:
+ *   • @techstark/opencv-js@5.0.0-release.1 — full OpenCV WASM build (cv.* API)
+ *   • opencv-document-scanner@1.2.2       — DocumentScanner helper for detect/crop
+ *   • react-opencv-document-scanner        — does NOT exist (404); not used
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { PDFDocument } from 'pdf-lib';
 import { MAX_MAIL_UPLOAD_SIZE_MB } from '../../config/constants';
 import { calculateTargetOutputDimensions, validateQuadGeometry } from '../../utils/documentGeometryUtils';
+import { useOpenCV } from '../../hooks/useOpenCV';
+import {
+  detectCorners,
+  perspectiveCorrect,
+  rotateCanvas,
+  applyEnhancement,
+} from '../../utils/opencvPipeline';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const OUTPUT_WIDTH  = 1240; // A4-ish @ ~150 DPI
-const OUTPUT_HEIGHT = 1754;
+const OUTPUT_HEIGHT = 1754; // A4-ish max dimension @ ~150 DPI
 const TIP_SEEN_KEY  = 'camscanner_capture_tip_seen';
 
 /**
@@ -47,551 +58,7 @@ const TIP_SEEN_KEY  = 'camscanner_capture_tip_seen';
  */
 const LIVE_DETECT_INTERVAL_MS = 350;
 
-// ─── Image-processing pure functions ─────────────────────────────────────────
-
-/**
- * Sobel edge magnitude map on a grayscale Float32Array.
- * Returns Float32Array of magnitudes [0…1], same w×h.
- */
-function computeEdgeMagnitude(grayData, w, h) {
-  const edges = new Float32Array(w * h);
-  for (let y = 1; y < h - 1; y++) {
-    for (let x = 1; x < w - 1; x++) {
-      const idx = y * w + x;
-      const gx =
-        -grayData[(y-1)*w+(x-1)] - 2*grayData[y*w+(x-1)] - grayData[(y+1)*w+(x-1)]
-        +grayData[(y-1)*w+(x+1)] + 2*grayData[y*w+(x+1)] + grayData[(y+1)*w+(x+1)];
-      const gy =
-        -grayData[(y-1)*w+(x-1)] - 2*grayData[(y-1)*w+x] - grayData[(y-1)*w+(x+1)]
-        +grayData[(y+1)*w+(x-1)] + 2*grayData[(y+1)*w+x] + grayData[(y+1)*w+(x+1)];
-      edges[idx] = Math.min(1, Math.sqrt(gx * gx + gy * gy) / 255);
-    }
-  }
-  return edges;
-}
-
-/**
- * Detect the 4 document corners in a canvas image.
- *
- * For each of the 4 corner quadrants the function scores every
- * above-threshold edge pixel by (edge_strength × closeness_to_that_corner)
- * and picks the winner, producing true quadrilateral corners rather than an
- * axis-aligned bounding box.
- *
- * @returns {{ corners: [{x,y}×4], confident: boolean }}
- *   corners   — [tl, tr, br, bl] in original-image pixel coordinates.
- *   confident — true when all 4 corners were genuinely detected (not fallback).
- *               Used by the live overlay to suppress jittery/wrong outlines.
- *
- * Falls back to a 10 % inset rectangle when detection fails
- * (confident = false in that case).
- */
-function detectDocumentCorners(canvas) {
-  const w = canvas.width;
-  const h = canvas.height;
-  const ctx = canvas.getContext('2d');
-  const data = ctx.getImageData(0, 0, w, h).data;
-
-  // Convert to grayscale
-  const gray = new Float32Array(w * h);
-  for (let i = 0; i < w * h; i++) {
-    gray[i] = 0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2];
-  }
-
-  // Downsample to ≤ 400 px wide for speed
-  const scale = Math.min(1, 400 / w);
-  const sw = Math.round(w * scale);
-  const sh = Math.round(h * scale);
-  const dg = new Float32Array(sw * sh);
-  for (let y = 0; y < sh; y++) {
-    for (let x = 0; x < sw; x++) {
-      dg[y * sw + x] = gray[Math.min(w * h - 1, Math.round(y / scale) * w + Math.round(x / scale))];
-    }
-  }
-
-  const edges = computeEdgeMagnitude(dg, sw, sh);
-
-  // Per-quadrant corner detection
-  // Quadrant search regions overlap slightly in the centre (40–60 %) so
-  // they can find corners that are not perfectly on the image boundary.
-  const mg = 0.05; // image-edge margin to exclude frame artifacts
-  const mx0 = Math.round(sw * mg),       my0 = Math.round(sh * mg);
-  const mx1 = Math.round(sw * (1 - mg)), my1 = Math.round(sh * (1 - mg));
-
-  const quadrants = [
-    { cx: 0,  cy: 0,  x0: mx0, y0: my0, x1: Math.round(sw * 0.65), y1: Math.round(sh * 0.65) }, // TL
-    { cx: sw, cy: 0,  x0: Math.round(sw * 0.35), y0: my0, x1: mx1, y1: Math.round(sh * 0.65) }, // TR
-    { cx: sw, cy: sh, x0: Math.round(sw * 0.35), y0: Math.round(sh * 0.35), x1: mx1, y1: my1 }, // BR
-    { cx: 0,  cy: sh, x0: mx0, y0: Math.round(sh * 0.35), x1: Math.round(sw * 0.65), y1: my1 }, // BL
-  ];
-
-  const THRESHOLD = 0.12;
-  const maxDist = Math.sqrt(sw * sw + sh * sh);
-  const found = [];
-
-  for (const q of quadrants) {
-    let bestScore = -1, bestX = -1, bestY = -1;
-    for (let y = q.y0; y < q.y1; y++) {
-      for (let x = q.x0; x < q.x1; x++) {
-        const e = edges[y * sw + x];
-        if (e < THRESHOLD) continue;
-        const dist = Math.sqrt((x - q.cx) ** 2 + (y - q.cy) ** 2);
-        const score = e * (1 - dist / maxDist);
-        if (score > bestScore) { bestScore = score; bestX = x; bestY = y; }
-      }
-    }
-    found.push(bestX < 0 ? null : { x: Math.max(0, Math.min(w, bestX / scale)), y: Math.max(0, Math.min(h, bestY / scale)) });
-  }
-
-  if (found.some((c) => c === null)) {
-    // Fallback: 10 % inset rectangle — confident = false so live overlay stays hidden
-    return {
-      corners: [
-        { x: w * 0.1, y: h * 0.1 }, { x: w * 0.9, y: h * 0.1 },
-        { x: w * 0.9, y: h * 0.9 }, { x: w * 0.1, y: h * 0.9 },
-      ],
-      confident: false,
-    };
-  }
-  return { corners: found, confident: true };
-}
-
-/**
- * Thin wrapper used by handleCapture (which still needs the raw corners array).
- * Returns just the corners array, matching the old call-site signature.
- */
-function detectDocumentCornersForCapture(canvas) {
-  return detectDocumentCorners(canvas).corners;
-}
-
-/**
- * Compute a 3×3 projective homography H using the Direct Linear Transform (DLT)
- * with 4 point correspondences.
- *
- *   toPts[i] ≈ H · fromPts[i]   (homogeneous coordinates)
- *
- * Solves an 8×8 linear system by Gaussian elimination with partial pivoting.
- * Returns H as a flat 9-element row-major array [h1…h9] with h9 = 1.
- */
-function computeHomography(fromPts, toPts) {
-  const A = [];
-  const b = [];
-  for (let i = 0; i < 4; i++) {
-    const { x: xi, y: yi }   = fromPts[i];
-    const { x: xi2, y: yi2 } = toPts[i];
-    A.push([xi, yi, 1, 0, 0, 0, -xi * xi2, -yi * xi2]);
-    b.push(xi2);
-    A.push([0, 0, 0, xi, yi, 1, -xi * yi2, -yi * yi2]);
-    b.push(yi2);
-  }
-
-  const n = 8;
-  const M = A.map((row, i) => [...row, b[i]]);
-
-  for (let col = 0; col < n; col++) {
-    // Partial pivot
-    let maxRow = col;
-    for (let row = col + 1; row < n; row++) {
-      if (Math.abs(M[row][col]) > Math.abs(M[maxRow][col])) maxRow = row;
-    }
-    [M[col], M[maxRow]] = [M[maxRow], M[col]];
-    if (Math.abs(M[col][col]) < 1e-12) continue; // near-singular — skip
-
-    for (let row = 0; row < n; row++) {
-      if (row === col) continue;
-      const f = M[row][col] / M[col][col];
-      for (let k = col; k <= n; k++) M[row][k] -= f * M[col][k];
-    }
-  }
-  const h = M.map((row, i) => row[n] / row[i]);
-  return [...h, 1]; // h1…h8 solved; h9 = 1 (fixed)
-}
-
-/** Apply a 9-element flat homography to point (x, y). */
-function applyHomography(H, x, y) {
-  const d = H[6] * x + H[7] * y + H[8];
-  return { x: (H[0] * x + H[1] * y + H[2]) / d, y: (H[3] * x + H[4] * y + H[5]) / d };
-}
-
-/**
- * Perspective-correct a canvas using 4 source corner points.
- *
- * Uses a true inverse projective homography (DLT) for mathematically correct
- * deskewing of any quadrilateral, including trapezoid/angled perspectives.
- *
- * @param {HTMLCanvasElement} srcCanvas  Raw captured image
- * @param {Array<{x,y}>}      corners   [tl, tr, br, bl] in source pixel coords
- * @param {number}            outW      Output width  (default OUTPUT_WIDTH)
- * @param {number}            outH      Output height (default OUTPUT_HEIGHT)
- * @returns {HTMLCanvasElement}
- */
-function applyPerspectiveTransform(srcCanvas, corners, outW, outH) {
-  const [tl, tr, br, bl] = corners;
-  const srcW = srcCanvas.width, srcH = srcCanvas.height;
-
-  // If explicit dimensions are not provided, dynamically compute target output dimensions
-  // that strictly preserve the document's true natural aspect ratio.
-  if (!outW || !outH) {
-    const target = calculateTargetOutputDimensions(corners, OUTPUT_HEIGHT);
-    outW = target.outW;
-    outH = target.outH;
-  }
-
-  // H maps dst-rect pixel → src-quad pixel (inverse direction for scanline rendering)
-  const dstRect = [
-    { x: 0,    y: 0    },
-    { x: outW, y: 0    },
-    { x: outW, y: outH },
-    { x: 0,    y: outH },
-  ];
-  const H = computeHomography(dstRect, [tl, tr, br, bl]);
-
-  const dst    = document.createElement('canvas');
-  dst.width    = outW;
-  dst.height   = outH;
-  const dstCtx = dst.getContext('2d');
-
-  const srcData = srcCanvas.getContext('2d').getImageData(0, 0, srcW, srcH).data;
-  const dstImgData = dstCtx.createImageData(outW, outH);
-  const d = dstImgData.data;
-
-  for (let dy = 0; dy < outH; dy++) {
-    for (let dx = 0; dx < outW; dx++) {
-      const { x: sx, y: sy } = applyHomography(H, dx, dy);
-
-      const sx0 = Math.floor(sx), sy0 = Math.floor(sy);
-      const sx1 = Math.min(sx0 + 1, srcW - 1), sy1 = Math.min(sy0 + 1, srcH - 1);
-      const fx = sx - sx0, fy = sy - sy0;
-      const csx0 = Math.max(0, Math.min(srcW - 1, sx0));
-      const csy0 = Math.max(0, Math.min(srcH - 1, sy0));
-      const csx1 = Math.max(0, Math.min(srcW - 1, sx1));
-      const csy1 = Math.max(0, Math.min(srcH - 1, sy1));
-
-      const i00 = (csy0 * srcW + csx0) * 4;
-      const i10 = (csy0 * srcW + csx1) * 4;
-      const i01 = (csy1 * srcW + csx0) * 4;
-      const i11 = (csy1 * srcW + csx1) * 4;
-      const di  = (dy * outW + dx) * 4;
-
-      for (let c = 0; c < 3; c++) {
-        d[di + c] = Math.round(
-          (1 - fx) * (1 - fy) * srcData[i00 + c] +
-          fx       * (1 - fy) * srcData[i10 + c] +
-          (1 - fx) * fy       * srcData[i01 + c] +
-          fx       * fy       * srcData[i11 + c]
-        );
-      }
-      d[di + 3] = 255;
-    }
-  }
-  dstCtx.putImageData(dstImgData, 0, 0);
-  return dst;
-}
-
-/**
- * Per-channel auto-levels: stretch the 2nd–98th percentile to [0, 255].
- * Removes colour casts and normalises uneven lighting without hard clipping.
- * Returns a new canvas.
- */
-/**
- * 3×3 median filter on a uint8 grayscale array.
- * Removes mobile sensor noise and speckles while keeping text edges crisp.
- */
-function denoiseGrayscaleMedian(gray, w, h) {
-  const out = new Uint8ClampedArray(w * h);
-  const win = new Uint8Array(9);
-  for (let y = 0; y < h; y++) {
-    const y0 = Math.max(0, y - 1), y1 = Math.min(h - 1, y + 1);
-    for (let x = 0; x < w; x++) {
-      const x0 = Math.max(0, x - 1), x1 = Math.min(w - 1, x + 1);
-      let count = 0;
-      for (let ny = y0; ny <= y1; ny++) {
-        for (let nx = x0; nx <= x1; nx++) {
-          win[count++] = gray[ny * w + nx];
-        }
-      }
-      for (let i = 1; i < count; i++) {
-        const val = win[i];
-        let j = i - 1;
-        while (j >= 0 && win[j] > val) {
-          win[j + 1] = win[j];
-          j--;
-        }
-        win[j + 1] = val;
-      }
-      out[y * w + x] = win[Math.floor(count / 2)];
-    }
-  }
-  return out;
-}
-
-/**
- * Background illumination normalization and document paper whitening for Color mode.
- * Removes shadows, yellowing, and ambient lighting casts to make the paper background clean white,
- * while strictly preserving rich colors (stamps, signatures, logos) and deep text contrast.
- */
-function applyIlluminationNormalization(srcCanvas) {
-  const w = srcCanvas.width, h = srcCanvas.height;
-  const src = srcCanvas.getContext('2d').getImageData(0, 0, w, h).data;
-
-  const gridW = 32, gridH = 32;
-  const stepX = w / gridW;
-  const stepY = h / gridH;
-
-  const cellR = Array.from({ length: gridW * gridH }, () => []);
-  const cellG = Array.from({ length: gridW * gridH }, () => []);
-  const cellB = Array.from({ length: gridW * gridH }, () => []);
-
-  for (let y = 0; y < h; y += 4) {
-    const gy = Math.min(gridH - 1, Math.floor(y / stepY));
-    for (let x = 0; x < w; x += 4) {
-      const gx = Math.min(gridW - 1, Math.floor(x / stepX));
-      const idx = (y * w + x) * 4;
-      const gidx = gy * gridW + gx;
-      cellR[gidx].push(src[idx]);
-      cellG[gidx].push(src[idx + 1]);
-      cellB[gidx].push(src[idx + 2]);
-    }
-  }
-
-  const bgR = new Float32Array(gridW * gridH);
-  const bgG = new Float32Array(gridW * gridH);
-  const bgB = new Float32Array(gridW * gridH);
-
-  for (let i = 0; i < gridW * gridH; i++) {
-    const rArr = cellR[i].sort((a, b) => b - a);
-    const gArr = cellG[i].sort((a, b) => b - a);
-    const bArr = cellB[i].sort((a, b) => b - a);
-    const topCount = Math.max(1, Math.floor(rArr.length * 0.15));
-    let sumR = 0, sumG = 0, sumB = 0;
-    for (let k = 0; k < topCount; k++) {
-      sumR += rArr[k] ?? 255;
-      sumG += gArr[k] ?? 255;
-      sumB += bArr[k] ?? 255;
-    }
-    bgR[i] = Math.max(110, sumR / topCount);
-    bgG[i] = Math.max(110, sumG / topCount);
-    bgB[i] = Math.max(110, sumB / topCount);
-  }
-
-  const dst = document.createElement('canvas');
-  dst.width = w; dst.height = h;
-  const dstCtx = dst.getContext('2d');
-  const out = dstCtx.createImageData(w, h);
-  const o = out.data;
-
-  for (let y = 0; y < h; y++) {
-    const gy = y / stepY - 0.5;
-    const gy0 = Math.max(0, Math.floor(gy));
-    const gy1 = Math.min(gridH - 1, gy0 + 1);
-    const fy = Math.max(0, Math.min(1, gy - gy0));
-
-    for (let x = 0; x < w; x++) {
-      const gx = x / stepX - 0.5;
-      const gx0 = Math.max(0, Math.floor(gx));
-      const gx1 = Math.min(gridW - 1, gx0 + 1);
-      const fx = Math.max(0, Math.min(1, gx - gx0));
-
-      const i00 = gy0 * gridW + gx0;
-      const i10 = gy0 * gridW + gx1;
-      const i01 = gy1 * gridW + gx0;
-      const i11 = gy1 * gridW + gx1;
-
-      const bR = (1 - fx) * (1 - fy) * bgR[i00] + fx * (1 - fy) * bgR[i10] + (1 - fx) * fy * bgR[i01] + fx * fy * bgR[i11];
-      const bG = (1 - fx) * (1 - fy) * bgG[i00] + fx * (1 - fy) * bgG[i10] + (1 - fx) * fy * bgG[i01] + fx * fy * bgG[i11];
-      const bB = (1 - fx) * (1 - fy) * bgB[i00] + fx * (1 - fy) * bgB[i10] + (1 - fx) * fy * bgB[i01] + fx * fy * bgB[i11];
-
-      const idx = (y * w + x) * 4;
-      const r = src[idx], g = src[idx + 1], b = src[idx + 2];
-
-      const normR = r / Math.max(1, bR);
-      const normG = g / Math.max(1, bG);
-      const normB = b / Math.max(1, bB);
-
-      const lum = 0.299 * normR + 0.587 * normG + 0.114 * normB;
-      const maxC = Math.max(r, g, b);
-      const minC = Math.min(r, g, b);
-      const chroma = maxC - minC;
-
-      let outR, outG, outB;
-
-      // Paper background zone: if bright and neutral, smoothly map to true white 255
-      if (lum >= 0.80 && chroma < 28) {
-        const whiteFactor = Math.min(1, (lum - 0.80) / 0.15);
-        const targetR = normR * 255;
-        const targetG = normG * 255;
-        const targetB = normB * 255;
-        outR = Math.min(255, Math.round(targetR + (255 - targetR) * whiteFactor));
-        outG = Math.min(255, Math.round(targetG + (255 - targetG) * whiteFactor));
-        outB = Math.min(255, Math.round(targetB + (255 - targetB) * whiteFactor));
-      } else if (chroma >= 25) {
-        // High saturation (stamps, signatures, colored headings) -> preserve rich color
-        outR = Math.min(255, Math.max(0, Math.round(normR * 250)));
-        outG = Math.min(255, Math.max(0, Math.round(normG * 250)));
-        outB = Math.min(255, Math.max(0, Math.round(normB * 250)));
-      } else {
-        // Text / lines / dark regions -> contrast enhancement
-        const factor = Math.pow(Math.min(1, lum), 1.2);
-        outR = Math.min(255, Math.max(0, Math.round((r / bR) * 255 * factor)));
-        outG = Math.min(255, Math.max(0, Math.round((g / bG) * 255 * factor)));
-        outB = Math.min(255, Math.max(0, Math.round((b / bB) * 255 * factor)));
-      }
-
-      o[idx]     = outR;
-      o[idx + 1] = outG;
-      o[idx + 2] = outB;
-      o[idx + 3] = 255;
-    }
-  }
-  dstCtx.putImageData(out, 0, 0);
-  return dst;
-}
-
-/**
- * Per-channel auto-levels stretch percentile [2%, 98%] to [0, 255].
- */
-function applyAutoLevels(srcCanvas) {
-  const w = srcCanvas.width, h = srcCanvas.height, n = w * h;
-  const src = srcCanvas.getContext('2d').getImageData(0, 0, w, h).data;
-
-  const dst    = document.createElement('canvas');
-  dst.width    = w; dst.height = h;
-  const dstCtx = dst.getContext('2d');
-  const out    = dstCtx.createImageData(w, h);
-  const o      = out.data;
-
-  for (let ch = 0; ch < 3; ch++) {
-    const hist = new Int32Array(256);
-    for (let i = 0; i < n; i++) hist[src[i * 4 + ch]]++;
-
-    let cumLo = 0, loVal = 0;
-    for (let v = 0; v < 256; v++) {
-      cumLo += hist[v];
-      if (cumLo >= n * 0.02) { loVal = v; break; }
-    }
-    let cumHi = 0, hiVal = 255;
-    for (let v = 255; v >= 0; v--) {
-      cumHi += hist[v];
-      if (cumHi >= n * 0.02) { hiVal = v; break; }
-    }
-    const range = Math.max(1, hiVal - loVal);
-
-    const lut = new Uint8ClampedArray(256);
-    for (let v = 0; v < 256; v++) {
-      lut[v] = Math.max(0, Math.min(255, Math.round((v - loVal) * 255 / range)));
-    }
-    for (let i = 0; i < n; i++) o[i * 4 + ch] = lut[src[i * 4 + ch]];
-  }
-  for (let i = 0; i < n; i++) o[i * 4 + 3] = 255;
-  dstCtx.putImageData(out, 0, 0);
-  return dst;
-}
-
-/**
- * Integral-image adaptive threshold — Bradley/Roth method.
- */
-function adaptiveThreshold(gray, w, h, winSize = 71, k = 0.12) {
-  const sat = new Float64Array((w + 1) * (h + 1));
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      sat[(y + 1) * (w + 1) + (x + 1)] =
-        gray[y * w + x]
-        + sat[y * (w + 1) + (x + 1)]
-        + sat[(y + 1) * (w + 1) + x]
-        - sat[y * (w + 1) + x];
-    }
-  }
-
-  const half = Math.floor(winSize / 2);
-  const out  = new Uint8ClampedArray(w * h);
-
-  for (let y = 0; y < h; y++) {
-    const y1 = Math.max(0, y - half), y2 = Math.min(h - 1, y + half);
-    for (let x = 0; x < w; x++) {
-      const x1 = Math.max(0, x - half), x2 = Math.min(w - 1, x + half);
-      const cnt = (x2 - x1 + 1) * (y2 - y1 + 1);
-      const sum = sat[(y2 + 1) * (w + 1) + (x2 + 1)]
-                - sat[y1 * (w + 1) + (x2 + 1)]
-                - sat[(y2 + 1) * (w + 1) + x1]
-                + sat[y1 * (w + 1) + x1];
-      out[y * w + x] = gray[y * w + x] > (sum / cnt) * (1 - k) ? 255 : 0;
-    }
-  }
-  return out;
-}
-
-/**
- * Apply document enhancement:
- *   'color' → illumination normalization + auto-levels (clean white background + vivid colors)
- *   'bw'    → greyscale → 3x3 median denoising → integral-image adaptive threshold (crisp text, zero speckles)
- */
-function applyFilter(srcCanvas, mode) {
-  if (mode === 'color') {
-    const illuminated = applyIlluminationNormalization(srcCanvas);
-    return applyAutoLevels(illuminated);
-  }
-
-  // B&W path
-  const w = srcCanvas.width, h = srcCanvas.height;
-  const data = srcCanvas.getContext('2d').getImageData(0, 0, w, h).data;
-
-  const gray = new Uint8ClampedArray(w * h);
-  for (let i = 0; i < w * h; i++) {
-    gray[i] = Math.round(0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2]);
-  }
-
-  // Pre-denoise grayscale image to eliminate sensor grain before thresholding
-  const denoised = denoiseGrayscaleMedian(gray, w, h);
-
-  const winSize = Math.max(31, Math.floor(Math.min(w, h) / 18)) | 1;
-  const bw = adaptiveThreshold(denoised, w, h, winSize, 0.12);
-
-  const dst    = document.createElement('canvas');
-  dst.width    = w; dst.height = h;
-  const dstCtx = dst.getContext('2d');
-  const outData = dstCtx.createImageData(w, h);
-  const o = outData.data;
-  for (let i = 0; i < w * h; i++) {
-    o[i * 4] = o[i * 4 + 1] = o[i * 4 + 2] = bw[i];
-    o[i * 4 + 3] = 255;
-  }
-  dstCtx.putImageData(outData, 0, 0);
-  return dst;
-}
-
-/**
- * Unsharp mask sharpening using a 3×3 Laplacian kernel.
- */
-function applySharpening(srcCanvas) {
-  const w = srcCanvas.width, h = srcCanvas.height;
-  const src = srcCanvas.getContext('2d').getImageData(0, 0, w, h).data;
-
-  const dst    = document.createElement('canvas');
-  dst.width    = w; dst.height = h;
-  const dstCtx = dst.getContext('2d');
-  const outImgData = dstCtx.createImageData(w, h);
-  const o = outImgData.data;
-
-  const KC = 1.5, KN = -0.125;
-
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const i  = (y * w + x) * 4;
-      const iU = (Math.max(0, y - 1) * w + x) * 4;
-      const iD = (Math.min(h - 1, y + 1) * w + x) * 4;
-      const iL = (y * w + Math.max(0, x - 1)) * 4;
-      const iR = (y * w + Math.min(w - 1, x + 1)) * 4;
-      for (let c = 0; c < 3; c++) {
-        o[i + c] = Math.max(0, Math.min(255, Math.round(
-          KC * src[i + c] + KN * (src[iU + c] + src[iD + c] + src[iL + c] + src[iR + c])
-        )));
-      }
-      o[i + 3] = 255;
-    }
-  }
-  dstCtx.putImageData(outImgData, 0, 0);
-  return dst;
-}
+// ─── PDF assembly (unchanged) ─────────────────────────────────────────────────
 
 /**
  * Assemble an array of processed canvases into a single multi-page PDF.
@@ -611,35 +78,6 @@ async function assemblePagesToPdf(canvases) {
   const pdfBytes  = await pdfDoc.save();
   const timestamp = new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
   return new File([pdfBytes], `scan_${timestamp}.pdf`, { type: 'application/pdf' });
-}
-
-// ─── Canvas rotation utility ───────────────────────────────────────────────
-
-/**
- * Returns a new canvas with the source rotated by steps × 90° clockwise.
- * steps: 1 = 90° CW, 2 = 180°, 3 = 270° CW (= 90° CCW).
- */
-function rotateCanvas90(srcCanvas, steps = 1) {
-  const s = ((steps % 4) + 4) % 4; // normalise to 0-3
-  if (s === 0) {
-    // No-op: return a copy
-    const dst = document.createElement('canvas');
-    dst.width = srcCanvas.width; dst.height = srcCanvas.height;
-    dst.getContext('2d').drawImage(srcCanvas, 0, 0);
-    return dst;
-  }
-  const landscape = s === 1 || s === 3;
-  const dst = document.createElement('canvas');
-  dst.width  = landscape ? srcCanvas.height : srcCanvas.width;
-  dst.height = landscape ? srcCanvas.width  : srcCanvas.height;
-  const ctx  = dst.getContext('2d');
-  ctx.save();
-  if (s === 1)      { ctx.translate(dst.width, 0);              ctx.rotate(Math.PI / 2); }
-  else if (s === 2) { ctx.translate(dst.width, dst.height);     ctx.rotate(Math.PI); }
-  else              { ctx.translate(0, dst.height);             ctx.rotate(-Math.PI / 2); }
-  ctx.drawImage(srcCanvas, 0, 0);
-  ctx.restore();
-  return dst;
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -751,6 +189,16 @@ function PageThumbnail({ canvas, index, totalPages, onRemove, onMoveLeft, onMove
  */
 export default function CamScannerModal({ onComplete, onCancel }) {
 
+  // ── OpenCV loading state ──────────────────────────────────────────────────
+  // cv is null until the WASM module is fully initialized.
+  // loading=true prevents capture until OpenCV is ready.
+  const { cv, loading: cvLoading, error: cvError } = useOpenCV();
+
+  // Keep cv in a ref so live-detection interval can always read the latest
+  // value without needing to re-register the interval when cv changes.
+  const cvRef = useRef(null);
+  useEffect(() => { cvRef.current = cv; }, [cv]);
+
   // ── Step: 'camera' | 'adjust' | 'preview' | 'pages' ─────────────────────
   const [step, setStep] = useState('camera');
 
@@ -804,10 +252,12 @@ export default function CamScannerModal({ onComplete, onCancel }) {
   const [rotationSteps, setRotationSteps]   = useState(0); // 0–3, clockwise 90° increments
   const adjustContainerRef = useRef(null);
 
-
   // ── Preview step ─────────────────────────────────────────────────────────
   const [previewCanvas, setPreviewCanvas] = useState(null);
   const [previewDataUrl, setPreviewDataUrl] = useState(null);
+  // When true, the preview image fills the screen so the user can inspect
+  // fine detail (text quality, corner accuracy) before accepting the page.
+  const [previewLightboxOpen, setPreviewLightboxOpen] = useState(false);
 
   // ── Pages list ───────────────────────────────────────────────────────────
   const [pages, setPages]             = useState([]);
@@ -842,16 +292,12 @@ export default function CamScannerModal({ onComplete, onCancel }) {
       if (videoRef.current) videoRef.current.srcObject = stream;
 
       // Detect facing mode from the active video track's capabilities/settings.
-      // getSettings() is the most reliable cross-browser method; getCapabilities()
-      // is a fallback for browsers that expose it there instead.
-      // If neither reports 'user', default to non-front (environment/unknown).
       const videoTrack = stream.getVideoTracks()[0];
       let detectedFacing = 'environment';
       if (videoTrack) {
         const settings     = videoTrack.getSettings?.()     || {};
         const capabilities = videoTrack.getCapabilities?.() || {};
         const facing = settings.facingMode || capabilities.facingMode;
-        // capabilities.facingMode can be an array of possible values; settings is a scalar
         if (Array.isArray(facing)) {
           detectedFacing = facing[0] ?? 'environment';
         } else if (facing) {
@@ -887,25 +333,23 @@ export default function CamScannerModal({ onComplete, onCancel }) {
 
   useEffect(() => () => stopCamera(), [stopCamera]);
 
-  // ─── Live document-boundary overlay (Issue B) ────────────────────────────
+  // ─── Live document-boundary overlay ─────────────────────────────────────
   //
   // While the camera step is active and the video is playing, sample one frame
-  // every LIVE_DETECT_INTERVAL_MS, run detectDocumentCorners on a small canvas,
-  // and draw the detected quad onto liveOverlayCanvasRef when confident.
+  // every LIVE_DETECT_INTERVAL_MS, run detectCorners() (OpenCV Canny+findContours)
+  // on a small canvas, and draw the detected quad onto liveOverlayCanvasRef.
   //
   // Performance notes:
-  //   • Detection runs on a 320-wide thumbnail (not full 1080p), taking < 30 ms
-  //     on a mid-range phone.
-  //   • We use setInterval rather than requestAnimationFrame so we don't
-  //     compete with the browser's own video rendering loop.
-  //   • The overlay canvas is drawn with ctx.clearRect each tick; no retained
-  //     state leaks between frames.
+  //   • Detection runs on a 320-wide thumbnail — same as the previous impl.
+  //   • OpenCV WASM findContours is significantly faster than the hand-rolled
+  //     Sobel edge map + per-pixel scoring loop it replaces.
+  //   • The interval guard `if (!cvRef.current) return` means detection is
+  //     silently skipped while OpenCV is still loading — no errors, no overlay.
   //   • The interval is fully cleared when the component leaves camera step or
   //     unmounts, ensuring zero background work in other steps.
 
   useEffect(() => {
     if (step !== 'camera') {
-      // Clear any existing interval when we leave the camera step
       if (liveDetectTimerRef.current) {
         clearInterval(liveDetectTimerRef.current);
         liveDetectTimerRef.current = null;
@@ -918,14 +362,17 @@ export default function CamScannerModal({ onComplete, onCancel }) {
     const scratch = document.createElement('canvas');
 
     const runDetection = () => {
-      const video   = videoRef.current;
-      const overlay = liveOverlayCanvasRef.current;
-      if (!video || !overlay || video.readyState < 2 || video.videoWidth === 0) return;
+      const currentCv = cvRef.current;
+      const video     = videoRef.current;
+      const overlay   = liveOverlayCanvasRef.current;
+
+      // Skip if OpenCV not yet ready or video not streaming
+      if (!currentCv || !video || !overlay || video.readyState < 2 || video.videoWidth === 0) return;
 
       const vw = video.videoWidth;
       const vh = video.videoHeight;
 
-      // Downscale to at most 320px wide for speed; detection still accurate enough
+      // Downscale to at most 320px wide for speed
       const scale  = Math.min(1, 320 / vw);
       const sw     = Math.round(vw * scale);
       const sh     = Math.round(vh * scale);
@@ -934,9 +381,8 @@ export default function CamScannerModal({ onComplete, onCancel }) {
 
       const sCtx = scratch.getContext('2d');
 
-      // Apply the same horizontal flip used at capture time so that the
-      // detected corner coordinates are in the same (corrected) coordinate
-      // space as the actual captured canvas — keeping overlay and capture aligned.
+      // Apply the same horizontal flip used at capture time so that detected
+      // corner coords are in the corrected (non-mirrored) coordinate space.
       if (isFrontCameraRef.current) {
         sCtx.translate(sw, 0);
         sCtx.scale(-1, 1);
@@ -946,11 +392,11 @@ export default function CamScannerModal({ onComplete, onCancel }) {
         sCtx.setTransform(1, 0, 0, 1, 0, 0);
       }
 
-      const { corners, confident } = detectDocumentCorners(scratch);
+      // OpenCV-based corner detection (Canny + findContours + approxPolyDP)
+      const { corners: detectedCorners, confident } = detectCorners(scratch, currentCv);
       setLiveDetected(confident);
 
       const oCtx = overlay.getContext('2d');
-      // Match overlay canvas pixel dimensions to the video element's CSS size
       const dispW = overlay.clientWidth  || vw;
       const dispH = overlay.clientHeight || vh;
       overlay.width  = dispW;
@@ -959,8 +405,8 @@ export default function CamScannerModal({ onComplete, onCancel }) {
 
       if (!confident) return;
 
-      // Compute exact object-fit: cover scaling and cropping offsets
-      const videoRatio = vw / vh;
+      // Compute object-fit: cover scaling and cropping offsets
+      const videoRatio   = vw / vh;
       const elementRatio = dispW / dispH;
 
       let scaleRatio, renderW, renderH, offsetX, offsetY;
@@ -978,17 +424,13 @@ export default function CamScannerModal({ onComplete, onCancel }) {
         offsetY = (renderH - dispH) / 2;
       }
 
-      // Map corners from scratch-canvas coords (sw, sh) -> overlay CSS coords (dispW, dispH)
-      const pts = corners.map((c) => {
-        const rawX = c.x / scale;
-        const rawY = c.y / scale;
-        return {
-          x: rawX * scaleRatio - offsetX,
-          y: rawY * scaleRatio - offsetY,
-        };
-      });
+      // Map corners from scratch-canvas coords (sw, sh) → overlay CSS coords
+      const pts = detectedCorners.map((c) => ({
+        x: (c.x / scale) * scaleRatio - offsetX,
+        y: (c.y / scale) * scaleRatio - offsetY,
+      }));
 
-      // Draw filled polygon with semi-transparent purple fill
+      // Filled polygon with semi-transparent purple fill
       oCtx.beginPath();
       oCtx.moveTo(pts[0].x, pts[0].y);
       pts.slice(1).forEach((p) => oCtx.lineTo(p.x, p.y));
@@ -996,7 +438,7 @@ export default function CamScannerModal({ onComplete, onCancel }) {
       oCtx.fillStyle   = 'rgba(75, 22, 76, 0.18)';
       oCtx.fill();
 
-      // Draw stroke edges — bright lime / emerald so it's readable on any doc colour
+      // Stroke edges — bright emerald so it's readable on any doc colour
       oCtx.beginPath();
       oCtx.moveTo(pts[0].x, pts[0].y);
       pts.forEach((p) => oCtx.lineTo(p.x, p.y));
@@ -1030,22 +472,10 @@ export default function CamScannerModal({ onComplete, onCancel }) {
   // ─── Capture photo ────────────────────────────────────────────────────────
   //
   // Draws the current video frame onto an off-screen canvas at full native
-  // resolution, then runs corner detection on that canvas.
+  // resolution, then runs OpenCV corner detection on that canvas.
   //
-  // Mirror correction:
-  //   Mobile browsers deliver the front camera's video stream in its hardware-
-  //   native orientation, which is typically already horizontally mirrored
-  //   (the physical sensor sees the world normally, but the OS flips it so it
-  //   matches "what you'd see in a mirror").  drawImage() reads from that raw
-  //   stream, so without correction the captured frame is mirrored for the
-  //   front camera.  We fix this by flipping the canvas horizontally when the
-  //   active camera is front-facing — the captured pixel data is then always in
-  //   the correct, unmirrored orientation regardless of which camera is used.
-  //
-  //   The live-preview <video> element is also flipped via CSS (see below) so
-  //   it looks natural for the user while framing, but that CSS transform has
-  //   zero effect on the drawImage output — the flip here is independent and
-  //   specifically for the saved pixel data.
+  // Mirror correction: when the active camera is front-facing, we flip the
+  // canvas horizontally so the saved image is never mirrored.
 
   const handleCapture = useCallback(() => {
     const video = videoRef.current;
@@ -1057,17 +487,10 @@ export default function CamScannerModal({ onComplete, onCancel }) {
     const ctx = canvas.getContext('2d');
 
     if (isFrontCamera) {
-      // Flip horizontally: translate to the right edge, then scale x by -1.
-      // This produces a correct (un-mirrored) image from the front camera stream.
       ctx.translate(w, 0);
       ctx.scale(-1, 1);
     }
-
     ctx.drawImage(video, 0, 0, w, h);
-
-    // Reset transform so any subsequent canvas reads are in normal coordinates.
-    // (ctx.getImageData is not affected by the current transform, but this is
-    //  defensive housekeeping.)
     if (isFrontCamera) {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
     }
@@ -1075,7 +498,8 @@ export default function CamScannerModal({ onComplete, onCancel }) {
     capturedCanvasRef.current = canvas;
     setImageNaturalSize({ w, h });
 
-    const detectedCorners = detectDocumentCornersForCapture(canvas);
+    // OpenCV-based corner detection for the still image
+    const { corners: detectedCorners } = detectCorners(canvas, cvRef.current);
     setCorners(detectedCorners);
     setRotationSteps(0);
 
@@ -1137,31 +561,27 @@ export default function CamScannerModal({ onComplete, onCancel }) {
         console.warn('[CamScanner] Quad geometry validation warning:', geomVal.errors);
       }
 
-      // 1. Perspective correction (true homography preserving natural aspect ratio)
+      // 1. Compute output dimensions (preserves true document aspect ratio)
       const target = calculateTargetOutputDimensions(corners, OUTPUT_HEIGHT);
-      const corrected = applyPerspectiveTransform(
+
+      // 2. Perspective correction using OpenCV getPerspectiveTransform + warpPerspective
+      const corrected = perspectiveCorrect(
         capturedCanvasRef.current,
         corners,
         target.outW,
-        target.outH
+        target.outH,
+        cvRef.current
       );
 
-      // 1b. Manual orientation rotation (0/90/180/270° CW) — applied immediately
-      //     after perspective warp so the output is always upright.
-      const rotated = rotationSteps !== 0 ? rotateCanvas90(corrected, rotationSteps) : corrected;
+      // 3. Manual orientation rotation (0/90/180/270° CW)
+      const rotated = rotationSteps !== 0 ? rotateCanvas(corrected, rotationSteps) : corrected;
 
       // Yield between heavy steps to avoid complete UI lock
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      // 2. Enhancement filter (illumination normalization for color, median denoising + adaptive threshold for B&W)
-      const filtered = applyFilter(rotated, filter);
+      // 4. Enhancement: sharpen + color normalization (CLAHE) or BW adaptive threshold
+      const finalResult = applyEnhancement(rotated, filter, cvRef.current);
 
-      await new Promise((resolve) => setTimeout(resolve, 0));
-
-      // 3. Post-enhancement sharpening for text crispness
-      const finalResult = applySharpening(filtered);
-
-      // Store result and advance to preview step
       setPreviewCanvas(finalResult);
       setPreviewDataUrl(finalResult.toDataURL('image/jpeg', 0.88));
       setStep('preview');
@@ -1175,7 +595,7 @@ export default function CamScannerModal({ onComplete, onCancel }) {
   const handleRotatePreview = useCallback((steps) => {
     setPreviewCanvas((prev) => {
       if (!prev) return prev;
-      const rotated = rotateCanvas90(prev, steps);
+      const rotated = rotateCanvas(prev, steps);
       setPreviewDataUrl(rotated.toDataURL('image/jpeg', 0.88));
       return rotated;
     });
@@ -1275,6 +695,10 @@ export default function CamScannerModal({ onComplete, onCancel }) {
     step === 'preview' ? 3 : 4;
 
   const cornerLabels = ['↖', '↗', '↘', '↙'];
+
+  // Whether capture interactions should be blocked
+  // (camera still loading, camera error, OR OpenCV not yet ready)
+  const captureBlocked = cameraLoading || !!cameraError || cvLoading;
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -1414,9 +838,7 @@ export default function CamScannerModal({ onComplete, onCancel }) {
 
               {!cameraError && (
                 <div className="relative w-full h-full">
-                  {/* Live video feed — object-cover fills the container without distortion.
-                      scaleX(-1) mirrors the preview for front camera only — purely cosmetic
-                      (makes it feel like a mirror while framing), has zero effect on drawImage. */}
+                  {/* Live video feed */}
                   <video
                     ref={videoRef}
                     autoPlay
@@ -1429,11 +851,7 @@ export default function CamScannerModal({ onComplete, onCancel }) {
                     }}
                   />
 
-                  {/* ── Issue B: live edge-detection overlay canvas ───────
-                      Sits directly on top of the video, pointer-events:none
-                      so it never blocks touch events on the capture button.
-                      Updated every LIVE_DETECT_INTERVAL_MS by the detection
-                      effect above. Only shows content when confident=true.    */}
+                  {/* Live edge-detection overlay canvas */}
                   <canvas
                     ref={liveOverlayCanvasRef}
                     className="absolute inset-0 w-full h-full pointer-events-none"
@@ -1459,7 +877,7 @@ export default function CamScannerModal({ onComplete, onCancel }) {
                     </div>
                   </div>
 
-                  {/* Live detection status badge (shown when document detected) */}
+                  {/* Live detection status badge */}
                   {liveDetected && (
                     <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
                       <div className="flex items-center gap-1.5 bg-emerald-600/90 backdrop-blur-sm text-white text-xs font-semibold px-3 py-1.5 rounded-full shadow-lg">
@@ -1469,9 +887,28 @@ export default function CamScannerModal({ onComplete, onCancel }) {
                     </div>
                   )}
 
-                  {/* ── Mobile overlay controls bar (hidden on lg+) ─────────
-                      Replaces the side panel for all viewports below lg.
-                      Uses a gradient backdrop for legibility over any camera feed. */}
+                  {/* OpenCV loading overlay — blocks capture until engine is ready */}
+                  {cvLoading && !cameraLoading && !cameraError && (
+                    <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+                      <div className="flex flex-col items-center gap-3 p-6 rounded-2xl bg-slate-900/90 border border-slate-700 shadow-2xl">
+                        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-400" />
+                        <p className="text-sm text-slate-300 font-medium">Memuat mesin pemrosesan...</p>
+                        <p className="text-xs text-slate-500">Mohon tunggu sebentar</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* OpenCV load error overlay */}
+                  {cvError && !cameraError && (
+                    <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/80">
+                      <div className="flex flex-col items-center gap-3 p-6 rounded-2xl bg-slate-900 border border-red-800 shadow-2xl max-w-sm text-center">
+                        <i className="bi bi-exclamation-triangle-fill text-red-400 text-3xl" />
+                        <p className="text-sm text-red-300 font-medium">{cvError}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Mobile overlay controls bar (hidden on lg+) ───────── */}
                   <div className="absolute bottom-0 left-0 right-0 lg:hidden z-10">
                     <div className="bg-gradient-to-t from-black/90 via-black/60 to-transparent px-5 pt-8 pb-safe-or-5 pb-5 flex flex-col gap-3">
 
@@ -1520,11 +957,11 @@ export default function CamScannerModal({ onComplete, onCancel }) {
                         <button
                           type="button"
                           onClick={handleCapture}
-                          disabled={cameraLoading || !!cameraError}
+                          disabled={captureBlocked}
                           className="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center shadow-2xl transition active:scale-95 disabled:opacity-40"
                           style={{ background: 'linear-gradient(135deg, #4B164C 0%, #DD88CF 100%)' }}
                           aria-label="Ambil foto"
-                          title="Ambil Foto"
+                          title={cvLoading ? 'Memuat mesin pemrosesan...' : 'Ambil Foto'}
                         >
                           <i className="bi bi-camera-fill text-3xl text-white" />
                         </button>
@@ -1544,7 +981,6 @@ export default function CamScannerModal({ onComplete, onCancel }) {
                             </span>
                           </button>
                         ) : (
-                          /* Empty placeholder to keep capture button centred */
                           <div className="w-12 h-12" aria-hidden="true" />
                         )}
                       </div>
@@ -1553,7 +989,7 @@ export default function CamScannerModal({ onComplete, onCancel }) {
                 </div>
               )}
 
-              {/* ── First-time capture tip overlay ───────────────────────── */}
+              {/* ── First-time capture tip overlay ─────────────────────── */}
               {showFirstTimeTip && !cameraError && !cameraLoading && (
                 <div className="absolute inset-0 z-30 flex items-end sm:items-center justify-center p-4 sm:p-8 bg-black/70 backdrop-blur-sm">
                   <div className="w-full max-w-sm bg-slate-900 rounded-2xl border border-purple-900/50 shadow-2xl p-5">
@@ -1594,7 +1030,7 @@ export default function CamScannerModal({ onComplete, onCancel }) {
               )}
             </div>
 
-            {/* Camera controls panel — desktop only (lg+), hidden on mobile */}
+            {/* Camera controls panel — desktop only (lg+) */}
             <div className="hidden lg:flex flex-none bg-slate-900 border-l border-slate-800 p-6 flex-col gap-4 w-64">
               <div>
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Langkah 1</p>
@@ -1611,6 +1047,20 @@ export default function CamScannerModal({ onComplete, onCancel }) {
                 <p>☀️ Cahaya merata, tanpa bayangan</p>
                 <p>🖼️ 4 sudut dokumen terlihat</p>
               </div>
+
+              {/* OpenCV loading status — desktop side panel */}
+              {cvLoading && (
+                <div className="flex items-center gap-2 bg-slate-800/60 rounded-xl p-3 border border-slate-700/60">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-400 shrink-0" />
+                  <p className="text-xs text-slate-400">Memuat mesin OpenCV...</p>
+                </div>
+              )}
+              {!cvLoading && !cvError && cv && (
+                <div className="flex items-center gap-2 bg-emerald-950/50 rounded-xl p-3 border border-emerald-900/50">
+                  <i className="bi bi-check-circle-fill text-emerald-400 text-sm shrink-0" />
+                  <p className="text-xs text-emerald-300 font-medium">Mesin pemrosesan siap</p>
+                </div>
+              )}
 
               {cameras.length > 1 && (
                 <div className="space-y-1">
@@ -1639,12 +1089,25 @@ export default function CamScannerModal({ onComplete, onCancel }) {
                 <button
                   type="button"
                   onClick={handleCapture}
-                  disabled={cameraLoading || !!cameraError}
+                  disabled={captureBlocked}
                   className="w-full inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-xl text-white text-sm font-bold shadow-lg transition min-h-[52px] disabled:opacity-40"
                   style={{ background: 'linear-gradient(135deg, #4B164C 0%, #DD88CF 100%)' }}
+                  title={cvLoading ? 'Memuat mesin pemrosesan...' : 'Ambil Foto'}
                 >
-                  <i className="bi bi-camera-fill text-lg" />
-                  Ambil Foto
+                  {cvLoading ? (
+                    <>
+                      <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Memuat...
+                    </>
+                  ) : (
+                    <>
+                      <i className="bi bi-camera-fill text-lg" />
+                      Ambil Foto
+                    </>
+                  )}
                 </button>
 
                 {pages.length > 0 && (
@@ -1753,7 +1216,7 @@ export default function CamScannerModal({ onComplete, onCancel }) {
                 <p className="text-[10px] text-slate-500 leading-relaxed">
                   {filter === 'bw'
                     ? 'Mode Hitam-Putih: kontras adaptif, teks hitam di atas putih, ukuran file lebih kecil.'
-                    : 'Mode Warna: normalisasi pencahayaan, mempertahankan warna asli dokumen.'}
+                    : 'Mode Warna: normalisasi pencahayaan CLAHE, mempertahankan warna asli dokumen.'}
                 </p>
               </div>
 
@@ -1808,7 +1271,7 @@ export default function CamScannerModal({ onComplete, onCancel }) {
                   ) : (
                     <>
                       <i className="bi bi-magic" />
-                      Proses & Tinjau
+                      Proses &amp; Tinjau
                     </>
                   )}
                 </button>
@@ -1842,12 +1305,20 @@ export default function CamScannerModal({ onComplete, onCancel }) {
                   <img
                     src={previewDataUrl}
                     alt="Hasil scan"
-                    className="max-h-[70vh] w-auto rounded-lg shadow-2xl border border-slate-700"
+                    onClick={() => setPreviewLightboxOpen(true)}
+                    className="max-h-[70vh] w-auto rounded-lg shadow-2xl border border-slate-700 cursor-zoom-in active:opacity-90 transition-opacity"
                     style={{ display: 'block' }}
+                    title="Ketuk untuk memperbesar"
                   />
-                  <p className="text-xs text-slate-500 text-center">
-                    Ini adalah tampilan hasil scan setelah koreksi perspektif dan peningkatan kualitas gambar.
-                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewLightboxOpen(true)}
+                    className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition"
+                    aria-label="Perbesar preview"
+                  >
+                    <i className="bi bi-zoom-in text-sm" />
+                    Ketuk gambar untuk memperbesar dan periksa detail teks
+                  </button>
                 </div>
               ) : (
                 <div className="flex items-center justify-center">
@@ -1885,7 +1356,7 @@ export default function CamScannerModal({ onComplete, onCancel }) {
                 ))}
               </div>
 
-              {/* Fine-tune rotation (in case result is still sideways) */}
+              {/* Fine-tune rotation */}
               <div className="space-y-1.5">
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Koreksi Orientasi</p>
                 <div className="flex gap-2">
@@ -2040,6 +1511,49 @@ export default function CamScannerModal({ onComplete, onCancel }) {
         )}
 
       </div>
+
+      {/* ── Preview lightbox — full-screen overlay ── */}
+      {previewLightboxOpen && previewDataUrl && (
+        <div
+          className="fixed inset-0 z-[300] flex items-center justify-center bg-black/95"
+          onClick={() => setPreviewLightboxOpen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Preview diperbesar"
+        >
+          <button
+            type="button"
+            onClick={() => setPreviewLightboxOpen(false)}
+            className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-black/60 backdrop-blur-sm border border-white/20 text-white flex items-center justify-center hover:bg-white/10 transition"
+            aria-label="Tutup preview diperbesar"
+            title="Tutup"
+          >
+            <i className="bi bi-x-lg" />
+          </button>
+
+          <p className="absolute bottom-4 left-1/2 -translate-x-1/2 text-xs text-white/40 pointer-events-none select-none">
+            Ketuk di luar gambar untuk menutup
+          </p>
+
+          <div
+            className="w-full h-full overflow-auto flex items-center justify-center p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={previewDataUrl}
+              alt="Hasil scan — diperbesar"
+              style={{
+                display: 'block',
+                maxWidth: '100%',
+                maxHeight: '100%',
+                objectFit: 'contain',
+                touchAction: 'pinch-zoom',
+              }}
+              draggable={false}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

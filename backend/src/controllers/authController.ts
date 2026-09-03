@@ -28,29 +28,62 @@ const verifyRecaptcha = async (token: string): Promise<boolean> => {
 
 export const register = async (req: Request, res: Response) => {
   try {
-    const { name, email, password, captchaToken } = req.body;
+    const {
+      name,
+      email,
+      password,
+      password_confirmation,
+      // Accept token from either field name:
+      // - 'captchaToken'        (sent by updated frontend)
+      // - 'g-recaptcha-response' (legacy / external clients)
+      captchaToken: captchaTokenField,
+      'g-recaptcha-response': captchaLegacy,
+    } = req.body;
+
+    const captchaToken = captchaTokenField || captchaLegacy;
 
     // Validate reCAPTCHA
     if (captchaToken) {
       const isValidCaptcha = await verifyRecaptcha(captchaToken);
       if (!isValidCaptcha) {
-        return res.status(400).json({ error: 'CAPTCHA verification failed' });
+        return res.status(400).json({ error: 'Verifikasi CAPTCHA gagal. Silakan coba lagi.' });
       }
     } else if (process.env.RECAPTCHA_SECRET_KEY) {
-      return res.status(400).json({ error: 'CAPTCHA token is required' });
+      return res.status(400).json({ error: 'Token CAPTCHA diperlukan.' });
+    }
+
+    // Validate required fields
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: 'Nama lengkap wajib diisi.' });
+    }
+    if (!email || !email.trim()) {
+      return res.status(400).json({ error: 'Alamat email wajib diisi.' });
+    }
+    if (!password) {
+      return res.status(400).json({ error: 'Password wajib diisi.' });
+    }
+
+    // Minimum password length
+    if (password.length < 8) {
+      return res.status(400).json({ error: 'Password minimal 8 karakter.' });
+    }
+
+    // Password confirmation (if provided by client)
+    if (password_confirmation !== undefined && password !== password_confirmation) {
+      return res.status(400).json({ error: 'Konfirmasi password tidak cocok.' });
     }
 
     // Check if user already exists
     const existingUser = await findUserByEmail(email);
     if (existingUser) {
-      return res.status(400).json({ error: 'Email already registered' });
+      return res.status(400).json({ error: 'Email sudah terdaftar. Silakan gunakan email lain atau masuk ke akun yang ada.' });
     }
 
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // Create user
-    const user = await createUser(name, email, hashedPassword);
+    const user = await createUser(name.trim(), email.trim().toLowerCase(), hashedPassword);
 
     // Generate token
     const token = jwt.sign(
@@ -61,40 +94,47 @@ export const register = async (req: Request, res: Response) => {
 
     res.status(201).json({
       success: true,
-      message: 'Registration successful',
+      message: 'Pendaftaran berhasil.',
       token,
       user: { id: user.id, name: user.name, email: user.email },
     });
   } catch (error) {
     console.error('Registration error:', error);
-    res.status(500).json({ error: 'Registration failed' });
+    res.status(500).json({ error: 'Pendaftaran gagal. Silakan coba lagi.' });
   }
 };
 
 export const login = async (req: Request, res: Response) => {
   try {
-    const { email, password, captchaToken } = req.body;
+    const {
+      email,
+      password,
+      captchaToken: captchaTokenField,
+      'g-recaptcha-response': captchaLegacy,
+    } = req.body;
+
+    const captchaToken = captchaTokenField || captchaLegacy;
 
     // Validate reCAPTCHA
     if (captchaToken) {
       const isValidCaptcha = await verifyRecaptcha(captchaToken);
       if (!isValidCaptcha) {
-        return res.status(400).json({ error: 'CAPTCHA verification failed' });
+        return res.status(400).json({ error: 'Verifikasi CAPTCHA gagal. Silakan coba lagi.' });
       }
     } else if (process.env.RECAPTCHA_SECRET_KEY) {
-      return res.status(400).json({ error: 'CAPTCHA token is required' });
+      return res.status(400).json({ error: 'Token CAPTCHA diperlukan.' });
     }
 
     // Find user
     const user = await findUserByEmail(email);
     if (!user) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+      return res.status(401).json({ error: 'Email atau password salah.' });
     }
 
     // Verify password
     const isValidPassword = await bcrypt.compare(password, user.password);
     if (!isValidPassword) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+      return res.status(401).json({ error: 'Email atau password salah.' });
     }
 
     // Generate token
@@ -106,13 +146,13 @@ export const login = async (req: Request, res: Response) => {
 
     res.json({
       success: true,
-      message: 'Login successful',
+      message: 'Login berhasil.',
       token,
       user: { id: user.id, name: user.name, email: user.email },
     });
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ error: 'Login failed' });
+    res.status(500).json({ error: 'Login gagal. Silakan coba lagi.' });
   }
 };
 

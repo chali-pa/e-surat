@@ -3,7 +3,13 @@ import { AuthRequest } from '../middleware/auth';
 import { createUser, findUserByEmail, findUserById, findUserByGoogleSub, updateUserGoogleTokens, clearUserGoogleTokens } from '../models/User';
 import jwt from 'jsonwebtoken';
 import { getOAuth2Client, generateGoogleAuthUrl, isGoogleErrorInvalidGrant } from '../services/userGoogleAuthService';
-import { initializeUserDriveStructure } from '../services/userGoogleDriveService';
+import { 
+  initializeUserDriveStructure, 
+  listDriveFolders, 
+  getFolderDetails, 
+  getStorageSettings, 
+  updateStorageSettings 
+} from '../services/userGoogleDriveService';
 import { ensureUserSpreadsheet } from '../services/userGoogleSheetsService';
 
 export const redirect = async (req: AuthRequest, res: Response) => {
@@ -275,3 +281,106 @@ export const debug = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ error: 'Failed to debug Google configuration' });
   }
 };
+
+export const listFolders = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const parentId = (req.query.parentId as string) || undefined;
+    const pageToken = (req.query.pageToken as string) || undefined;
+
+    const result = await listDriveFolders(userId, parentId, pageToken);
+    res.json({ success: true, ...result });
+  } catch (error: any) {
+    console.error('List folders error:', error);
+    if (isGoogleErrorInvalidGrant(error)) {
+      return res.status(401).json({
+        error_code: 'GOOGLE_RECONNECT_REQUIRED',
+        error: 'Koneksi Google perlu diperbarui',
+        message: 'Your Google connection needs to be renewed. Please reconnect your Google account to continue.',
+      });
+    }
+    res.status(500).json({ error: 'Failed to list folders', details: error.message });
+  }
+};
+
+export const getFolder = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const folderId = req.params.id;
+    const details = await getFolderDetails(userId, folderId);
+    res.json({ success: true, data: details });
+  } catch (error: any) {
+    console.error('Get folder error:', error);
+    if (isGoogleErrorInvalidGrant(error)) {
+      return res.status(401).json({
+        error_code: 'GOOGLE_RECONNECT_REQUIRED',
+        error: 'Koneksi Google perlu diperbarui',
+        message: 'Your Google connection needs to be renewed. Please reconnect your Google account to continue.',
+      });
+    }
+    res.status(500).json({ error: 'Failed to get folder details', details: error.message });
+  }
+};
+
+export const getStorageSettingsHandler = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const settings = await getStorageSettings(userId);
+    res.json({ success: true, data: settings });
+  } catch (error: any) {
+    console.error('Get storage settings error:', error);
+    if (isGoogleErrorInvalidGrant(error)) {
+      return res.status(401).json({
+        error_code: 'GOOGLE_RECONNECT_REQUIRED',
+        error: 'Koneksi Google perlu diperbarui',
+        message: 'Your Google connection needs to be renewed. Please reconnect your Google account to continue.',
+      });
+    }
+    res.status(500).json({ error: 'Failed to get storage settings', details: error.message });
+  }
+};
+
+export const updateStorageSettingsHandler = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const { letterType, folderId, folderName, useMonthlyOrganization, resetToDefault } = req.body;
+    if (!letterType || !['incoming', 'outgoing'].includes(letterType)) {
+      return res.status(400).json({ error: 'Invalid letterType. Must be incoming or outgoing.' });
+    }
+    if (!resetToDefault && !folderId) {
+      return res.status(400).json({ error: 'folderId is required when not resetting to default.' });
+    }
+
+    const updated = await updateStorageSettings(userId, {
+      letterType,
+      folderId,
+      folderName,
+      useMonthlyOrganization,
+      resetToDefault,
+    });
+    res.json({ success: true, message: 'Pengaturan penyimpanan berhasil diperbarui.', data: updated });
+  } catch (error: any) {
+    console.error('Update storage settings error:', error);
+    if (isGoogleErrorInvalidGrant(error)) {
+      return res.status(401).json({
+        error_code: 'GOOGLE_RECONNECT_REQUIRED',
+        error: 'Koneksi Google perlu diperbarui',
+        message: 'Your Google connection needs to be renewed. Please reconnect your Google account to continue.',
+      });
+    }
+    res.status(500).json({ error: error.message || 'Failed to update storage settings', details: error.message });
+  }
+};
+

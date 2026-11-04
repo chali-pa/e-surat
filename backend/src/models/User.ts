@@ -28,13 +28,20 @@ export interface User {
   // Sheets
   sheet_masuk_id?: string | null;
   sheet_keluar_id?: string | null;
+  // Configured storage destinations
+  incoming_storage_folder_id?: string | null;
+  incoming_storage_folder_name?: string | null;
+  outgoing_storage_folder_id?: string | null;
+  outgoing_storage_folder_name?: string | null;
+  incoming_monthly_organization?: boolean;
+  outgoing_monthly_organization?: boolean;
   created_at: Date;
   updated_at: Date;
 }
 
 // Ensure optional columns exist in users table safely
 let columnsEnsured = false;
-async function ensureUserGoogleColumns() {
+export async function ensureUserGoogleColumns() {
   if (columnsEnsured) return;
   try {
     await pool.query(`
@@ -50,6 +57,12 @@ async function ensureUserGoogleColumns() {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS sheet_masuk_id TEXT;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS sheet_keluar_id TEXT;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS documentation_folder_id TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS incoming_storage_folder_id TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS incoming_storage_folder_name TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS outgoing_storage_folder_id TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS outgoing_storage_folder_name TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS incoming_monthly_organization BOOLEAN DEFAULT FALSE;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS outgoing_monthly_organization BOOLEAN DEFAULT FALSE;
     `);
     columnsEnsured = true;
   } catch (err) {
@@ -221,3 +234,48 @@ export const updateUserGoogleResourceIds = async (
   const result = await pool.query(query, values);
   return result.rows[0];
 };
+
+export const updateUserStorageSettings = async (
+  id: number,
+  settings: {
+    incoming_storage_folder_id?: string | null;
+    incoming_storage_folder_name?: string | null;
+    outgoing_storage_folder_id?: string | null;
+    outgoing_storage_folder_name?: string | null;
+    incoming_monthly_organization?: boolean;
+    outgoing_monthly_organization?: boolean;
+  }
+): Promise<User> => {
+  await ensureUserGoogleColumns();
+  const hasIncomingFolder = settings.incoming_storage_folder_id !== undefined;
+  const hasIncomingName = settings.incoming_storage_folder_name !== undefined;
+  const hasOutgoingFolder = settings.outgoing_storage_folder_id !== undefined;
+  const hasOutgoingName = settings.outgoing_storage_folder_name !== undefined;
+  const hasIncomingMonthly = settings.incoming_monthly_organization !== undefined;
+  const hasOutgoingMonthly = settings.outgoing_monthly_organization !== undefined;
+
+  const query = `
+    UPDATE users
+    SET incoming_storage_folder_id = CASE WHEN $1::boolean THEN $2 ELSE incoming_storage_folder_id END,
+        incoming_storage_folder_name = CASE WHEN $3::boolean THEN $4 ELSE incoming_storage_folder_name END,
+        outgoing_storage_folder_id = CASE WHEN $5::boolean THEN $6 ELSE outgoing_storage_folder_id END,
+        outgoing_storage_folder_name = CASE WHEN $7::boolean THEN $8 ELSE outgoing_storage_folder_name END,
+        incoming_monthly_organization = CASE WHEN $9::boolean THEN $10 ELSE incoming_monthly_organization END,
+        outgoing_monthly_organization = CASE WHEN $11::boolean THEN $12 ELSE outgoing_monthly_organization END,
+        updated_at = NOW()
+    WHERE id = $13
+    RETURNING *
+  `;
+  const values = [
+    hasIncomingFolder, settings.incoming_storage_folder_id ?? null,
+    hasIncomingName, settings.incoming_storage_folder_name ?? null,
+    hasOutgoingFolder, settings.outgoing_storage_folder_id ?? null,
+    hasOutgoingName, settings.outgoing_storage_folder_name ?? null,
+    hasIncomingMonthly, settings.incoming_monthly_organization ?? null,
+    hasOutgoingMonthly, settings.outgoing_monthly_organization ?? null,
+    id,
+  ];
+  const result = await pool.query(query, values);
+  return result.rows[0];
+};
+

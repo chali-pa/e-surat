@@ -12,6 +12,10 @@ export interface Surat {
   google_sheet_row?: number;
   user_id?: number;
   folder_id?: number;
+  drive_parent_folder_id?: string;
+  original_file_name?: string;
+  file_mime_type?: string;
+  storage_destination?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -28,6 +32,10 @@ export interface SuratKeluar {
   google_sheet_row?: number;
   user_id?: number;
   folder_id?: number;
+  drive_parent_folder_id?: string;
+  original_file_name?: string;
+  file_mime_type?: string;
+  storage_destination?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -41,16 +49,34 @@ const toDateValue = (dateValue?: string) => {
   return value.toISOString().slice(0, 10);
 };
 
-const ensureSuratKeluarColumns = async (): Promise<void> => {
-  await pool.query(`
-    ALTER TABLE surat_keluars
-      ADD COLUMN IF NOT EXISTS nama_penerima VARCHAR(255),
-      ADD COLUMN IF NOT EXISTS nama_surat TEXT,
-      ADD COLUMN IF NOT EXISTS tanggal_keluar DATE,
-      ADD COLUMN IF NOT EXISTS tanggal_buat DATE,
-      ADD COLUMN IF NOT EXISTS google_sheet_row INTEGER
-  `);
+let suratColumnsEnsured = false;
+export const ensureSuratColumns = async (): Promise<void> => {
+  if (suratColumnsEnsured) return;
+  try {
+    await pool.query(`
+      ALTER TABLE surats
+        ADD COLUMN IF NOT EXISTS drive_parent_folder_id TEXT,
+        ADD COLUMN IF NOT EXISTS original_file_name TEXT,
+        ADD COLUMN IF NOT EXISTS file_mime_type TEXT,
+        ADD COLUMN IF NOT EXISTS storage_destination TEXT;
+
+      ALTER TABLE surat_keluars
+        ADD COLUMN IF NOT EXISTS nama_penerima VARCHAR(255),
+        ADD COLUMN IF NOT EXISTS nama_surat TEXT,
+        ADD COLUMN IF NOT EXISTS tanggal_keluar DATE,
+        ADD COLUMN IF NOT EXISTS tanggal_buat DATE,
+        ADD COLUMN IF NOT EXISTS google_sheet_row INTEGER,
+        ADD COLUMN IF NOT EXISTS drive_parent_folder_id TEXT,
+        ADD COLUMN IF NOT EXISTS original_file_name TEXT,
+        ADD COLUMN IF NOT EXISTS file_mime_type TEXT,
+        ADD COLUMN IF NOT EXISTS storage_destination TEXT;
+    `);
+    suratColumnsEnsured = true;
+  } catch (err) {
+    console.warn('[Surat] ensureSuratColumns warning:', err);
+  }
 };
+ensureSuratColumns();
 
 /**
  * Fetch incoming letter records for a specific calendar month.
@@ -63,6 +89,7 @@ export const getIncomingLetterRecordsByMonth = async (
   year: number,
   month: number
 ): Promise<Surat[]> => {
+  await ensureSuratColumns();
   const startOfMonth = new Date(year, month - 1, 1);
   const startOfNextMonth = new Date(year, month, 1);
 
@@ -86,12 +113,17 @@ export const getIncomingLetterRecordsByMonth = async (
     google_sheet_row: row.google_sheet_row ?? undefined,
     user_id: row.user_id,
     folder_id: row.folder_id ?? undefined,
+    drive_parent_folder_id: row.drive_parent_folder_id || '',
+    original_file_name: row.original_file_name || '',
+    file_mime_type: row.file_mime_type || '',
+    storage_destination: row.storage_destination || '',
     created_at: row.created_at ? new Date(row.created_at).toISOString() : undefined,
     updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
   }));
 };
 
 export const getAllIncomingLetterRecords = async (userId: number): Promise<Surat[]> => {
+  await ensureSuratColumns();
   const result = await pool.query(
     'SELECT * FROM surats WHERE user_id = $1 ORDER BY created_at DESC, id DESC',
     [userId]
@@ -108,12 +140,17 @@ export const getAllIncomingLetterRecords = async (userId: number): Promise<Surat
     google_sheet_row: row.google_sheet_row ?? undefined,
     user_id: row.user_id,
     folder_id: row.folder_id ?? undefined,
+    drive_parent_folder_id: row.drive_parent_folder_id || '',
+    original_file_name: row.original_file_name || '',
+    file_mime_type: row.file_mime_type || '',
+    storage_destination: row.storage_destination || '',
     created_at: row.created_at ? new Date(row.created_at).toISOString() : undefined,
     updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
   }));
 };
 
 export const getIncomingLetterRecordById = async (userId: number, id: number): Promise<Surat | null> => {
+  await ensureSuratColumns();
   const result = await pool.query('SELECT * FROM surats WHERE id = $1 AND user_id = $2', [id, userId]);
   const row = result.rows[0];
   if (!row) return null;
@@ -129,15 +166,20 @@ export const getIncomingLetterRecordById = async (userId: number, id: number): P
     google_sheet_row: row.google_sheet_row ?? undefined,
     user_id: row.user_id,
     folder_id: row.folder_id ?? undefined,
+    drive_parent_folder_id: row.drive_parent_folder_id || '',
+    original_file_name: row.original_file_name || '',
+    file_mime_type: row.file_mime_type || '',
+    storage_destination: row.storage_destination || '',
     created_at: row.created_at ? new Date(row.created_at).toISOString() : undefined,
     updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
   };
 };
 
 export const createIncomingLetterRecord = async (surat: Surat): Promise<Surat> => {
+  await ensureSuratColumns();
   const result = await pool.query(
-    `INSERT INTO surats (nomor_surat, nama_pengirim, nama_surat, tanggal_masuk, tanggal_buat, file_path, google_drive_id, google_sheet_row, user_id, folder_id, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
+    `INSERT INTO surats (nomor_surat, nama_pengirim, nama_surat, tanggal_masuk, tanggal_buat, file_path, google_drive_id, google_sheet_row, user_id, folder_id, drive_parent_folder_id, original_file_name, file_mime_type, storage_destination, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW())
      RETURNING *`,
     [
       surat.nomor_surat,
@@ -150,6 +192,10 @@ export const createIncomingLetterRecord = async (surat: Surat): Promise<Surat> =
       surat.google_sheet_row ?? null,
       surat.user_id ?? null,
       surat.folder_id ?? null,
+      surat.drive_parent_folder_id || null,
+      surat.original_file_name || null,
+      surat.file_mime_type || null,
+      surat.storage_destination || null,
     ]
   );
   const row = result.rows[0];
@@ -166,12 +212,17 @@ export const createIncomingLetterRecord = async (surat: Surat): Promise<Surat> =
     google_sheet_row: row.google_sheet_row,
     user_id: row.user_id,
     folder_id: row.folder_id ?? undefined,
+    drive_parent_folder_id: row.drive_parent_folder_id || '',
+    original_file_name: row.original_file_name || '',
+    file_mime_type: row.file_mime_type || '',
+    storage_destination: row.storage_destination || '',
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
 };
 
 export const updateIncomingLetterRecord = async (id: number, userId: number, surat: Partial<Surat>): Promise<Surat | null> => {
+  await ensureSuratColumns();
   const hasFolderId = surat.folder_id !== undefined;
   const folderIdValue = surat.folder_id === null ? null : surat.folder_id;
 
@@ -186,8 +237,12 @@ export const updateIncomingLetterRecord = async (id: number, userId: number, sur
          google_drive_id = COALESCE($7, google_drive_id),
          google_sheet_row = COALESCE($8, google_sheet_row),
          folder_id = CASE WHEN $9::boolean THEN $10::integer ELSE folder_id END,
+         drive_parent_folder_id = COALESCE($11, drive_parent_folder_id),
+         original_file_name = COALESCE($12, original_file_name),
+         file_mime_type = COALESCE($13, file_mime_type),
+         storage_destination = COALESCE($14, storage_destination),
          updated_at = NOW()
-     WHERE id = $11 AND user_id = $12
+     WHERE id = $15 AND user_id = $16
      RETURNING *`,
     [
       surat.nomor_surat ?? null,
@@ -200,6 +255,10 @@ export const updateIncomingLetterRecord = async (id: number, userId: number, sur
       surat.google_sheet_row ?? null,
       hasFolderId,
       folderIdValue,
+      surat.drive_parent_folder_id ?? null,
+      surat.original_file_name ?? null,
+      surat.file_mime_type ?? null,
+      surat.storage_destination ?? null,
       id,
       userId,
     ]
@@ -218,6 +277,10 @@ export const updateIncomingLetterRecord = async (id: number, userId: number, sur
     google_sheet_row: row.google_sheet_row,
     user_id: row.user_id,
     folder_id: row.folder_id,
+    drive_parent_folder_id: row.drive_parent_folder_id || '',
+    original_file_name: row.original_file_name || '',
+    file_mime_type: row.file_mime_type || '',
+    storage_destination: row.storage_destination || '',
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -229,7 +292,7 @@ export const deleteIncomingLetterRecord = async (userId: number, id: number): Pr
 };
 
 export const getAllOutgoingLetterRecords = async (userId: number): Promise<SuratKeluar[]> => {
-  await ensureSuratKeluarColumns();
+  await ensureSuratColumns();
   const result = await pool.query(
     'SELECT * FROM surat_keluars WHERE user_id = $1 ORDER BY created_at DESC, id DESC',
     [userId]
@@ -246,6 +309,10 @@ export const getAllOutgoingLetterRecords = async (userId: number): Promise<Surat
     google_sheet_row: row.google_sheet_row ?? undefined,
     user_id: row.user_id,
     folder_id: row.folder_id ?? undefined,
+    drive_parent_folder_id: row.drive_parent_folder_id || '',
+    original_file_name: row.original_file_name || '',
+    file_mime_type: row.file_mime_type || '',
+    storage_destination: row.storage_destination || '',
     created_at: row.created_at ? new Date(row.created_at).toISOString() : undefined,
     updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
   }));
@@ -261,7 +328,7 @@ export const getOutgoingLetterRecordsByMonth = async (
   year: number,
   month: number
 ): Promise<SuratKeluar[]> => {
-  await ensureSuratKeluarColumns();
+  await ensureSuratColumns();
   const startOfMonth = new Date(year, month - 1, 1);
   const startOfNextMonth = new Date(year, month, 1);
 
@@ -285,13 +352,17 @@ export const getOutgoingLetterRecordsByMonth = async (
     google_sheet_row: row.google_sheet_row ?? undefined,
     user_id: row.user_id,
     folder_id: row.folder_id ?? undefined,
+    drive_parent_folder_id: row.drive_parent_folder_id || '',
+    original_file_name: row.original_file_name || '',
+    file_mime_type: row.file_mime_type || '',
+    storage_destination: row.storage_destination || '',
     created_at: row.created_at ? new Date(row.created_at).toISOString() : undefined,
     updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
   }));
 };
 
 export const getOutgoingLetterRecordById = async (userId: number, id: number): Promise<SuratKeluar | null> => {
-  await ensureSuratKeluarColumns();
+  await ensureSuratColumns();
   const result = await pool.query('SELECT * FROM surat_keluars WHERE id = $1 AND user_id = $2', [id, userId]);
   const row = result.rows[0];
   if (!row) return null;
@@ -307,17 +378,21 @@ export const getOutgoingLetterRecordById = async (userId: number, id: number): P
     google_sheet_row: row.google_sheet_row ?? undefined,
     user_id: row.user_id,
     folder_id: row.folder_id ?? undefined,
+    drive_parent_folder_id: row.drive_parent_folder_id || '',
+    original_file_name: row.original_file_name || '',
+    file_mime_type: row.file_mime_type || '',
+    storage_destination: row.storage_destination || '',
     created_at: row.created_at ? new Date(row.created_at).toISOString() : undefined,
     updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
   };
 };
 
 export const createOutgoingLetterRecord = async (surat: SuratKeluar): Promise<SuratKeluar> => {
-  await ensureSuratKeluarColumns();
+  await ensureSuratColumns();
   
   const result = await pool.query(
-    `INSERT INTO surat_keluars (nomor_surat, nama_penerima, nama_surat, tanggal_keluar, tanggal_buat, file_path, google_drive_id, google_sheet_row, user_id, folder_id, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
+    `INSERT INTO surat_keluars (nomor_surat, nama_penerima, nama_surat, tanggal_keluar, tanggal_buat, file_path, google_drive_id, google_sheet_row, user_id, folder_id, drive_parent_folder_id, original_file_name, file_mime_type, storage_destination, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW())
      RETURNING *`,
     [
       surat.nomor_surat,
@@ -330,6 +405,10 @@ export const createOutgoingLetterRecord = async (surat: SuratKeluar): Promise<Su
       surat.google_sheet_row ?? null,
       surat.user_id ?? null,
       surat.folder_id ?? null,
+      surat.drive_parent_folder_id || null,
+      surat.original_file_name || null,
+      surat.file_mime_type || null,
+      surat.storage_destination || null,
     ]
   );
   const row = result.rows[0];
@@ -346,13 +425,17 @@ export const createOutgoingLetterRecord = async (surat: SuratKeluar): Promise<Su
     google_sheet_row: row.google_sheet_row,
     user_id: row.user_id,
     folder_id: row.folder_id ?? undefined,
+    drive_parent_folder_id: row.drive_parent_folder_id || '',
+    original_file_name: row.original_file_name || '',
+    file_mime_type: row.file_mime_type || '',
+    storage_destination: row.storage_destination || '',
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
 };
 
 export const updateOutgoingLetterRecord = async (id: number, userId: number, surat: Partial<SuratKeluar>): Promise<SuratKeluar | null> => {
-  await ensureSuratKeluarColumns();
+  await ensureSuratColumns();
   const hasFolderId = surat.folder_id !== undefined;
   const folderIdValue = surat.folder_id === null ? null : surat.folder_id;
 
@@ -367,8 +450,12 @@ export const updateOutgoingLetterRecord = async (id: number, userId: number, sur
          google_drive_id = COALESCE($7, google_drive_id),
          google_sheet_row = COALESCE($8, google_sheet_row),
          folder_id = CASE WHEN $9::boolean THEN $10::integer ELSE folder_id END,
+         drive_parent_folder_id = COALESCE($11, drive_parent_folder_id),
+         original_file_name = COALESCE($12, original_file_name),
+         file_mime_type = COALESCE($13, file_mime_type),
+         storage_destination = COALESCE($14, storage_destination),
          updated_at = NOW()
-     WHERE id = $11 AND user_id = $12
+     WHERE id = $15 AND user_id = $16
      RETURNING *`,
     [
       surat.nomor_surat ?? null,
@@ -381,6 +468,10 @@ export const updateOutgoingLetterRecord = async (id: number, userId: number, sur
       surat.google_sheet_row ?? null,
       hasFolderId,
       folderIdValue,
+      surat.drive_parent_folder_id ?? null,
+      surat.original_file_name ?? null,
+      surat.file_mime_type ?? null,
+      surat.storage_destination ?? null,
       id,
       userId,
     ]
@@ -399,6 +490,10 @@ export const updateOutgoingLetterRecord = async (id: number, userId: number, sur
     google_sheet_row: row.google_sheet_row,
     user_id: row.user_id,
     folder_id: row.folder_id,
+    drive_parent_folder_id: row.drive_parent_folder_id || '',
+    original_file_name: row.original_file_name || '',
+    file_mime_type: row.file_mime_type || '',
+    storage_destination: row.storage_destination || '',
     created_at: row.created_at,
     updated_at: row.updated_at,
   };

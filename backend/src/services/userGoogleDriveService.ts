@@ -1,7 +1,7 @@
 import { google, drive_v3 } from 'googleapis';
 import path from 'path';
 import { Readable } from 'stream';
-import { findUserById, updateUserGoogleResourceIds } from '../models/User';
+import { findUserById, updateUserGoogleResourceIds, updateUserStorageSettings } from '../models/User';
 import { getOAuth2ClientForUser, GoogleReconnectRequiredError, isGoogleErrorInvalidGrant } from './userGoogleAuthService';
 import { createFolder, findFolderByDriveId, findFoldersByUserAndMonth, findFolderById } from '../models/Folder';
 
@@ -340,55 +340,114 @@ export async function uploadUserLetterFile(
   fileId: string;
   webViewLink: string;
   logicalPath: string;
+  parentFolderId: string;
+  storageDestination: string;
 }> {
   console.log(`[GoogleDrive] Uploading file for user ${userId}: ${originalFileName} (${letterType})`);
   try {
     const auth = await getOAuth2ClientForUser(userId);
     const drive = google.drive({ version: 'v3', auth });
 
-    // 1. Resolve root folder ID
-    const rootName = letterType === 'incoming' ? 'esurat' : 'esurat-keluar';
     const user = await findUserById(userId);
-    let rootFolderId = letterType === 'incoming' ? user?.drive_folder_id : user?.drive_keluar_folder_id;
-    const otherFolderId = letterType === 'incoming' ? user?.drive_keluar_folder_id : user?.drive_folder_id;
-
-    if (rootFolderId && otherFolderId && rootFolderId === otherFolderId) {
-      console.warn(`[GoogleDrive] Identical folder ID detected for incoming and outgoing. Resetting rootFolderId for ${letterType}.`);
-      rootFolderId = null;
-    }
-
-    if (!rootFolderId) {
-      rootFolderId = await findOrCreateFolder(drive, rootName, undefined, otherFolderId);
-      if (letterType === 'incoming') {
-        await updateUserGoogleResourceIds(userId, { drive_folder_id: rootFolderId });
-      } else {
-        await updateUserGoogleResourceIds(userId, { drive_keluar_folder_id: rootFolderId });
-      }
-    }
-
-    // 2. Determine target folder ID and logical path
-    let targetFolderId: string = '';
-    let logicalPath: string = '';
-
+    const rootName = letterType === 'incoming' ? 'esurat' : 'esurat-keluar';
     const monthYear = formatMonthYear(letterDateStr);
 
+    let targetFolderId = '';
+    let storageDestination = '';
+    let logicalPath = '';
+
+    // 1. Check if customFolderId is explicitly passed (e.g. from subfolder picker in form)
     if (customFolderId) {
-      // Validate custom folder ID exists and is accessible
       try {
-        await drive.files.get({ fileId: customFolderId, fields: 'id, trashed' });
+        const folderRes = await drive.files.get({
+          fileId: customFolderId,
+          fields: 'id, name, mimeType, trashed',
+        });
+        if (folderRes.data.trashed) {
+          throw new Error(`Folder Google Drive '${folderRes.data.name || customFolderId}' berada di kotak sampah.`);
+        }
+        if (folderRes.data.mimeType !== 'application/vnd.google-apps.folder') {
+          throw new Error(`ID '${customFolderId}' bukan sebuah folder Google Drive.`);
+        }
         targetFolderId = customFolderId;
-        logicalPath = `${rootName}/${monthYear}/${originalFileName}`;
+        storageDestination = folderRes.data.name || 'Folder Pilihan';
+        logicalPath = `${storageDestination}/${originalFileName}`;
       } catch (e: any) {
-        console.error(`[GoogleDrive] Custom folder ID ${customFolderId} not accessible or missing:`, e);
-        throw new Error(`Folder Google Drive '${customFolderId}' tidak ditemukan atau tidak dapat diakses.`);
+        console.error(`[GoogleDrive] Custom folder ID ${customFolderId} not accessible:`, e);
+        throw new Error(e.message || `Folder Google Drive '${customFolderId}' tidak ditemukan atau tidak dapat diakses.`);
       }
     } else {
-      targetFolderId = await findOrCreateFolder(drive, monthYear, rootFolderId);
-      logicalPath = `${rootName}/${monthYear}/${originalFileName}`;
+      // 2. Resolve user's configured storage destination for this letter type
+      const configuredFolderId = letterType === 'incoming'
+        ? user?.incoming_storage_folder_id
+        : user?.outgoing_storage_folder_id;
+      const configuredFolderName = letterType === 'incoming'
+        ? (user?.incoming_storage_folder_name || 'esurat')
+        : (user?.outgoing_storage_folder_name || 'esurat-keluar');
+      const useMonthlyOrg = letterType === 'incoming'
+        ? !!user?.incoming_monthly_organization
+        : !!user?.outgoing_monthly_organization;
+
+      const defaultRootId = letterType === 'incoming' ? user?.drive_folder_id : user?.drive_keluar_folder_id;
+      const isDefault = !configuredFolderId || configuredFolderId === defaultRootId;
+
+      if (isDefault) {
+        // Default esurat / esurat-keluar behavior with MM-YY monthly folder
+        let rootFolderId = defaultRootId;
+        const otherFolderId = letterType === 'incoming' ? user?.drive_keluar_folder_id : user?.drive_folder_id;
+
+        if (rootFolderId && otherFolderId && rootFolderId === otherFolderId) {
+          console.warn(`[GoogleDrive] Identical folder ID detected for incoming and outgoing. Resetting rootFolderId for ${letterType}.`);
+          rootFolderId = null;
+        }
+
+        if (!rootFolderId) {
+          rootFolderId = await findOrCreateFolder(drive, rootName, undefined, otherFolderId);
+          if (letterType === 'incoming') {
+            await updateUserGoogleResourceIds(userId, { drive_folder_id: rootFolderId });
+          } else {
+            await updateUserGoogleResourceIds(userId, { drive_keluar_folder_id: rootFolderId });
+          }
+        }
+
+        targetFolderId = await findOrCreateFolder(drive, monthYear, rootFolderId);
+        storageDestination = rootName;
+        logicalPath = `${rootName}/${monthYear}/${originalFileName}`;
+      } else {
+        // User-selected existing folder: preserve all existing contents
+        try {
+          const folderRes = await drive.files.get({
+            fileId: configuredFolderId,
+            fields: 'id, name, mimeType, trashed',
+          });
+          if (folderRes.data.trashed) {
+            throw new Error(`Folder tujuan penyimpanan Google Drive '${configuredFolderName}' berada di kotak sampah.`);
+          }
+          if (folderRes.data.mimeType !== 'application/vnd.google-apps.folder') {
+            throw new Error(`Folder tujuan penyimpanan Google Drive '${configuredFolderName}' bukan sebuah folder.`);
+          }
+          const verifiedName = folderRes.data.name || configuredFolderName;
+          storageDestination = verifiedName;
+
+          if (useMonthlyOrg) {
+            // User explicitly chose monthly organization inside custom folder
+            targetFolderId = await findOrCreateFolder(drive, monthYear, configuredFolderId);
+            logicalPath = `${verifiedName}/${monthYear}/${originalFileName}`;
+          } else {
+            // Default for user-selected folders: direct upload into the selected folder
+            targetFolderId = configuredFolderId;
+            logicalPath = `${verifiedName}/${originalFileName}`;
+          }
+        } catch (folderErr: any) {
+          console.error(`[GoogleDrive] Configured storage folder inaccessible for user ${userId}:`, folderErr);
+          throw new Error(
+            `Folder tujuan penyimpanan Google Drive '${configuredFolderName}' tidak ditemukan atau telah dipindahkan/dihapus di Google Drive. Silakan buka Pengaturan Profil untuk memilih folder tujuan baru.`
+          );
+        }
+      }
     }
 
-    // 3. Upload file directly to target folder (no auto-compression —
-    //    size validation is performed by the controller before this call).
+    // 3. Upload file directly to target folder (never overwrite or modify other files)
     const fileMetadata = {
       name: originalFileName,
       parents: [targetFolderId],
@@ -402,7 +461,7 @@ export async function uploadUserLetterFile(
     const response = await drive.files.create({
       requestBody: fileMetadata,
       media: media,
-      fields: 'id, webViewLink',
+      fields: 'id, webViewLink, parents',
     });
 
     if (!response.data.id) {
@@ -425,8 +484,14 @@ export async function uploadUserLetterFile(
       console.warn(`[GoogleDrive] Could not set reader permission on file ${fileId}:`, permErr);
     }
 
-    console.log(`[GoogleDrive] Upload successful! File ID: ${fileId}`);
-    return { fileId, webViewLink, logicalPath };
+    console.log(`[GoogleDrive] Upload successful! File ID: ${fileId}, targetFolder: ${targetFolderId}, path: ${logicalPath}`);
+    return {
+      fileId,
+      webViewLink,
+      logicalPath,
+      parentFolderId: targetFolderId,
+      storageDestination,
+    };
   } catch (error: any) {
     console.error(`[GoogleDrive] Upload failed for user ${userId}:`, error);
     if (isGoogleErrorInvalidGrant(error)) {
@@ -437,9 +502,9 @@ export async function uploadUserLetterFile(
 }
 
 /**
- * Delete a file from user's Google Drive.
- * Handles 404 gracefully (file already missing/deleted).
- * Throws real errors (network, permission, auth) so callers can prevent premature DB deletion.
+ * Delete a file from user's Google Drive safely.
+ * Strictly verifies the target is a file (never a folder) and deletes ONLY that file ID.
+ * Preserves all unrelated files and parent folders completely.
  */
 export async function deleteUserFile(userId: number, fileId: string): Promise<void> {
   if (!fileId) return;
@@ -447,8 +512,10 @@ export async function deleteUserFile(userId: number, fileId: string): Promise<vo
     const auth = await getOAuth2ClientForUser(userId);
     const drive = google.drive({ version: 'v3', auth });
 
+    let fileData: any = null;
     try {
-      await drive.files.get({ fileId, fields: 'id' });
+      const getRes = await drive.files.get({ fileId, fields: 'id, name, mimeType' });
+      fileData = getRes.data;
     } catch (getError: any) {
       if (getError.code === 404 || getError.status === 404) {
         console.log(`[GoogleDrive] File ${fileId} not found in Drive, treating as already deleted.`);
@@ -460,8 +527,14 @@ export async function deleteUserFile(userId: number, fileId: string): Promise<vo
       throw getError;
     }
 
+    // Critical safeguard: Never delete a folder
+    if (fileData?.mimeType === 'application/vnd.google-apps.folder') {
+      console.error(`[GoogleDrive] CRITICAL REFUSAL: Refusing to delete ${fileId} because it is a folder!`);
+      throw new Error(`Operasi dibatalkan: ID '${fileId}' adalah folder Google Drive. Aplikasi E-Surat hanya dapat menghapus file surat.`);
+    }
+
     await drive.files.delete({ fileId });
-    console.log(`[GoogleDrive] Deleted file ${fileId} from user ${userId}'s Drive`);
+    console.log(`[GoogleDrive] Safely deleted managed file ${fileId} (${fileData?.name}) from user ${userId}'s Drive`);
   } catch (error: any) {
     console.error(`[GoogleDrive] Failed to delete file ${fileId} for user ${userId}:`, error);
 
@@ -820,3 +893,364 @@ export async function getMonthlyFolders(
     }
   }
 }
+
+/**
+ * List folders in user's Google Drive for the folder browser.
+ * Only lists folders belonging to the authenticated user's Google account.
+ * Supports navigation from My Drive root or inside a specific parent folder.
+ */
+export async function listDriveFolders(
+  userId: number,
+  parentId?: string,
+  pageToken?: string
+): Promise<{
+  folders: Array<{
+    id: string;
+    name: string;
+    mimeType: string;
+    modifiedTime?: string;
+  }>;
+  nextPageToken?: string | null;
+  currentFolder: {
+    id: string;
+    name: string;
+    parentId: string | null;
+  };
+}> {
+  try {
+    const auth = await getOAuth2ClientForUser(userId);
+    const drive = google.drive({ version: 'v3', auth });
+
+    const isRoot = !parentId || parentId === 'root' || parentId.trim() === '';
+    const parentQuery = isRoot ? "'root' in parents" : `'${parentId}' in parents`;
+    const q = `${parentQuery} and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+
+    let currentFolder = {
+      id: 'root',
+      name: 'My Drive',
+      parentId: null as string | null,
+    };
+
+    if (!isRoot) {
+      try {
+        const folderRes = await drive.files.get({
+          fileId: parentId,
+          fields: 'id, name, parents, trashed',
+        });
+        if (folderRes.data.trashed) {
+          throw new Error(`Folder '${folderRes.data.name || parentId}' berada di kotak sampah.`);
+        }
+        currentFolder = {
+          id: folderRes.data.id || parentId,
+          name: folderRes.data.name || 'Folder',
+          parentId: folderRes.data.parents?.[0] || 'root',
+        };
+      } catch (err: any) {
+        console.error(`[GoogleDrive] Error fetching current folder ${parentId}:`, err);
+        throw new Error(`Folder tidak ditemukan atau tidak dapat diakses.`);
+      }
+    }
+
+    const res = await drive.files.list({
+      q,
+      fields: 'nextPageToken, files(id, name, mimeType, modifiedTime, parents)',
+      orderBy: 'name asc',
+      pageSize: 50,
+      pageToken: pageToken || undefined,
+      spaces: 'drive',
+    });
+
+    const folders = (res.data.files || []).map((f) => ({
+      id: f.id || '',
+      name: f.name || '',
+      mimeType: f.mimeType || 'application/vnd.google-apps.folder',
+      modifiedTime: f.modifiedTime || undefined,
+    }));
+
+    return {
+      folders,
+      nextPageToken: res.data.nextPageToken || null,
+      currentFolder,
+    };
+  } catch (error: any) {
+    console.error(`[GoogleDrive] listDriveFolders error for user ${userId}:`, error);
+    if (isGoogleErrorInvalidGrant(error)) {
+      throw new GoogleReconnectRequiredError();
+    }
+    throw error;
+  }
+}
+
+/**
+ * Get details and validate a folder in Google Drive.
+ * Verifies that the folder exists, is not trashed, is a folder (not a file),
+ * and that the user has permission to add files to it.
+ */
+export async function getFolderDetails(
+  userId: number,
+  folderId: string
+): Promise<{
+  id: string;
+  name: string;
+  parentId: string | null;
+  canAddChildren: boolean;
+  isRoot: boolean;
+}> {
+  try {
+    if (!folderId || folderId === 'root') {
+      return {
+        id: 'root',
+        name: 'My Drive',
+        parentId: null,
+        canAddChildren: true,
+        isRoot: true,
+      };
+    }
+
+    const auth = await getOAuth2ClientForUser(userId);
+    const drive = google.drive({ version: 'v3', auth });
+
+    const res = await drive.files.get({
+      fileId: folderId,
+      fields: 'id, name, mimeType, parents, trashed, capabilities(canAddChildren)',
+    });
+
+    if (res.data.trashed) {
+      throw new Error(`Folder '${res.data.name || folderId}' berada di kotak sampah (trashed).`);
+    }
+
+    if (res.data.mimeType !== 'application/vnd.google-apps.folder') {
+      throw new Error(`Item '${res.data.name || folderId}' bukan sebuah folder Google Drive.`);
+    }
+
+    const canAddChildren = res.data.capabilities?.canAddChildren ?? true;
+
+    return {
+      id: res.data.id || folderId,
+      name: res.data.name || 'Folder',
+      parentId: res.data.parents?.[0] || 'root',
+      canAddChildren,
+      isRoot: false,
+    };
+  } catch (error: any) {
+    console.error(`[GoogleDrive] getFolderDetails error for folder ${folderId}:`, error);
+    if (isGoogleErrorInvalidGrant(error)) {
+      throw new GoogleReconnectRequiredError();
+    }
+    throw error;
+  }
+}
+
+/**
+ * Retrieve parent folder details for breadcrumb / navigation upwards.
+ */
+export async function getParentFolder(
+  userId: number,
+  folderId: string
+): Promise<{ id: string; name: string } | null> {
+  if (!folderId || folderId === 'root') {
+    return null;
+  }
+
+  try {
+    const details = await getFolderDetails(userId, folderId);
+    if (!details.parentId || details.parentId === 'root') {
+      return { id: 'root', name: 'My Drive' };
+    }
+    const parentDetails = await getFolderDetails(userId, details.parentId);
+    return { id: parentDetails.id, name: parentDetails.name };
+  } catch {
+    return { id: 'root', name: 'My Drive' };
+  }
+}
+
+/**
+ * Get current storage settings for incoming and outgoing mail.
+ * Checks folder accessibility in Google Drive to detect if user moved or deleted folders.
+ */
+export async function getStorageSettings(userId: number): Promise<{
+  incoming: {
+    folderId: string | null;
+    folderName: string;
+    isDefault: boolean;
+    useMonthlyOrganization: boolean;
+    accessible: boolean;
+    warning?: string | null;
+  };
+  outgoing: {
+    folderId: string | null;
+    folderName: string;
+    isDefault: boolean;
+    useMonthlyOrganization: boolean;
+    accessible: boolean;
+    warning?: string | null;
+  };
+  defaultIncoming: {
+    folderId: string | null;
+    folderName: string;
+  };
+  defaultOutgoing: {
+    folderId: string | null;
+    folderName: string;
+  };
+}> {
+  const user = await findUserById(userId);
+  if (!user) {
+    throw new Error(`User with ID ${userId} not found.`);
+  }
+
+  let drive: drive_v3.Drive | null = null;
+  try {
+    const auth = await getOAuth2ClientForUser(userId);
+    drive = google.drive({ version: 'v3', auth });
+  } catch (authErr) {
+    console.warn(`[GoogleDrive] Could not get OAuth client for storage settings check:`, authErr);
+  }
+
+  const defaultIncomingId = user.drive_folder_id || null;
+  const defaultOutgoingId = user.drive_keluar_folder_id || null;
+
+  // Incoming configuration
+  const incomingFolderId = user.incoming_storage_folder_id || defaultIncomingId;
+  const incomingFolderName = user.incoming_storage_folder_name || 'esurat';
+  const incomingIsDefault = !user.incoming_storage_folder_id || user.incoming_storage_folder_id === defaultIncomingId;
+  const incomingMonthly = incomingIsDefault ? true : !!user.incoming_monthly_organization;
+
+  let incomingAccessible = true;
+  let incomingWarning: string | null = null;
+
+  if (drive && incomingFolderId) {
+    try {
+      const res = await drive.files.get({ fileId: incomingFolderId, fields: 'id, name, trashed' });
+      if (res.data.trashed) {
+        incomingAccessible = false;
+        incomingWarning = `Folder '${incomingFolderName}' telah dipindahkan ke kotak sampah di Google Drive. Silakan pilih folder penyimpanan baru.`;
+      }
+    } catch (e: any) {
+      if (e.code === 404 || e.status === 404) {
+        incomingAccessible = false;
+        incomingWarning = `Folder '${incomingFolderName}' tidak ditemukan atau telah dihapus di Google Drive. Silakan pilih folder penyimpanan baru.`;
+      }
+    }
+  }
+
+  // Outgoing configuration
+  const outgoingFolderId = user.outgoing_storage_folder_id || defaultOutgoingId;
+  const outgoingFolderName = user.outgoing_storage_folder_name || 'esurat-keluar';
+  const outgoingIsDefault = !user.outgoing_storage_folder_id || user.outgoing_storage_folder_id === defaultOutgoingId;
+  const outgoingMonthly = outgoingIsDefault ? true : !!user.outgoing_monthly_organization;
+
+  let outgoingAccessible = true;
+  let outgoingWarning: string | null = null;
+
+  if (drive && outgoingFolderId) {
+    try {
+      const res = await drive.files.get({ fileId: outgoingFolderId, fields: 'id, name, trashed' });
+      if (res.data.trashed) {
+        outgoingAccessible = false;
+        outgoingWarning = `Folder '${outgoingFolderName}' telah dipindahkan ke kotak sampah di Google Drive. Silakan pilih folder penyimpanan baru.`;
+      }
+    } catch (e: any) {
+      if (e.code === 404 || e.status === 404) {
+        outgoingAccessible = false;
+        outgoingWarning = `Folder '${outgoingFolderName}' tidak ditemukan atau telah dihapus di Google Drive. Silakan pilih folder penyimpanan baru.`;
+      }
+    }
+  }
+
+  return {
+    incoming: {
+      folderId: incomingFolderId,
+      folderName: incomingFolderName,
+      isDefault: incomingIsDefault,
+      useMonthlyOrganization: incomingMonthly,
+      accessible: incomingAccessible,
+      warning: incomingWarning,
+    },
+    outgoing: {
+      folderId: outgoingFolderId,
+      folderName: outgoingFolderName,
+      isDefault: outgoingIsDefault,
+      useMonthlyOrganization: outgoingMonthly,
+      accessible: outgoingAccessible,
+      warning: outgoingWarning,
+    },
+    defaultIncoming: {
+      folderId: defaultIncomingId,
+      folderName: 'esurat',
+    },
+    defaultOutgoing: {
+      folderId: defaultOutgoingId,
+      folderName: 'esurat-keluar',
+    },
+  };
+}
+
+/**
+ * Update user's storage destination for incoming or outgoing mail.
+ * Server-side validates folder existence and access before saving.
+ */
+export async function updateStorageSettings(
+  userId: number,
+  payload: {
+    letterType: 'incoming' | 'outgoing';
+    folderId?: string | null;
+    folderName?: string | null;
+    useMonthlyOrganization?: boolean;
+    resetToDefault?: boolean;
+  }
+): Promise<ReturnType<typeof getStorageSettings>> {
+  const user = await findUserById(userId);
+  if (!user) {
+    throw new Error(`User with ID ${userId} not found.`);
+  }
+
+  const { letterType, resetToDefault } = payload;
+
+  if (resetToDefault) {
+    if (letterType === 'incoming') {
+      await updateUserStorageSettings(userId, {
+        incoming_storage_folder_id: null,
+        incoming_storage_folder_name: 'esurat',
+        incoming_monthly_organization: false,
+      });
+    } else {
+      await updateUserStorageSettings(userId, {
+        outgoing_storage_folder_id: null,
+        outgoing_storage_folder_name: 'esurat-keluar',
+        outgoing_monthly_organization: false,
+      });
+    }
+    return getStorageSettings(userId);
+  }
+
+  if (!payload.folderId) {
+    throw new Error('folderId diperlukan untuk mengatur tujuan penyimpanan.');
+  }
+
+  // Validate folder server-side in Google Drive
+  const details = await getFolderDetails(userId, payload.folderId);
+  if (!details.canAddChildren) {
+    throw new Error(`Anda tidak memiliki izin untuk mengunggah file ke folder '${details.name}'.`);
+  }
+
+  const verifiedName = payload.folderName?.trim() || details.name;
+
+  if (letterType === 'incoming') {
+    await updateUserStorageSettings(userId, {
+      incoming_storage_folder_id: details.id,
+      incoming_storage_folder_name: verifiedName,
+      incoming_monthly_organization: !!payload.useMonthlyOrganization,
+    });
+  } else {
+    await updateUserStorageSettings(userId, {
+      outgoing_storage_folder_id: details.id,
+      outgoing_storage_folder_name: verifiedName,
+      outgoing_monthly_organization: !!payload.useMonthlyOrganization,
+    });
+  }
+
+  console.log(`[GoogleDrive] Updated storage settings for user ${userId} (${letterType}): folder=${verifiedName} (${details.id})`);
+  return getStorageSettings(userId);
+}
+

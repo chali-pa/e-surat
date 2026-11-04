@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import api from '../api/axios'
+import GoogleDriveFolderBrowserModal from './drive/GoogleDriveFolderBrowserModal'
 
 export default function GoogleIntegration() {
   const [status, setStatus] = useState({
@@ -13,6 +14,8 @@ export default function GoogleIntegration() {
     sheetMasukId: null,
     sheetKeluarId: null,
   })
+  const [storageSettings, setStorageSettings] = useState(null)
+  const [browserModal, setBrowserModal] = useState({ isOpen: false, letterType: 'incoming' })
   const [loading, setLoading] = useState(true)
   const [connecting, setConnecting] = useState(false)
   const [provisioning, setProvisioning] = useState(false)
@@ -22,8 +25,9 @@ export default function GoogleIntegration() {
     try {
       const response = await api.get('/api/google/status')
       if (response.data.success) {
+        const isConnected = !!response.data.connected
         setStatus({
-          connected: !!response.data.connected,
+          connected: isConnected,
           provisioned: !!response.data.provisioned,
           email: response.data.email || '',
           googleName: response.data.googleName || '',
@@ -33,6 +37,17 @@ export default function GoogleIntegration() {
           sheetMasukId: response.data.sheetMasukId,
           sheetKeluarId: response.data.sheetKeluarId,
         })
+
+        if (isConnected) {
+          try {
+            const storageRes = await api.get('/api/google/storage-settings')
+            if (storageRes.data.success) {
+              setStorageSettings(storageRes.data.data)
+            }
+          } catch (storageErr) {
+            console.warn('Failed to load storage settings:', storageErr)
+          }
+        }
       }
     } catch (error) {
       console.error('Failed to check Google status:', error)
@@ -165,11 +180,11 @@ export default function GoogleIntegration() {
               <div className="mt-2 text-[11px] text-emerald-800 space-y-0.5 font-mono">
                 <p className="flex items-center gap-1.5">
                   <i className={`bi ${status.driveFolderId ? 'bi-check-lg text-emerald-600' : 'bi-dash-circle text-amber-500'}`} />
-                  Folder Incoming: <span className="font-semibold">esurat</span>
+                  Folder Incoming: <span className="font-semibold">{storageSettings?.incoming?.folderName || 'esurat'}</span>
                 </p>
                 <p className="flex items-center gap-1.5">
                   <i className={`bi ${status.driveKeluarFolderId ? 'bi-check-lg text-emerald-600' : 'bi-dash-circle text-amber-500'}`} />
-                  Folder Outgoing: <span className="font-semibold">esurat-keluar</span>
+                  Folder Outgoing: <span className="font-semibold">{storageSettings?.outgoing?.folderName || 'esurat-keluar'}</span>
                 </p>
                 <p className="flex items-center gap-1.5">
                   <i className={`bi ${status.sheetMasukId ? 'bi-check-lg text-emerald-600' : 'bi-dash-circle text-amber-500'}`} />
@@ -179,6 +194,132 @@ export default function GoogleIntegration() {
                   <i className={`bi ${status.sheetKeluarId ? 'bi-check-lg text-emerald-600' : 'bi-dash-circle text-amber-500'}`} />
                   Spreadsheet Keluar: <span className="font-semibold">E-Surat Keluar</span>
                 </p>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Storage Configuration Section ─────────────────────────────── */}
+          <div className="pt-2 border-t border-slate-100 space-y-3">
+            <div>
+              <h4 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                <i className="bi bi-folder-symlink text-[#4B164C]" />
+                Konfigurasi Folder Penyimpanan
+              </h4>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Pilih folder Google Drive tujuan untuk surat masuk dan surat keluar secara independen.
+              </p>
+            </div>
+
+            {/* Warning if any destination is inaccessible */}
+            {(storageSettings?.incoming?.accessible === false || storageSettings?.outgoing?.accessible === false) && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-start gap-2">
+                <i className="bi bi-exclamation-triangle-fill text-red-500 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="font-semibold">Perhatian: Folder Tujuan Tidak Dapat Diakses</p>
+                  <p className="mt-0.5 text-[11px]">
+                    {storageSettings?.incoming?.warning || storageSettings?.outgoing?.warning || 'Folder Google Drive yang disimpan telah dipindahkan atau dihapus. Silakan pilih folder tujuan baru.'}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {/* Incoming Mail Storage */}
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <i className="bi bi-inbox-fill text-[#4B164C]" />
+                    Surat Masuk
+                  </span>
+                  {storageSettings?.incoming?.isDefault ? (
+                    <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-200 text-slate-700 rounded-full">
+                      Default E-Surat
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold px-2 py-0.5 bg-[#DD88CF]/20 text-[#4B164C] rounded-full">
+                      Folder Kustom
+                    </span>
+                  )}
+                </div>
+
+                <div>
+                  <p className="text-[11px] text-slate-500">Folder Tujuan:</p>
+                  <p className="text-xs font-semibold text-slate-800 truncate mt-0.5 flex items-center gap-1">
+                    <i className="bi bi-folder text-amber-500" />
+                    <span>{storageSettings?.incoming?.folderName || 'esurat'}</span>
+                  </p>
+                  {storageSettings?.incoming?.accessible === false ? (
+                    <p className="text-[10px] text-red-600 font-semibold mt-0.5 flex items-center gap-1">
+                      <i className="bi bi-x-circle-fill" /> Folder hilang / tidak dapat diakses
+                    </p>
+                  ) : (
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      {storageSettings?.incoming?.isDefault
+                        ? 'Struktur: esurat/MM-YY/'
+                        : storageSettings?.incoming?.useMonthlyOrganization
+                        ? 'Struktur: <folder>/MM-YY/'
+                        : 'Unggah langsung ke folder ini'}
+                    </p>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setBrowserModal({ isOpen: true, letterType: 'incoming' })}
+                  className="w-full py-2 px-3 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 transition flex items-center justify-center gap-1.5"
+                >
+                  <i className="bi bi-folder2-open text-[#4B164C]" />
+                  Ganti Folder
+                </button>
+              </div>
+
+              {/* Outgoing Mail Storage */}
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <i className="bi bi-send-fill text-[#DD88CF]" />
+                    Surat Keluar
+                  </span>
+                  {storageSettings?.outgoing?.isDefault ? (
+                    <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-200 text-slate-700 rounded-full">
+                      Default E-Surat
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold px-2 py-0.5 bg-[#DD88CF]/20 text-[#4B164C] rounded-full">
+                      Folder Kustom
+                    </span>
+                  )}
+                </div>
+
+                <div>
+                  <p className="text-[11px] text-slate-500">Folder Tujuan:</p>
+                  <p className="text-xs font-semibold text-slate-800 truncate mt-0.5 flex items-center gap-1">
+                    <i className="bi bi-folder text-amber-500" />
+                    <span>{storageSettings?.outgoing?.folderName || 'esurat-keluar'}</span>
+                  </p>
+                  {storageSettings?.outgoing?.accessible === false ? (
+                    <p className="text-[10px] text-red-600 font-semibold mt-0.5 flex items-center gap-1">
+                      <i className="bi bi-x-circle-fill" /> Folder hilang / tidak dapat diakses
+                    </p>
+                  ) : (
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      {storageSettings?.outgoing?.isDefault
+                        ? 'Struktur: esurat-keluar/MM-YY/'
+                        : storageSettings?.outgoing?.useMonthlyOrganization
+                        ? 'Struktur: <folder>/MM-YY/'
+                        : 'Unggah langsung ke folder ini'}
+                    </p>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setBrowserModal({ isOpen: true, letterType: 'outgoing' })}
+                  className="w-full py-2 px-3 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 transition flex items-center justify-center gap-1.5"
+                >
+                  <i className="bi bi-folder2-open text-[#DD88CF]" />
+                  Ganti Folder
+                </button>
               </div>
             </div>
           </div>
@@ -253,6 +394,29 @@ export default function GoogleIntegration() {
             )}
           </button>
         </div>
+      )}
+
+      {/* Folder Browser Modal */}
+      {browserModal.isOpen && (
+        <GoogleDriveFolderBrowserModal
+          isOpen={browserModal.isOpen}
+          onClose={() => setBrowserModal((prev) => ({ ...prev, isOpen: false }))}
+          letterType={browserModal.letterType}
+          currentStorage={
+            browserModal.letterType === 'incoming'
+              ? storageSettings?.incoming
+              : storageSettings?.outgoing
+          }
+          onFolderSelected={(updatedSettings) => {
+            setStorageSettings(updatedSettings)
+            setMessage({
+              type: 'success',
+              text: `Folder penyimpanan ${
+                browserModal.letterType === 'incoming' ? 'Surat Masuk' : 'Surat Keluar'
+              } berhasil diperbarui.`,
+            })
+          }}
+        />
       )}
     </div>
   )

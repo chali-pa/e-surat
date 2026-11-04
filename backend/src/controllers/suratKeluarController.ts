@@ -183,9 +183,15 @@ export const store = async (req: AuthRequest, res: Response) => {
       });
     }
 
+    let parentFolderId = '';
+    let storageDestination = '';
+    let originalFileName = '';
+    let fileMimeType = '';
+
     if (req.file) {
-      const originalName = req.file.originalname || `${nomor_surat}_${Date.now()}`;
-      const ext = path.extname(originalName) || '.pdf';
+      originalFileName = req.file.originalname || `${nomor_surat}_${Date.now()}`;
+      fileMimeType = req.file.mimetype || 'application/octet-stream';
+      const ext = path.extname(originalFileName) || '.pdf';
       const cleanFileName = `${nomor_surat.replace(/[\/\\?%*:|"<>]/g, '_')}_${nama_surat.replace(/[\/\\?%*:|"<>]/g, '_')}_${Date.now()}${ext}`;
 
       console.log('Uploading outgoing letter to user Drive:', cleanFileName);
@@ -204,6 +210,8 @@ export const store = async (req: AuthRequest, res: Response) => {
         googleDriveId = uploadResult.fileId;
         webViewLink = uploadResult.webViewLink;
         logicalPath = uploadResult.logicalPath;
+        parentFolderId = uploadResult.parentFolderId;
+        storageDestination = uploadResult.storageDestination;
       } catch (uploadError: any) {
         console.error('Google Drive upload error:', uploadError);
         if (isGoogleErrorInvalidGrant(uploadError)) {
@@ -231,6 +239,10 @@ export const store = async (req: AuthRequest, res: Response) => {
       file_path: logicalPath || webViewLink,
       user_id: userId,
       folder_id: folder_id ? parseInt(folder_id) : undefined,
+      drive_parent_folder_id: parentFolderId,
+      original_file_name: originalFileName,
+      file_mime_type: fileMimeType,
+      storage_destination: storageDestination,
       created_at: new Date().toISOString(),
     };
 
@@ -345,9 +357,15 @@ export const update = async (req: AuthRequest, res: Response) => {
       });
     }
 
+    let parentFolderId = oldSurat.drive_parent_folder_id || '';
+    let storageDestination = oldSurat.storage_destination || '';
+    let originalFileName = oldSurat.original_file_name || '';
+    let fileMimeType = oldSurat.file_mime_type || '';
+
     if (req.file) {
-      const originalName = req.file.originalname || `${nomor_surat}_${Date.now()}`;
-      const ext = path.extname(originalName) || '.pdf';
+      originalFileName = req.file.originalname || `${nomor_surat}_${Date.now()}`;
+      fileMimeType = req.file.mimetype || 'application/octet-stream';
+      const ext = path.extname(originalFileName) || '.pdf';
       const cleanFileName = `${nomor_surat.replace(/[\/\\?%*:|"<>]/g, '_')}_${nama_surat.replace(/[\/\\?%*:|"<>]/g, '_')}_${Date.now()}${ext}`;
 
       try {
@@ -372,6 +390,8 @@ export const update = async (req: AuthRequest, res: Response) => {
         googleDriveId = uploadResult.fileId;
         webViewLink = uploadResult.webViewLink;
         logicalPath = uploadResult.logicalPath;
+        parentFolderId = uploadResult.parentFolderId;
+        storageDestination = uploadResult.storageDestination;
       } catch (uploadError: any) {
         if (isGoogleErrorInvalidGrant(uploadError)) {
           return res.status(401).json({
@@ -426,6 +446,10 @@ export const update = async (req: AuthRequest, res: Response) => {
       file_path: logicalPath,
       google_sheet_row: oldSurat.google_sheet_row,
       folder_id: folder_id ? parseInt(folder_id) : undefined,
+      drive_parent_folder_id: parentFolderId,
+      original_file_name: originalFileName,
+      file_mime_type: fileMimeType,
+      storage_destination: storageDestination,
       updated_at: new Date().toISOString(),
     };
 

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import api from '../../api/axios';
 import FolderSelector from '../drive/FolderSelector';
 import DocumentPreviewModal from '../DocumentPreviewModal';
@@ -49,6 +50,8 @@ export default function MailForm({ type, id, prepopulatedFile, onClearFile, onSa
   const [uploadProgress, setUploadProgress] = useState(0);
   const [dragActive, setDragActive] = useState(false);
   const [googleConnected, setGoogleConnected] = useState(true);
+  const [storageSettings, setStorageSettings] = useState(null);
+  const [loadingStorageSettings, setLoadingStorageSettings] = useState(false);
   
   const [objectUrl, setObjectUrl] = useState('');
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -65,13 +68,27 @@ export default function MailForm({ type, id, prepopulatedFile, onClearFile, onSa
     }
   }, [formData.file_surat]);
 
-  // Check Google account connection status
+  // Check Google account connection status & storage settings
   useEffect(() => {
     const checkGoogleStatus = async () => {
       try {
         const res = await api.get('/api/google/status');
         if (res.data.success) {
-          setGoogleConnected(!!res.data.connected);
+          const isConnected = !!res.data.connected;
+          setGoogleConnected(isConnected);
+          if (isConnected) {
+            setLoadingStorageSettings(true);
+            try {
+              const storageRes = await api.get('/api/google/storage-settings');
+              if (storageRes.data?.success) {
+                setStorageSettings(storageRes.data.data);
+              }
+            } catch (storageErr) {
+              console.warn('Failed to fetch storage settings:', storageErr);
+            } finally {
+              setLoadingStorageSettings(false);
+            }
+          }
         }
       } catch (err) {
         console.warn('Failed to check Google status:', err);
@@ -418,6 +435,87 @@ export default function MailForm({ type, id, prepopulatedFile, onClearFile, onSa
             </p>
           )}
         </div>
+
+        {/* Google Drive Storage Destination Status */}
+        {googleConnected && (
+          <div className="bg-slate-50/80 border border-slate-200/90 rounded-xl p-3.5 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+                <i className="bi bi-google text-slate-500" />
+                Tujuan Penyimpanan Google Drive ({type === 'incoming' ? 'Surat Masuk' : 'Surat Keluar'})
+              </span>
+              <Link
+                to="/profile"
+                className="text-xs font-medium text-[#4B164C] hover:text-[#381039] hover:underline flex items-center gap-1 transition-colors"
+                title="Kelola folder tujuan penyimpanan di halaman Pengaturan Profil"
+              >
+                <i className="bi bi-gear" />
+                Ubah di Profil
+              </Link>
+            </div>
+
+            {loadingStorageSettings ? (
+              <div className="flex items-center gap-2 text-xs text-slate-500 py-1">
+                <i className="bi bi-arrow-repeat animate-spin text-[#4B164C]" />
+                <span>Memeriksa folder tujuan Google Drive...</span>
+              </div>
+            ) : (() => {
+              const currentDestination = storageSettings ? (type === 'incoming' ? storageSettings.incoming : storageSettings.outgoing) : null;
+              if (!currentDestination) return null;
+
+              return (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-white border border-slate-200 text-slate-800 shadow-sm">
+                      <i className="bi bi-folder2 text-amber-500 text-sm" />
+                      <span className="font-semibold">{currentDestination.folderName}</span>
+                      <span className="text-[11px] text-slate-400">
+                        {currentDestination.isCustom ? '(Folder Kustom)' : '(Folder Default)'}
+                      </span>
+                    </div>
+
+                    {currentDestination.monthlyOrganization && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-purple-50 text-purple-700 border border-purple-200/70">
+                        <i className="bi bi-calendar3 text-[10px]" />
+                        Subfolder MM-YY Aktif
+                      </span>
+                    )}
+
+                    {currentDestination.accessible ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/70">
+                        <i className="bi bi-check-circle text-[10px]" /> Siap
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-red-50 text-red-700 border border-red-200/70 animate-pulse">
+                        <i className="bi bi-exclamation-triangle text-[10px]" /> Tidak Dapat Diakses
+                      </span>
+                    )}
+                  </div>
+
+                  {!currentDestination.accessible && (
+                    <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 space-y-1.5">
+                      <p className="font-semibold flex items-center gap-1.5">
+                        <i className="bi bi-exclamation-octagon-fill text-red-600 text-sm" />
+                        Folder tujuan di Google Drive tidak ditemukan atau dipindahkan
+                      </p>
+                      <p className="text-red-600 text-[11px] leading-relaxed">
+                        {currentDestination.warning || 'Folder Google Drive yang sebelumnya dipilih tidak lagi dapat diakses. File yang diunggah akan dialihkan ke folder default sistem jika folder tujuan belum diperbarui.'}
+                      </p>
+                      <div className="pt-0.5">
+                        <Link
+                          to="/profile"
+                          className="inline-flex items-center gap-1 font-semibold text-red-800 hover:text-red-950 underline"
+                        >
+                          Buka Pengaturan Profil & Google Drive &rarr;
+                        </Link>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        )}
 
         {/* Folder Selection */}
         <FolderSelector

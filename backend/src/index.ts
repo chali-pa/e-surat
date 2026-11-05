@@ -61,6 +61,7 @@ app.use(cors({
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['Content-Disposition', 'X-Original-Size', 'X-Compressed-Size', 'X-Was-Compressed', 'X-File-Name'],
 }));
 
 // Rate limiting
@@ -126,7 +127,14 @@ if (!process.env.VERCEL) {
   const server = app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-  }).on('error', (err: any) => {
+  });
+
+  // Configure timeouts for large uploads (up to 50 MB)
+  server.setTimeout(300000); // 5 minutes
+  server.keepAliveTimeout = 65000;
+  server.headersTimeout = 66000;
+
+  server.on('error', (err: any) => {
     if (err.code === 'EADDRINUSE') {
       console.error(`Error: Port ${PORT} is already in use.`);
       console.error('Please kill the process using this port or use a different port.');

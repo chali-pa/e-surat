@@ -3,7 +3,7 @@ import path from 'path';
 import { Readable } from 'stream';
 import { findUserById, updateUserGoogleResourceIds, updateUserStorageSettings } from '../models/User';
 import { getOAuth2ClientForUser, GoogleReconnectRequiredError, isGoogleErrorInvalidGrant } from './userGoogleAuthService';
-import { createFolder, findFolderByDriveId, findFoldersByUserAndMonth, findFolderById } from '../models/Folder';
+import { createFolder, findFolderByDriveId, findFoldersByUserAndMonth, findFolderById, deleteFolder, findFoldersByUser } from '../models/Folder';
 
 /**
  * Helper to find an existing folder under parentId by name (to prevent duplicates)
@@ -175,7 +175,7 @@ export async function moveUserFile(
 /**
  * Determine subfolder category based on file extension / mime type
  */
-export function getSubfolderType(fileName: string, mimeType?: string): 'Excel' | 'Documentation' | 'PDF' {
+export function getSubfolderType(fileName: string, mimeType?: string): 'Excel' | 'Photos' | 'PDF' {
   const ext = path.extname(fileName).toLowerCase();
 
   if (['.xlsx', '.xls', '.csv'].includes(ext) || (mimeType && (mimeType.includes('spreadsheet') || mimeType.includes('excel') || mimeType.includes('csv')))) {
@@ -183,12 +183,7 @@ export function getSubfolderType(fileName: string, mimeType?: string): 'Excel' |
   }
 
   if (['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp', '.tiff', '.svg'].includes(ext) || (mimeType && mimeType.startsWith('image/'))) {
-    return 'Documentation';
-  }
-
-  if (['.doc', '.docx', '.txt', '.rtf', '.odt'].includes(ext) || 
-      (mimeType && (mimeType.includes('document') || mimeType.includes('text') || mimeType.includes('msword')))) {
-    return 'Documentation';
+    return 'Photos';
   }
 
   return 'PDF';
@@ -235,13 +230,15 @@ export async function moveDriveFileToCorrectFolder(
     let logicalPath: string;
 
     const monthYear = formatMonthYear(letterDateStr);
+    const subfolder = getSubfolderType(originalFileName, mimeType);
 
     if (customFolderDriveId) {
       targetFolderId = customFolderDriveId;
       logicalPath = `${rootName}/${monthYear}/${originalFileName}`;
     } else {
-      targetFolderId = await findOrCreateFolder(drive, monthYear, rootFolderId);
-      logicalPath = `${rootName}/${monthYear}/${originalFileName}`;
+      const monthFolderId = await findOrCreateFolder(drive, monthYear, rootFolderId);
+      targetFolderId = await findOrCreateFolder(drive, subfolder, monthFolderId);
+      logicalPath = `${rootName}/${monthYear}/${subfolder}/${originalFileName}`;
     }
 
     await moveUserFile(userId, fileId, targetFolderId);
@@ -325,6 +322,75 @@ export async function initializeUserDriveStructure(userId: number): Promise<{
 }
 
 /**
+ * Upload file to user's Google Drive using the official Google Drive Resumable Upload protocol.
+ * Supports files up to 50 MB with binary transfer (no Base64 conversion overhead) and automatic retry.
+ */
+export async function uploadToDriveResumable(
+  auth: any,
+  fileBuffer: Buffer,
+  fileMetadata: { name: string; parents?: string[]; mimeType?: string },
+  mimeType: string
+): Promise<{ id: string; webViewLink?: string; parents?: string[] }> {
+  const fileSize = fileBuffer.length;
+  const contentType = mimeType || 'application/octet-stream';
+
+  // Step 1: Initiate resumable session with Google Drive
+  const initRes = await auth.request({
+    method: 'POST',
+    url: 'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,webViewLink,parents',
+    headers: {
+      'Content-Type': 'application/json; charset=UTF-8',
+      'X-Upload-Content-Type': contentType,
+      'X-Upload-Content-Length': fileSize.toString(),
+    },
+    data: fileMetadata,
+    maxBodyLength: Infinity,
+    maxContentLength: Infinity,
+  });
+
+  const sessionUri = initRes.headers.location;
+  if (!sessionUri) {
+    throw new Error('Google Drive API did not return a resumable session URI');
+  }
+
+  // Step 2: Upload binary buffer to the session URI with retry handling
+  let attempts = 0;
+  const maxAttempts = 3;
+  let uploadRes: any;
+
+  while (attempts < maxAttempts) {
+    try {
+      attempts++;
+      uploadRes = await auth.request({
+        method: 'PUT',
+        url: sessionUri,
+        headers: {
+          'Content-Type': contentType,
+          'Content-Length': fileSize.toString(),
+        },
+        data: fileBuffer,
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity,
+        timeout: 300000, // 5 minutes timeout for up to 50 MB
+      });
+      break;
+    } catch (uploadErr: any) {
+      if (attempts >= maxAttempts) {
+        throw uploadErr;
+      }
+      console.warn(`[GoogleDrive] Resumable upload attempt ${attempts} failed: ${uploadErr.message}. Retrying...`);
+      await new Promise(r => setTimeout(r, 1000 * attempts));
+    }
+  }
+
+  if (!uploadRes?.data?.id) {
+    throw new Error('Google Drive upload did not return file ID');
+  }
+
+  return uploadRes.data;
+}
+
+/**
  * Upload file to user's Google Drive with strict MM-YY folder routing.
  * Fails explicitly if a customFolderId is invalid/unresolvable.
  */
@@ -343,7 +409,7 @@ export async function uploadUserLetterFile(
   parentFolderId: string;
   storageDestination: string;
 }> {
-  console.log(`[GoogleDrive] Uploading file for user ${userId}: ${originalFileName} (${letterType})`);
+  console.log(`[GoogleDrive] Uploading file for user ${userId}: ${originalFileName} (${letterType}) [size: ${(fileBuffer.length / (1024 * 1024)).toFixed(2)} MB]`);
   try {
     const auth = await getOAuth2ClientForUser(userId);
     const drive = google.drive({ version: 'v3', auth });
@@ -351,6 +417,7 @@ export async function uploadUserLetterFile(
     const user = await findUserById(userId);
     const rootName = letterType === 'incoming' ? 'esurat' : 'esurat-keluar';
     const monthYear = formatMonthYear(letterDateStr);
+    const subfolder = getSubfolderType(originalFileName, mimeType);
 
     let targetFolderId = '';
     let storageDestination = '';
@@ -392,7 +459,8 @@ export async function uploadUserLetterFile(
       const isDefault = !configuredFolderId || configuredFolderId === defaultRootId;
 
       if (isDefault) {
-        // Default esurat / esurat-keluar behavior with MM-YY monthly folder
+        // Default esurat / esurat-keluar structure:
+        // esurat/MM-YY/Excel, esurat/MM-YY/Photos, esurat/MM-YY/PDF
         let rootFolderId = defaultRootId;
         const otherFolderId = letterType === 'incoming' ? user?.drive_keluar_folder_id : user?.drive_folder_id;
 
@@ -410,9 +478,10 @@ export async function uploadUserLetterFile(
           }
         }
 
-        targetFolderId = await findOrCreateFolder(drive, monthYear, rootFolderId);
+        const monthFolderId = await findOrCreateFolder(drive, monthYear, rootFolderId);
+        targetFolderId = await findOrCreateFolder(drive, subfolder, monthFolderId);
         storageDestination = rootName;
-        logicalPath = `${rootName}/${monthYear}/${originalFileName}`;
+        logicalPath = `${rootName}/${monthYear}/${subfolder}/${originalFileName}`;
       } else {
         // User-selected existing folder: preserve all existing contents
         try {
@@ -430,9 +499,11 @@ export async function uploadUserLetterFile(
           storageDestination = verifiedName;
 
           if (useMonthlyOrg) {
-            // User explicitly chose monthly organization inside custom folder
-            targetFolderId = await findOrCreateFolder(drive, monthYear, configuredFolderId);
-            logicalPath = `${verifiedName}/${monthYear}/${originalFileName}`;
+            // User explicitly chose monthly organization inside custom folder:
+            // <customFolder>/MM-YY/<subfolder>/<fileName>
+            const monthFolderId = await findOrCreateFolder(drive, monthYear, configuredFolderId);
+            targetFolderId = await findOrCreateFolder(drive, subfolder, monthFolderId);
+            logicalPath = `${verifiedName}/${monthYear}/${subfolder}/${originalFileName}`;
           } else {
             // Default for user-selected folders: direct upload into the selected folder
             targetFolderId = configuredFolderId;
@@ -447,29 +518,21 @@ export async function uploadUserLetterFile(
       }
     }
 
-    // 3. Upload file directly to target folder (never overwrite or modify other files)
+    // 3. Upload file using Resumable Upload protocol (streaming binary, handles up to 50MB reliably)
     const fileMetadata = {
       name: originalFileName,
       parents: [targetFolderId],
     };
 
-    const media = {
-      mimeType: mimeType || 'application/octet-stream',
-      body: Readable.from(fileBuffer),
-    };
+    const uploadedFile = await uploadToDriveResumable(
+      auth,
+      fileBuffer,
+      fileMetadata,
+      mimeType || 'application/octet-stream'
+    );
 
-    const response = await drive.files.create({
-      requestBody: fileMetadata,
-      media: media,
-      fields: 'id, webViewLink, parents',
-    });
-
-    if (!response.data.id) {
-      throw new Error('Google Drive API did not return a file ID');
-    }
-
-    const fileId = response.data.id;
-    const webViewLink = response.data.webViewLink || `https://drive.google.com/file/d/${fileId}/view`;
+    const fileId = uploadedFile.id;
+    const webViewLink = uploadedFile.webViewLink || `https://drive.google.com/file/d/${fileId}/view`;
 
     // Make viewable
     try {
@@ -820,21 +883,48 @@ export async function getMonthlyFolders(
     // 2. Find the month sub-folder (list only — do NOT create it here)
     const monthFolderId = await findFolderByName(drive, cleanedMonth, rootFolderId);
     if (!monthFolderId) {
-      // Month folder doesn't exist yet — nothing to list
+      // Month folder was deleted or doesn't exist in Google Drive!
+      // Synchronize database: clean up custom folders for this deleted month so they disappear from UI
+      try {
+        const existingDbFolders = await findFoldersByUserAndMonth(userId, cleanedMonth, letterType);
+        for (const dbF of existingDbFolders) {
+          if (dbF.id) {
+            console.log(`[GoogleDrive] Monthly folder '${cleanedMonth}' was deleted from Drive. Removing DB custom folder '${dbF.name}' (${dbF.id})`);
+            await deleteFolder(dbF.id);
+          }
+        }
+      } catch (cleanErr) {
+        console.warn(`[GoogleDrive] Error cleaning up deleted month folders from DB:`, cleanErr);
+      }
       return [];
     }
 
     // 3. List all folder children of the month folder from Drive
     const driveRes = await drive.files.list({
       q: `'${monthFolderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
-      fields: 'files(id, name)',
+      fields: 'files(id, name, trashed)',
       spaces: 'drive',
       pageSize: 100,
     });
 
-    const driveFolders = driveRes.data.files || [];
+    const systemFolderNames = ['excel', 'photos', 'pdf', 'documentation'];
+    const driveFolders = (driveRes.data.files || []).filter(
+      (f) => f.id && f.name && !systemFolderNames.includes(f.name.toLowerCase()) && !f.trashed
+    );
+    const driveFolderMap = new Map(driveFolders.map((f) => [f.id!, f.name!]));
 
-    // 4. Upsert each Drive folder into the local DB and build the result list
+    // 4. Synchronize: Clean up DB folders for this month that no longer exist in Drive
+    const existingDbFolders = await findFoldersByUserAndMonth(userId, cleanedMonth, letterType);
+    for (const dbF of existingDbFolders) {
+      if (!driveFolderMap.has(dbF.google_drive_folder_id)) {
+        console.log(`[GoogleDrive] Folder '${dbF.name}' (${dbF.google_drive_folder_id}) was deleted from Drive. Removing from DB.`);
+        if (dbF.id) {
+          await deleteFolder(dbF.id);
+        }
+      }
+    }
+
+    // 5. Upsert remaining or newly discovered Drive folders into DB and build the result list
     const results: Array<{ id: string; name: string; google_drive_folder_id: string }> = [];
 
     for (const driveFolder of driveFolders) {
@@ -855,7 +945,6 @@ export async function getMonthlyFolders(
             letter_type: letterType,
           });
         } catch (upsertErr: any) {
-          // Concurrent request may have inserted it between our check and insert — retry lookup
           dbRow = await findFolderByDriveId(driveFolder.id);
           if (!dbRow) {
             console.warn(`[GoogleDrive] Could not upsert folder '${driveFolder.name}' (${driveFolder.id}):`, upsertErr);
@@ -880,17 +969,63 @@ export async function getMonthlyFolders(
       throw new GoogleReconnectRequiredError();
     }
 
-    // For other transient errors fall back to DB-only listing so the UI stays usable
-    try {
-      const dbFolders = await findFoldersByUserAndMonth(userId, cleanedMonth, letterType);
-      return dbFolders.map((f) => ({
-        id: f.id?.toString() || '',
-        name: f.name,
-        google_drive_folder_id: f.google_drive_folder_id,
-      }));
-    } catch {
-      return [];
+    // For other transient errors return empty array
+    return [];
+  }
+}
+
+/**
+ * Synchronize all monthly folders in user's root folder with Drive.
+ * Scans Google Drive root (esurat or esurat-keluar) and returns active monthly folders.
+ * Automatically cleans up any custom folder records in DB whose parent monthly folder was deleted from Drive.
+ */
+export async function syncActiveMonthlyFolders(
+  userId: number,
+  letterType: 'incoming' | 'outgoing' = 'incoming'
+): Promise<Array<{ month: string; driveFolderId: string }>> {
+  try {
+    const auth = await getOAuth2ClientForUser(userId);
+    const drive = google.drive({ version: 'v3', auth });
+
+    const user = await findUserById(userId);
+    const rootFolderId = letterType === 'incoming' ? user?.drive_folder_id : user?.drive_keluar_folder_id;
+    if (!rootFolderId) return [];
+
+    const res = await drive.files.list({
+      q: `'${rootFolderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+      fields: 'files(id, name, trashed)',
+      spaces: 'drive',
+      pageSize: 100,
+    });
+
+    const activeMonthFolders: Array<{ month: string; driveFolderId: string }> = [];
+    const activeMonths = new Set<string>();
+
+    for (const file of res.data.files || []) {
+      if (file.id && file.name && /^\d{2}-\d{2}$/.test(file.name) && !file.trashed) {
+        activeMonthFolders.push({ month: file.name, driveFolderId: file.id });
+        activeMonths.add(file.name);
+      }
     }
+
+    // Clean up any DB folders whose month no longer exists in Drive
+    const allDbFolders = await findFoldersByUser(userId);
+    for (const dbF of allDbFolders) {
+      if (dbF.letter_type === letterType && dbF.month && !activeMonths.has(dbF.month)) {
+        console.log(`[GoogleDrive] Monthly folder '${dbF.month}' deleted in Drive. Removing DB folder '${dbF.name}' (${dbF.id})`);
+        if (dbF.id) {
+          await deleteFolder(dbF.id);
+        }
+      }
+    }
+
+    return activeMonthFolders;
+  } catch (err: any) {
+    console.error(`[GoogleDrive] Error syncing active monthly folders:`, err);
+    if (isGoogleErrorInvalidGrant(err)) {
+      throw new GoogleReconnectRequiredError();
+    }
+    return [];
   }
 }
 
@@ -1253,4 +1388,122 @@ export async function updateStorageSettings(
   console.log(`[GoogleDrive] Updated storage settings for user ${userId} (${letterType}): folder=${verifiedName} (${details.id})`);
   return getStorageSettings(userId);
 }
+
+/**
+ * Rename a Google Drive folder. Validates the folder belongs to the user's
+ * Drive tree (accessible via their OAuth token). Preserves contents.
+ */
+export async function renameDriveFolder(
+  userId: number,
+  driveId: string,
+  newName: string
+): Promise<{ id: string; name: string }> {
+  if (!newName || !newName.trim()) {
+    throw new Error('Nama folder baru tidak boleh kosong.');
+  }
+  const trimmed = newName.trim();
+  const auth = await getOAuth2ClientForUser(userId);
+  const drive = google.drive({ version: 'v3', auth });
+
+  // Verify folder is accessible by this user and not trashed
+  const existing = await drive.files.get({
+    fileId: driveId,
+    fields: 'id, name, mimeType, trashed, parents',
+  });
+  if (existing.data.trashed) {
+    throw new Error(`Folder '${existing.data.name}' berada di kotak sampah.`);
+  }
+  if (existing.data.mimeType !== 'application/vnd.google-apps.folder') {
+    throw new Error(`'${driveId}' bukan sebuah folder.`);
+  }
+
+  // Protect root folders from being renamed to arbitrary names that break app structure
+  const user = await findUserById(userId);
+  if (driveId === user?.drive_folder_id || driveId === user?.drive_keluar_folder_id) {
+    throw new Error('Folder root default (esurat / esurat-keluar) tidak boleh diubah namanya.');
+  }
+
+  const updated = await drive.files.update({
+    fileId: driveId,
+    requestBody: { name: trimmed },
+    fields: 'id, name',
+  });
+
+  // Update DB folder record if exists
+  try {
+    const dbFolder = await findFolderByDriveId(driveId);
+    if (dbFolder && dbFolder.id) {
+      const { updateFolder } = await import('../models/Folder');
+      await updateFolder(dbFolder.id, { name: trimmed });
+    }
+  } catch (dbErr) {
+    console.warn(`[GoogleDrive] Note: Could not update DB record for folder ${driveId}:`, dbErr);
+  }
+
+  console.log(`[GoogleDrive] Renamed folder ${driveId} to '${trimmed}' for user ${userId}`);
+  return { id: updated.data.id!, name: updated.data.name! };
+}
+
+/**
+ * Move a Google Drive folder to trash. Protects root folders.
+ * Never permanently deletes — sets trashed: true via Drive API.
+ */
+export async function trashDriveFolder(
+  userId: number,
+  driveId: string
+): Promise<void> {
+  const auth = await getOAuth2ClientForUser(userId);
+  const drive = google.drive({ version: 'v3', auth });
+
+  // Verify folder is accessible and not already trashed
+  const existing = await drive.files.get({
+    fileId: driveId,
+    fields: 'id, name, mimeType, trashed',
+  });
+  if (existing.data.trashed) {
+    throw new Error(`Folder '${existing.data.name}' sudah berada di kotak sampah.`);
+  }
+  if (existing.data.mimeType !== 'application/vnd.google-apps.folder') {
+    throw new Error(`'${driveId}' bukan sebuah folder.`);
+  }
+
+  // Protect the user's root esurat / esurat-keluar folders
+  const user = await findUserById(userId);
+  if (
+    driveId === user?.drive_folder_id ||
+    driveId === user?.drive_keluar_folder_id
+  ) {
+    throw new Error(
+      `Tidak dapat menghapus folder root '${existing.data.name}'. Folder ini diperlukan oleh sistem.`
+    );
+  }
+
+  // Protect configured root storage destinations
+  if (
+    driveId === user?.incoming_storage_folder_id ||
+    driveId === user?.outgoing_storage_folder_id
+  ) {
+    throw new Error(
+      `Folder '${existing.data.name}' sedang aktif digunakan sebagai tujuan penyimpanan utama. Ubah tujuan penyimpanan terlebih dahulu sebelum menghapus.`
+    );
+  }
+
+  await drive.files.update({
+    fileId: driveId,
+    requestBody: { trashed: true },
+  });
+
+  // Clean up any database folder entry
+  try {
+    const dbFolder = await findFolderByDriveId(driveId);
+    if (dbFolder && dbFolder.id) {
+      await deleteFolder(dbFolder.id);
+    }
+  } catch (dbErr) {
+    console.warn(`[GoogleDrive] Note: Could not delete DB record for folder ${driveId}:`, dbErr);
+  }
+
+  console.log(`[GoogleDrive] Moved folder ${driveId} ('${existing.data.name}') to trash for user ${userId}`);
+}
+
 

@@ -30,7 +30,7 @@
  */
 
 import { PDFDocument, PDFName, PDFRawStream, PDFNumber, PDFArray } from 'pdf-lib';
-import sharp from 'sharp';
+import sharp, { Sharp as SharpInstance, Metadata as SharpMetadata } from 'sharp';
 import zlib from 'zlib';
 
 /** Files at or above this size trigger automatic compression in mail upload (in bytes). */
@@ -137,26 +137,68 @@ export async function compressPdfIfNeeded(
       }
 
       let imgBuffer: Buffer | null = null;
+      let isFlateRaw = false;
 
       if (filterName.includes('DCTDecode')) {
         imgBuffer = Buffer.from(object.contents);
       } else if (filterName.includes('FlateDecode')) {
         try {
           imgBuffer = zlib.inflateSync(Buffer.from(object.contents));
+          isFlateRaw = true;
         } catch {
           imgBuffer = Buffer.from(object.contents);
         }
       } else if (!filterName) {
         imgBuffer = Buffer.from(object.contents);
+        isFlateRaw = true;
       }
 
       if (!imgBuffer || imgBuffer.length === 0) continue;
 
       try {
-        const sharpImg = sharp(imgBuffer);
-        const metadata = await sharpImg.metadata();
+        let sharpImg: SharpInstance | null = null;
+        let metadata: SharpMetadata | null = null;
 
-        if (!metadata.width || !metadata.height) continue;
+        try {
+          sharpImg = sharp(imgBuffer);
+          metadata = await sharpImg.metadata();
+        } catch (directErr) {
+          // If direct decoding failed (e.g. raw bitmap bytes from FlateDecode), try with raw metadata
+          const widthObj = dict.get(PDFName.of('Width'));
+          const heightObj = dict.get(PDFName.of('Height'));
+          const colorSpaceObj = dict.get(PDFName.of('ColorSpace'));
+          const bpcObj = dict.get(PDFName.of('BitsPerComponent'));
+
+          const w = widthObj instanceof PDFNumber ? widthObj.asNumber() : null;
+          const h = heightObj instanceof PDFNumber ? heightObj.asNumber() : null;
+          const bpc = bpcObj instanceof PDFNumber ? bpcObj.asNumber() : 8;
+
+          let channels: 1 | 3 | 4 = 3;
+          if (colorSpaceObj instanceof PDFName) {
+            const cs = colorSpaceObj.asString();
+            if (cs.includes('Gray')) channels = 1;
+            else if (cs.includes('CMYK')) channels = 4;
+            else if (cs.includes('RGB')) channels = 3;
+          }
+
+          if (w && h && bpc === 8 && imgBuffer.length >= w * h * channels) {
+            try {
+              const rawSlice = imgBuffer.length === w * h * channels ? imgBuffer : imgBuffer.subarray(0, w * h * channels);
+              sharpImg = sharp(rawSlice, {
+                raw: {
+                  width: w,
+                  height: h,
+                  channels,
+                },
+              });
+              metadata = await sharpImg.metadata();
+            } catch {
+              sharpImg = null;
+            }
+          }
+        }
+
+        if (!sharpImg || !metadata?.width || !metadata?.height) continue;
 
         let needResize = false;
         let newWidth = metadata.width;

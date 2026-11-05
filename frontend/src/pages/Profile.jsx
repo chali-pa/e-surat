@@ -62,7 +62,11 @@ export default function Profile() {
         const res = await api.get('/api/profile')
         if (res.data.success && res.data.user) {
           const fresh = res.data.user
-          setUser(prev => ({ ...prev, ...fresh }))
+          setUser(prev => {
+            const merged = { ...prev, ...fresh }
+            localStorage.setItem('user', JSON.stringify(merged))
+            return merged
+          })
           setFormData({ name: fresh.name || '', email: fresh.email || '' })
         }
       } catch (err) {
@@ -184,16 +188,27 @@ export default function Profile() {
           <div
             className="absolute left-4 sm:left-6 bottom-0 translate-y-1/2 z-10
                         w-20 h-20 rounded-2xl border-4 border-white shadow-md
-                        flex items-center justify-center text-xl font-bold text-white"
+                        flex items-center justify-center text-xl font-bold text-white overflow-hidden"
             style={{ background: 'linear-gradient(135deg, #4B164C 0%, #DD88CF 100%)' }}
           >
-            {initials}
+            {user?.googlePicture || user?.google_picture ? (
+              <img
+                src={user.googlePicture || user.google_picture}
+                alt={formData.name}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                }}
+              />
+            ) : (
+              initials
+            )}
           </div>
         </div>
 
         {/* White body — pt-12 clears the 40px avatar overhang */}
         <div className="px-4 sm:px-6 pt-12 pb-5">
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
             <div className="min-w-0">
               <h2 className="text-base font-bold text-slate-900 truncate">
                 {formData.name || 'Nama Pengguna'}
@@ -203,10 +218,23 @@ export default function Profile() {
               </p>
             </div>
 
-            {/* Active status pill */}
-            <div className="flex-shrink-0 flex items-center gap-1.5 px-2.5 py-1 bg-green-50 border border-green-200 rounded-full mt-0.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
-              <span className="text-xs font-semibold text-green-700">Aktif</span>
+            {/* Badges: Status + Google Connection */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {user?.google_connected ? (
+                <div className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1 bg-emerald-50 border border-emerald-200 rounded-full">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-xs font-semibold text-emerald-700">Google Terhubung</span>
+                </div>
+              ) : (
+                <div className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1 bg-slate-100 border border-slate-200 rounded-full">
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                  <span className="text-xs font-semibold text-slate-600">Google Belum Terhubung</span>
+                </div>
+              )}
+              <div className="flex-shrink-0 flex items-center gap-1.5 px-2.5 py-1 bg-green-50 border border-green-200 rounded-full">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
+                <span className="text-xs font-semibold text-green-700">Aktif</span>
+              </div>
             </div>
           </div>
         </div>

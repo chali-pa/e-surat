@@ -213,11 +213,31 @@ export default function SuratEdit() {
               <label className="block text-sm font-semibold text-gray-700 mb-2">Upload File Surat (Opsional)</label>
               <input
                 type="file"
-                onChange={(e) => setFormData({ ...formData, file_surat: e.target.files[0] })}
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) {
+                    if (file.size > 50 * 1024 * 1024) {
+                      const fileMB = (file.size / (1024 * 1024)).toFixed(1)
+                      setErrors((prev) => ({
+                        ...prev,
+                        file_surat: `Ukuran file maksimum adalah 50 MB. File Anda ${fileMB} MB — silakan kurangi ukurannya dan coba lagi.`
+                      }))
+                      setFormData((prev) => ({ ...prev, file_surat: null }))
+                      e.target.value = ''
+                      return
+                    }
+                    setErrors((prev) => {
+                      const next = { ...prev }
+                      delete next.file_surat
+                      return next
+                    })
+                    setFormData((prev) => ({ ...prev, file_surat: file }))
+                  }
+                }}
                 className={`w-full border rounded-xl px-4 py-3 outline-none transition ${errors.file_surat ? 'border-red-400' : 'border-gray-200'}`}
               />
               {errors.file_surat && <p className="text-red-500 text-xs mt-1">{errors.file_surat}</p>}
-              <p className="text-xs text-gray-500 mt-1">Biarkan kosong jika tidak ingin mengganti file</p>
+              <p className="text-xs text-gray-500 mt-1">Biarkan kosong jika tidak ingin mengganti file (maks. 50 MB)</p>
             </div>
 
             <div className="flex justify-end pt-4">

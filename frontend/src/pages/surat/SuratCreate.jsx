@@ -59,6 +59,11 @@ export default function SuratCreate() {
     if (!ALLOWED_TYPES.includes(file.type)) {
       return `Tipe file tidak didukung. Gunakan: ${ALLOWED_EXT.join(', ')}`
     }
+    const MAX_SIZE = 50 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      const fileMB = (file.size / (1024 * 1024)).toFixed(1);
+      return `Ukuran file maksimum adalah 50 MB. File Anda ${fileMB} MB — silakan kurangi ukurannya dan coba lagi.`;
+    }
     return null
   }
 

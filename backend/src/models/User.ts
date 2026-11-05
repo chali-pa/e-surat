@@ -9,6 +9,7 @@ export interface User {
   google_sub?: string | null;
   google_name?: string | null;
   google_email?: string | null;
+  google_picture?: string | null;
   google_access_token?: string | null;
   google_refresh_token?: string | null;
   google_token_expires_at?: number | string | null;
@@ -48,6 +49,7 @@ export async function ensureUserGoogleColumns() {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS google_sub TEXT;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS google_name VARCHAR(255);
       ALTER TABLE users ADD COLUMN IF NOT EXISTS google_email VARCHAR(255);
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS google_picture TEXT;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS google_access_token TEXT;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS google_refresh_token TEXT;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS google_token_expires_at BIGINT;
@@ -144,7 +146,8 @@ export const updateUserGoogleTokens = async (
   expiresAt?: number | null,
   googleSub?: string | null,
   googleName?: string | null,
-  googleEmail?: string | null
+  googleEmail?: string | null,
+  googlePicture?: string | null
 ): Promise<User> => {
   await ensureUserGoogleColumns();
   let query: string;
@@ -160,11 +163,12 @@ export const updateUserGoogleTokens = async (
           google_sub = COALESCE($4, google_sub),
           google_name = COALESCE($5, google_name),
           google_email = COALESCE($6, google_email),
+          google_picture = COALESCE($7, google_picture),
           updated_at = NOW()
-      WHERE id = $7
+      WHERE id = $8
       RETURNING *
     `;
-    values = [accessToken, refreshToken, expiresAt || null, googleSub || null, googleName || null, googleEmail || null, id];
+    values = [accessToken, refreshToken, expiresAt || null, googleSub || null, googleName || null, googleEmail || null, googlePicture || null, id];
   } else {
     query = `
       UPDATE users
@@ -174,11 +178,12 @@ export const updateUserGoogleTokens = async (
           google_sub = COALESCE($3, google_sub),
           google_name = COALESCE($4, google_name),
           google_email = COALESCE($5, google_email),
+          google_picture = COALESCE($6, google_picture),
           updated_at = NOW()
-      WHERE id = $6
+      WHERE id = $7
       RETURNING *
     `;
-    values = [accessToken, expiresAt || null, googleSub || null, googleName || null, googleEmail || null, id];
+    values = [accessToken, expiresAt || null, googleSub || null, googleName || null, googleEmail || null, googlePicture || null, id];
   }
 
   const result = await pool.query(query, values);
@@ -194,6 +199,7 @@ export const clearUserGoogleTokens = async (id: number): Promise<User> => {
         google_connected = FALSE,
         google_name = NULL,
         google_email = NULL,
+        google_picture = NULL,
         updated_at = NOW()
     WHERE id = $1
     RETURNING *

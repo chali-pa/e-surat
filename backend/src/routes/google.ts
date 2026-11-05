@@ -9,7 +9,12 @@ import {
   listFolders,
   getFolder,
   getStorageSettingsHandler,
-  updateStorageSettingsHandler
+  updateStorageSettingsHandler,
+  listSpreadsheets,
+  createSpreadsheet,
+  renameSpreadsheet,
+  trashSpreadsheet,
+  assignSpreadsheet
 } from '../controllers/googleController';
 import { authenticate } from '../middleware/auth';
 
@@ -31,5 +36,12 @@ router.get('/folders', listFolders);
 router.get('/folders/:id', getFolder);
 router.get('/storage-settings', getStorageSettingsHandler);
 router.put('/storage-settings', updateStorageSettingsHandler);
+
+// Spreadsheet CRUD routes
+router.get('/spreadsheets', listSpreadsheets);
+router.post('/spreadsheets', createSpreadsheet);
+router.put('/spreadsheets/:id', renameSpreadsheet);
+router.delete('/spreadsheets/:id', trashSpreadsheet);
+router.put('/spreadsheets/:id/assign', assignSpreadsheet);
 
 export default router;

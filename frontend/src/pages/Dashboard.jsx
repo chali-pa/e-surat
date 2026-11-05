@@ -8,6 +8,9 @@ import DeleteConfirmDialog from '../components/mail/DeleteConfirmDialog';
 import DocumentScanner from '../components/mail/DocumentScanner';
 import CamScannerModal from '../components/mail/CamScannerModal';
 import { getSuratDriveUrl } from '../utils/getDriveFileUrl';
+import FolderSwitcherPopup from '../components/drive/FolderSwitcherPopup';
+import DriveManagerModal from '../components/drive/DriveManagerModal';
+import SheetsManagerModal from '../components/drive/SheetsManagerModal';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
 
@@ -112,6 +115,35 @@ export default function Dashboard() {
   const [selectedMonthOutgoing, setSelectedMonthOutgoing] = useState(currentMonthValue);
   // Dropdown open state per tab
   const [monthPickerOpen, setMonthPickerOpen] = useState(false);
+
+  // ── Drive & Sheets Modals / Folder Switcher ──────────────────────────
+  const [folderSwitcherOpen, setFolderSwitcherOpen] = useState(false);
+  const [driveManagerOpen, setDriveManagerOpen] = useState(false);
+  const [sheetsManagerOpen, setSheetsManagerOpen] = useState(false);
+  const folderSwitcherTriggerRef = useRef(null);
+
+  // Handler for selecting folder from floating popup
+  const handleFolderSelectFromPopup = (monthStr, letterType) => {
+    if (letterType !== activeTab) {
+      handleTabChange(letterType);
+    }
+    const match = monthStr.match(/^(\d{2})-(\d{2})$/);
+    if (match) {
+      const monthNum = parseInt(match[1], 10);
+      const yearYY = parseInt(match[2], 10);
+      const sel = { year: 2000 + yearYY, month: monthNum };
+      if (letterType === 'incoming') {
+        setSelectedMonthIncoming(sel);
+      } else {
+        setSelectedMonthOutgoing(sel);
+      }
+    }
+    setToast({
+      show: true,
+      type: 'success',
+      message: `Beralih ke folder arsip ${letterType === 'incoming' ? 'Surat Masuk' : 'Surat Keluar'} (${monthStr})`,
+    });
+  };
 
   // ── Data ────────────────────────────────────────────────────────────
   const [surats, setSurats]             = useState([]);
@@ -909,6 +941,63 @@ export default function Dashboard() {
                 )}
               </div>
 
+              {/* ── Floating Folder Switcher Trigger ──────────────── */}
+              <div className="relative shrink-0">
+                <button
+                  ref={folderSwitcherTriggerRef}
+                  type="button"
+                  onClick={() => setFolderSwitcherOpen((v) => !v)}
+                  title="Pilih folder arsip Google Drive"
+                  aria-expanded={folderSwitcherOpen}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition-all min-h-[36px] ${
+                    folderSwitcherOpen
+                      ? 'bg-[#4B164C] text-white border-[#4B164C] shadow-sm'
+                      : 'bg-white text-slate-700 border-slate-200 hover:border-[#4B164C] hover:text-[#4B164C]'
+                  }`}
+                >
+                  <i className="bi bi-folder2-open text-purple-600 shrink-0 text-sm" />
+                  <span className="hidden sm:inline font-semibold">Folder:</span>
+                  <span className="font-mono text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md font-bold text-[11px]">
+                    {activeTab === 'incoming' ? 'esurat' : 'esurat-keluar'}/
+                    {activeMonthSel
+                      ? `${String(activeMonthSel.month).padStart(2, '0')}-${String(activeMonthSel.year).slice(-2)}`
+                      : 'semua'}
+                  </span>
+                  <i className={`bi bi-chevron-${folderSwitcherOpen ? 'up' : 'down'} text-[10px] shrink-0 text-slate-400`} />
+                </button>
+
+                <FolderSwitcherPopup
+                  isOpen={folderSwitcherOpen}
+                  onClose={() => setFolderSwitcherOpen(false)}
+                  triggerRef={folderSwitcherTriggerRef}
+                  currentTab={activeTab}
+                  currentMonthSel={activeMonthSel}
+                  onSelectFolder={handleFolderSelectFromPopup}
+                  onOpenDriveManager={() => setDriveManagerOpen(true)}
+                />
+              </div>
+
+              {/* ── Quick Google Drive & Sheets Managers ────────────── */}
+              <button
+                type="button"
+                onClick={() => setDriveManagerOpen(true)}
+                title="Kelola Folder Google Drive (Tambah, Ubah Nama, Hapus)"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border border-purple-200 bg-purple-50/70 text-[#4B164C] hover:bg-purple-100 transition min-h-[36px] shrink-0"
+              >
+                <i className="bi bi-folder-fill shrink-0 text-[#4B164C]" />
+                <span className="hidden md:inline">Folder Drive</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSheetsManagerOpen(true)}
+                title="Kelola Google Sheets (Tambah, Ubah Nama, Hapus, Jadikan Aktif)"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border border-emerald-200 bg-emerald-50/70 text-emerald-700 hover:bg-emerald-100 transition min-h-[36px] shrink-0"
+              >
+                <i className="bi bi-file-earmark-spreadsheet-fill shrink-0 text-emerald-600" />
+                <span className="hidden md:inline">Google Sheets</span>
+              </button>
+
               {/* ── Month-filter pill ─────────────────────────────── */}
               <div className="relative shrink-0" data-month-picker>
                 <button
@@ -1124,6 +1213,21 @@ export default function Dashboard() {
             ? `/api/${previewModal.letterType === 'incoming' ? 'surat' : 'surat-keluar'}/${previewModal.surat.id}/file`
             : ''
         }
+      />
+
+      {/* Google Drive Folder Manager Modal */}
+      <DriveManagerModal
+        isOpen={driveManagerOpen}
+        onClose={() => setDriveManagerOpen(false)}
+        initialTab={activeTab}
+        onFolderChanged={() => fetchData()}
+      />
+
+      {/* Google Sheets Spreadsheet Manager Modal */}
+      <SheetsManagerModal
+        isOpen={sheetsManagerOpen}
+        onClose={() => setSheetsManagerOpen(false)}
+        onSpreadsheetChanged={() => fetchData()}
       />
     </div>
   );

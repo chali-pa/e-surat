@@ -28,7 +28,8 @@ function formatBytes(bytes) {
 }
 
 function savingPct(original, final) {
-  if (!original || original === 0) return 0;
+  if (!original || original <= 0) return 0;
+  if (final >= original) return 0;
   return Math.max(0, Math.round(((original - final) / original) * 100));
 }
 
@@ -110,10 +111,22 @@ export default function PdfCompressorPage() {
         responseType: 'blob',
       });
 
-      // Read the custom headers the server returns
-      const originalSize = parseInt(response.headers['x-original-size'] || '0', 10);
-      const finalSize    = parseInt(response.headers['x-compressed-size'] || '0', 10);
-      const wasCompressed = response.headers['x-was-compressed'] === 'true';
+      // Read the custom headers the server returns (case-insensitive with fallback)
+      const getHeader = (name) => {
+        if (!response.headers) return null;
+        if (typeof response.headers.get === 'function') {
+          return response.headers.get(name) || response.headers.get(name.toLowerCase());
+        }
+        return response.headers[name] || response.headers[name.toLowerCase()];
+      };
+
+      const rawOrig = getHeader('x-original-size');
+      const rawFinal = getHeader('x-compressed-size');
+      const rawWasCompressed = getHeader('x-was-compressed');
+
+      const originalSize = parseInt(rawOrig || '0', 10) || file.size;
+      const finalSize = parseInt(rawFinal || '0', 10) || response.data?.size || file.size;
+      const wasCompressed = rawWasCompressed === 'true' || finalSize < originalSize;
 
       const baseName = file.name.replace(/\.pdf$/i, '');
       const outputName = `${baseName}_compressed.pdf`;
@@ -263,16 +276,6 @@ export default function PdfCompressorPage() {
                   <p className="font-semibold text-slate-700 text-sm">{file.name}</p>
                   <p className="text-xs text-slate-400 mt-0.5">
                     Ukuran asli: <span className="font-medium text-slate-600">{formatBytes(file.size)}</span>
-                    {thresholdInfo && file.size >= thresholdInfo.trigger_bytes && (
-                      <span className="ml-2 text-amber-600 font-medium">
-                        (≥ {triggerLabel} — akan dikompres)
-                      </span>
-                    )}
-                    {thresholdInfo && file.size < thresholdInfo.trigger_bytes && (
-                      <span className="ml-2 text-slate-400">
-                        ({'<'} {triggerLabel} — re-save tanpa kompresi agresif)
-                      </span>
-                    )}
                   </p>
                 </div>
                 {!result && (

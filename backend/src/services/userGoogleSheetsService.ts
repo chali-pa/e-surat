@@ -804,3 +804,269 @@ export async function deleteOutgoingLetterRow(
     throw error;
   }
 }
+
+/**
+ * List all Google Sheets spreadsheets in user's Google Drive.
+ * Flags which one is currently configured for incoming and outgoing mail.
+ */
+export async function listUserSpreadsheets(userId: number): Promise<{
+  spreadsheets: Array<{
+    id: string;
+    name: string;
+    webViewLink: string;
+    createdTime?: string;
+    modifiedTime?: string;
+    isIncomingActive: boolean;
+    isOutgoingActive: boolean;
+  }>;
+  incomingSheetId: string | null;
+  outgoingSheetId: string | null;
+}> {
+  const auth = await getOAuth2ClientForUser(userId);
+  const drive = google.drive({ version: 'v3', auth });
+  const user = await findUserById(userId);
+
+  const res = await drive.files.list({
+    q: "mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false",
+    fields: 'files(id, name, webViewLink, createdTime, modifiedTime)',
+    pageSize: 50,
+    orderBy: 'modifiedTime desc',
+  });
+
+  const files = res.data.files || [];
+  const incomingId = user?.sheet_masuk_id || null;
+  const outgoingId = user?.sheet_keluar_id || null;
+
+  const spreadsheets = files.map(file => ({
+    id: file.id!,
+    name: file.name || 'Untitled Spreadsheet',
+    webViewLink: file.webViewLink || `https://docs.google.com/spreadsheets/d/${file.id}`,
+    createdTime: file.createdTime || undefined,
+    modifiedTime: file.modifiedTime || undefined,
+    isIncomingActive: file.id === incomingId,
+    isOutgoingActive: file.id === outgoingId,
+  }));
+
+  return {
+    spreadsheets,
+    incomingSheetId: incomingId,
+    outgoingSheetId: outgoingId,
+  };
+}
+
+/**
+ * Create a new Google Sheets spreadsheet with appropriate headers.
+ */
+export async function createUserSpreadsheet(
+  userId: number,
+  title: string,
+  letterType: 'incoming' | 'outgoing' | 'none' = 'none'
+): Promise<{
+  id: string;
+  name: string;
+  letterType: string;
+  webViewLink: string;
+}> {
+  if (!title || !title.trim()) {
+    throw new Error('Judul spreadsheet tidak boleh kosong.');
+  }
+
+  const auth = await getOAuth2ClientForUser(userId);
+  const sheets = google.sheets({ version: 'v4', auth });
+  const trimmedTitle = title.trim();
+
+  // Create spreadsheet
+  const createRes = await sheets.spreadsheets.create({
+    requestBody: {
+      properties: { title: trimmedTitle },
+      sheets: [
+        {
+          properties: {
+            title: 'Data',
+            gridProperties: { frozenRowCount: 1 },
+          },
+        },
+      ],
+    },
+  });
+
+  const newSheetId = createRes.data.spreadsheetId;
+  if (!newSheetId) {
+    throw new Error('Gagal membuat spreadsheet di Google Sheets.');
+  }
+
+  // Populate headers if letterType specified
+  if (letterType === 'incoming' || letterType === 'outgoing') {
+    const headers = letterType === 'incoming' ? INCOMING_SHEET_HEADERS : OUTGOING_SHEET_HEADERS;
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: newSheetId,
+      range: 'Data!A1:I1',
+      valueInputOption: 'USER_ENTERED',
+      requestBody: {
+        values: [headers],
+      },
+    });
+
+    // Update user's configured sheet ID
+    if (letterType === 'incoming') {
+      await updateUserGoogleResourceIds(userId, { sheet_masuk_id: newSheetId });
+    } else {
+      await updateUserGoogleResourceIds(userId, { sheet_keluar_id: newSheetId });
+    }
+  }
+
+  const webViewLink = `https://docs.google.com/spreadsheets/d/${newSheetId}`;
+  console.log(`[GoogleSheets] Created spreadsheet '${trimmedTitle}' (${newSheetId}) for user ${userId} [type: ${letterType}]`);
+
+  return {
+    id: newSheetId,
+    name: trimmedTitle,
+    letterType,
+    webViewLink,
+  };
+}
+
+/**
+ * Rename a spreadsheet in Google Drive.
+ */
+export async function renameSpreadsheet(
+  userId: number,
+  spreadsheetId: string,
+  newTitle: string
+): Promise<{ id: string; name: string }> {
+  if (!newTitle || !newTitle.trim()) {
+    throw new Error('Judul spreadsheet baru tidak boleh kosong.');
+  }
+
+  const auth = await getOAuth2ClientForUser(userId);
+  const drive = google.drive({ version: 'v3', auth });
+  const trimmed = newTitle.trim();
+
+  const updated = await drive.files.update({
+    fileId: spreadsheetId,
+    requestBody: { name: trimmed },
+    fields: 'id, name',
+  });
+
+  console.log(`[GoogleSheets] Renamed spreadsheet ${spreadsheetId} to '${trimmed}' for user ${userId}`);
+  return { id: updated.data.id!, name: updated.data.name! };
+}
+
+/**
+ * Trash a spreadsheet in Google Drive.
+ */
+export async function trashSpreadsheet(
+  userId: number,
+  spreadsheetId: string,
+  force: boolean = false
+): Promise<{ isConfigured: boolean; configuredType?: string }> {
+  const auth = await getOAuth2ClientForUser(userId);
+  const drive = google.drive({ version: 'v3', auth });
+  const user = await findUserById(userId);
+
+  const isIncoming = spreadsheetId === user?.sheet_masuk_id;
+  const isOutgoing = spreadsheetId === user?.sheet_keluar_id;
+
+  if ((isIncoming || isOutgoing) && !force) {
+    const typeLabel = isIncoming && isOutgoing ? 'Surat Masuk dan Surat Keluar' : isIncoming ? 'Surat Masuk' : 'Surat Keluar';
+    throw new Error(
+      `Spreadsheet ini sedang aktif digunakan untuk sinkronisasi ${typeLabel}. Silakan pilih spreadsheet pengganti atau konfirmasi penonaktifan terlebih dahulu.`
+    );
+  }
+
+  await drive.files.update({
+    fileId: spreadsheetId,
+    requestBody: { trashed: true },
+  });
+
+  // If was configured, clear the setting in DB so user is not stuck on a trashed file
+  if (isIncoming) {
+    await updateUserGoogleResourceIds(userId, { sheet_masuk_id: null as any });
+  }
+  if (isOutgoing) {
+    await updateUserGoogleResourceIds(userId, { sheet_keluar_id: null as any });
+  }
+
+  console.log(`[GoogleSheets] Moved spreadsheet ${spreadsheetId} to trash for user ${userId}`);
+  return {
+    isConfigured: isIncoming || isOutgoing,
+    configuredType: isIncoming && isOutgoing ? 'both' : isIncoming ? 'incoming' : isOutgoing ? 'outgoing' : undefined,
+  };
+}
+
+/**
+ * Assign a spreadsheet as the primary sync target for incoming or outgoing mail.
+ */
+export async function assignUserSpreadsheet(
+  userId: number,
+  spreadsheetId: string,
+  letterType: 'incoming' | 'outgoing'
+): Promise<void> {
+  const auth = await getOAuth2ClientForUser(userId);
+  const drive = google.drive({ version: 'v3', auth });
+  const sheets = google.sheets({ version: 'v4', auth });
+
+  // Verify file exists, is a spreadsheet, and is not trashed
+  const fileRes = await drive.files.get({
+    fileId: spreadsheetId,
+    fields: 'id, name, mimeType, trashed',
+  });
+
+  if (fileRes.data.trashed) {
+    throw new Error('Spreadsheet berada di kotak sampah dan tidak dapat digunakan.');
+  }
+
+  if (fileRes.data.mimeType !== 'application/vnd.google-apps.spreadsheet') {
+    throw new Error('File yang dipilih bukan Google Spreadsheet.');
+  }
+
+  // Ensure "Data" tab and headers exist
+  try {
+    const doc = await sheets.spreadsheets.get({ spreadsheetId });
+    const hasDataSheet = doc.data.sheets?.some(s => s.properties?.title === 'Data');
+    if (!hasDataSheet) {
+      // Add "Data" tab
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: {
+          requests: [
+            {
+              addSheet: {
+                properties: {
+                  title: 'Data',
+                  gridProperties: { frozenRowCount: 1 },
+                },
+              },
+            },
+          ],
+        },
+      });
+    }
+
+    // Check header row
+    const headersRes = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: 'Data!A1:I1',
+    });
+    if (!headersRes.data.values || headersRes.data.values.length === 0) {
+      const headers = letterType === 'incoming' ? INCOMING_SHEET_HEADERS : OUTGOING_SHEET_HEADERS;
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: 'Data!A1:I1',
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: [headers] },
+      });
+    }
+  } catch (sheetErr: any) {
+    console.warn(`[GoogleSheets] Warning verifying sheets tabs:`, sheetErr.message);
+  }
+
+  if (letterType === 'incoming') {
+    await updateUserGoogleResourceIds(userId, { sheet_masuk_id: spreadsheetId });
+  } else {
+    await updateUserGoogleResourceIds(userId, { sheet_keluar_id: spreadsheetId });
+  }
+
+  console.log(`[GoogleSheets] Assigned spreadsheet ${spreadsheetId} for ${letterType} mail (user ${userId})`);
+}
+

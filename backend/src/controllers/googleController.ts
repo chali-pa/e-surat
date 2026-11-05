@@ -10,7 +10,14 @@ import {
   getStorageSettings, 
   updateStorageSettings 
 } from '../services/userGoogleDriveService';
-import { ensureUserSpreadsheet } from '../services/userGoogleSheetsService';
+import { 
+  ensureUserSpreadsheet,
+  listUserSpreadsheets,
+  createUserSpreadsheet,
+  renameSpreadsheet as renameSpreadsheetService,
+  trashSpreadsheet as trashSpreadsheetService,
+  assignUserSpreadsheet
+} from '../services/userGoogleSheetsService';
 
 export const redirect = async (req: AuthRequest, res: Response) => {
   try {
@@ -122,7 +129,8 @@ export const callback = async (req: AuthRequest, res: Response) => {
         tokens.expiry_date || null,
         googleSub || null,
         userInfo.name || null,
-        userInfo.email || null
+        userInfo.email || null,
+        userInfo.picture || null
       );
     }
 
@@ -197,6 +205,7 @@ export const status = async (req: AuthRequest, res: Response) => {
       email: user.email,
       googleName: user.google_name || user.name || null,
       googleEmail: user.google_email || user.email || null,
+      googlePicture: user.google_picture || null,
       driveFolderId: user.drive_folder_id || null,
       driveKeluarFolderId: user.drive_keluar_folder_id || null,
       sheetMasukId: user.sheet_masuk_id || null,
@@ -383,4 +392,166 @@ export const updateStorageSettingsHandler = async (req: AuthRequest, res: Respon
     res.status(500).json({ error: error.message || 'Failed to update storage settings', details: error.message });
   }
 };
+
+export const listSpreadsheets = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const result = await listUserSpreadsheets(userId);
+    res.json({ success: true, data: result });
+  } catch (error: any) {
+    console.error('List spreadsheets error:', error);
+    if (isGoogleErrorInvalidGrant(error)) {
+      return res.status(401).json({
+        error_code: 'GOOGLE_RECONNECT_REQUIRED',
+        error: 'Koneksi Google perlu diperbarui',
+        message: 'Your Google connection needs to be renewed. Please reconnect your Google account to continue.',
+      });
+    }
+    res.status(500).json({ error: 'Failed to list spreadsheets', details: error.message });
+  }
+};
+
+export const createSpreadsheet = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { title, letterType } = req.body;
+    if (!title || !title.trim()) {
+      return res.status(400).json({ error: 'Judul spreadsheet harus diisi.' });
+    }
+
+    const type = letterType === 'incoming' || letterType === 'outgoing' ? letterType : 'none';
+    const result = await createUserSpreadsheet(userId, title.trim(), type);
+
+    res.status(201).json({
+      success: true,
+      message: 'Spreadsheet berhasil dibuat di Google Drive & Google Sheets.',
+      data: result,
+    });
+  } catch (error: any) {
+    console.error('Create spreadsheet error:', error);
+    if (isGoogleErrorInvalidGrant(error)) {
+      return res.status(401).json({
+        error_code: 'GOOGLE_RECONNECT_REQUIRED',
+        error: 'Koneksi Google perlu diperbarui',
+        message: 'Your Google connection needs to be renewed. Please reconnect your Google account to continue.',
+      });
+    }
+    res.status(500).json({ error: error.message || 'Failed to create spreadsheet', details: error.message });
+  }
+};
+
+export const renameSpreadsheet = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { id } = req.params;
+    const { name } = req.body;
+
+    if (!id) {
+      return res.status(400).json({ error: 'Spreadsheet ID diperlukan.' });
+    }
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: 'Judul baru spreadsheet tidak boleh kosong.' });
+    }
+
+    const result = await renameSpreadsheetService(userId, id, name.trim());
+    res.json({
+      success: true,
+      message: 'Nama spreadsheet berhasil diperbarui.',
+      data: result,
+    });
+  } catch (error: any) {
+    console.error('Rename spreadsheet error:', error);
+    if (isGoogleErrorInvalidGrant(error)) {
+      return res.status(401).json({
+        error_code: 'GOOGLE_RECONNECT_REQUIRED',
+        error: 'Koneksi Google perlu diperbarui',
+        message: 'Your Google connection needs to be renewed. Please reconnect your Google account to continue.',
+      });
+    }
+    res.status(500).json({ error: error.message || 'Failed to rename spreadsheet', details: error.message });
+  }
+};
+
+export const trashSpreadsheet = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { id } = req.params;
+    const force = req.query.force === 'true';
+
+    if (!id) {
+      return res.status(400).json({ error: 'Spreadsheet ID diperlukan.' });
+    }
+
+    const result = await trashSpreadsheetService(userId, id, force);
+    res.json({
+      success: true,
+      message: 'Spreadsheet berhasil dipindahkan ke kotak sampah Google Drive.',
+      data: result,
+    });
+  } catch (error: any) {
+    console.error('Trash spreadsheet error:', error);
+    if (isGoogleErrorInvalidGrant(error)) {
+      return res.status(401).json({
+        error_code: 'GOOGLE_RECONNECT_REQUIRED',
+        error: 'Koneksi Google perlu diperbarui',
+        message: 'Your Google connection needs to be renewed. Please reconnect your Google account to continue.',
+      });
+    }
+    res.status(400).json({ error: error.message || 'Failed to delete spreadsheet', details: error.message });
+  }
+};
+
+export const assignSpreadsheet = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { id } = req.params;
+    const { letterType } = req.body;
+
+    if (!id) {
+      return res.status(400).json({ error: 'Spreadsheet ID diperlukan.' });
+    }
+
+    if (!letterType || !['incoming', 'outgoing'].includes(letterType)) {
+      return res.status(400).json({ error: 'letterType harus bernilai "incoming" atau "outgoing".' });
+    }
+
+    await assignUserSpreadsheet(userId, id, letterType);
+    res.json({
+      success: true,
+      message: `Spreadsheet berhasil dijadikan target sinkronisasi ${letterType === 'incoming' ? 'Surat Masuk' : 'Surat Keluar'}.`,
+    });
+  } catch (error: any) {
+    console.error('Assign spreadsheet error:', error);
+    if (isGoogleErrorInvalidGrant(error)) {
+      return res.status(401).json({
+        error_code: 'GOOGLE_RECONNECT_REQUIRED',
+        error: 'Koneksi Google perlu diperbarui',
+        message: 'Your Google connection needs to be renewed. Please reconnect your Google account to continue.',
+      });
+    }
+    res.status(500).json({ error: error.message || 'Failed to assign spreadsheet', details: error.message });
+  }
+};
+
 

@@ -57,8 +57,8 @@ export default function SuratEdit() {
       }
     })
 
-    if (selectedFolder?.id) {
-      data.append('folder_id', selectedFolder.id)
+    if (selectedFolder) {
+      data.append('folder_id', selectedFolder.google_drive_folder_id || selectedFolder.id)
     }
 
     try {

@@ -124,7 +124,7 @@ export default function SuratKeluarCreate() {
     
     // Add folder_id if a folder is selected
     if (selectedFolder) {
-      data.append('folder_id', selectedFolder.id)
+      data.append('folder_id', selectedFolder.google_drive_folder_id || selectedFolder.id)
     }
 
     try {

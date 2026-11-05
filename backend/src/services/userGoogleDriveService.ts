@@ -791,38 +791,78 @@ export async function createCustomFolder(
  */
 export async function validateFolderOwnership(
   userId: number,
-  folderId: string,
+  folderId: string | number,
   letterType: 'incoming' | 'outgoing' = 'incoming'
 ): Promise<{ valid: boolean; googleDriveFolderId?: string; dbFolderId?: number }> {
   try {
-    const parsedFolderId = parseInt(String(folderId), 10);
-    if (isNaN(parsedFolderId)) {
-      return { valid: false };
+    const rawId = String(folderId).trim();
+    if (!rawId) return { valid: false };
+
+    // 1. Check if numeric database folder ID
+    const parsedFolderId = parseInt(rawId, 10);
+    if (!isNaN(parsedFolderId) && String(parsedFolderId) === rawId) {
+      const dbFolder = await findFolderById(parsedFolderId);
+      if (dbFolder && Number(dbFolder.user_id) === Number(userId)) {
+        if (dbFolder.google_drive_folder_id && dbFolder.google_drive_folder_id.trim() !== '') {
+          return {
+            valid: true,
+            googleDriveFolderId: dbFolder.google_drive_folder_id,
+            dbFolderId: dbFolder.id,
+          };
+        }
+      }
     }
 
-    const dbFolder = await findFolderById(parsedFolderId);
-    if (!dbFolder) {
-      return { valid: false };
+    // 2. Check if rawId is a Google Drive folder ID in the database
+    const dbFolderByDrive = await findFolderByDriveId(rawId);
+    if (dbFolderByDrive && Number(dbFolderByDrive.user_id) === Number(userId)) {
+      return {
+        valid: true,
+        googleDriveFolderId: dbFolderByDrive.google_drive_folder_id,
+        dbFolderId: dbFolderByDrive.id,
+      };
     }
 
-    if (Number(dbFolder.user_id) !== Number(userId)) {
-      return { valid: false };
+    // 3. Check directly in Google Drive with user's OAuth client
+    const auth = await getOAuth2ClientForUser(userId);
+    const drive = google.drive({ version: 'v3', auth });
+    const driveFile = await drive.files.get({
+      fileId: rawId,
+      fields: 'id, name, mimeType, trashed',
+    });
+
+    if (
+      driveFile.data &&
+      !driveFile.data.trashed &&
+      driveFile.data.mimeType === 'application/vnd.google-apps.folder'
+    ) {
+      let registeredId = dbFolderByDrive?.id;
+      if (!registeredId) {
+        try {
+          const newDb = await createFolder({
+            user_id: userId,
+            google_drive_folder_id: rawId,
+            parent_folder_id: 'root',
+            name: driveFile.data.name || 'Folder Pilihan',
+            month: formatMonthYear(),
+            folder_type: 'custom',
+            letter_type: letterType,
+          });
+          registeredId = newDb.id;
+        } catch (regErr) {
+          console.warn('[validateFolderOwnership] Could not register folder in DB:', regErr);
+        }
+      }
+      return {
+        valid: true,
+        googleDriveFolderId: rawId,
+        dbFolderId: registeredId,
+      };
     }
 
-    if (dbFolder.letter_type !== letterType) {
-      return { valid: false };
-    }
-
-    if (!dbFolder.google_drive_folder_id || dbFolder.google_drive_folder_id.trim() === '') {
-      return { valid: false };
-    }
-
-    return {
-      valid: true,
-      googleDriveFolderId: dbFolder.google_drive_folder_id,
-      dbFolderId: dbFolder.id,
-    };
+    return { valid: false };
   } catch (error) {
+    console.warn('[validateFolderOwnership] Error checking folder:', error);
     return { valid: false };
   }
 }

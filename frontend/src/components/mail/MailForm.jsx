@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api/axios';
 import FolderSelector from '../drive/FolderSelector';
+import ChangeStorageDestinationModal from '../drive/ChangeStorageDestinationModal';
 import DocumentPreviewModal from '../DocumentPreviewModal';
 import { MAX_MAIL_UPLOAD_SIZE_MB } from '../../config/constants';
 
@@ -52,6 +53,8 @@ export default function MailForm({ type, id, prepopulatedFile, onClearFile, onSa
   const [googleConnected, setGoogleConnected] = useState(true);
   const [storageSettings, setStorageSettings] = useState(null);
   const [loadingStorageSettings, setLoadingStorageSettings] = useState(false);
+  const [changeDestinationModalOpen, setChangeDestinationModalOpen] = useState(false);
+  const [customDestination, setCustomDestination] = useState(null);
   
   const [objectUrl, setObjectUrl] = useState('');
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -238,7 +241,9 @@ export default function MailForm({ type, id, prepopulatedFile, onClearFile, onSa
     });
 
     if (selectedFolder) {
-      data.append('folder_id', selectedFolder.id);
+      data.append('folder_id', selectedFolder.google_drive_folder_id || selectedFolder.id);
+    } else if (customDestination) {
+      data.append('folder_id', customDestination.id);
     }
 
     try {
@@ -436,22 +441,38 @@ export default function MailForm({ type, id, prepopulatedFile, onClearFile, onSa
           )}
         </div>
 
-        {/* Google Drive Storage Destination Status */}
+        {/* Google Drive Storage Destination Status & Folder Picker */}
         {googleConnected && (
           <div className="bg-slate-50/80 border border-slate-200/90 rounded-xl p-3.5 space-y-2.5">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
                 <i className="bi bi-google text-slate-500" />
                 Tujuan Penyimpanan Google Drive ({type === 'incoming' ? 'Surat Masuk' : 'Surat Keluar'})
               </span>
-              <Link
-                to="/profile"
-                className="text-xs font-medium text-[#4B164C] hover:text-[#381039] hover:underline flex items-center gap-1 transition-colors"
-                title="Kelola folder tujuan penyimpanan di halaman Pengaturan Profil"
-              >
-                <i className="bi bi-gear" />
-                Ubah di Profil
-              </Link>
+
+              {/* Action buttons */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setChangeDestinationModalOpen(true)}
+                  className="text-xs font-semibold text-[#4B164C] hover:text-[#381039] bg-white hover:bg-purple-50 border border-purple-200 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all shadow-xs"
+                  title="Pilih folder tujuan di Google Drive"
+                >
+                  <i className="bi bi-folder-symlink" />
+                  <span>Ubah Folder</span>
+                </button>
+
+                {customDestination && (
+                  <button
+                    type="button"
+                    onClick={() => setCustomDestination(null)}
+                    className="text-xs font-medium text-slate-500 hover:text-slate-800 bg-white hover:bg-slate-100 border border-slate-200 px-2.5 py-1.5 rounded-lg transition"
+                    title="Gunakan folder default kembali"
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
             </div>
 
             {loadingStorageSettings ? (
@@ -460,55 +481,74 @@ export default function MailForm({ type, id, prepopulatedFile, onClearFile, onSa
                 <span>Memeriksa folder tujuan Google Drive...</span>
               </div>
             ) : (() => {
-              const currentDestination = storageSettings ? (type === 'incoming' ? storageSettings.incoming : storageSettings.outgoing) : null;
-              if (!currentDestination) return null;
+              const defaultDestination = storageSettings ? (type === 'incoming' ? storageSettings.incoming : storageSettings.outgoing) : null;
+              const activeFolderDisplay = customDestination
+                ? {
+                    folderName: customDestination.name,
+                    category: customDestination.category === 'incoming' ? 'Surat Masuk' : 'Surat Keluar',
+                    isCustom: true,
+                    path: customDestination.path,
+                  }
+                : defaultDestination
+                ? {
+                    folderName: defaultDestination.folderName,
+                    category: type === 'incoming' ? 'Surat Masuk' : 'Surat Keluar',
+                    isCustom: defaultDestination.isCustom,
+                    monthlyOrganization: defaultDestination.monthlyOrganization,
+                    accessible: defaultDestination.accessible,
+                    warning: defaultDestination.warning,
+                  }
+                : null;
+
+              if (!activeFolderDisplay) return null;
 
               return (
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-white border border-slate-200 text-slate-800 shadow-sm">
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-slate-200 text-slate-800 shadow-xs">
                       <i className="bi bi-folder2 text-amber-500 text-sm" />
-                      <span className="font-semibold">{currentDestination.folderName}</span>
-                      <span className="text-[11px] text-slate-400">
-                        {currentDestination.isCustom ? '(Folder Kustom)' : '(Folder Default)'}
+                      <span className="font-semibold">{activeFolderDisplay.folderName}</span>
+                      <span className="text-[11px] text-slate-400 font-mono">
+                        ({activeFolderDisplay.category})
                       </span>
+                      {customDestination ? (
+                        <span className="text-[10px] bg-purple-100 text-[#4B164C] px-1.5 py-0.5 rounded font-bold">
+                          Kustom Dipilih
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-slate-400">
+                          {activeFolderDisplay.isCustom ? '(Folder Kustom)' : '(Folder Default)'}
+                        </span>
+                      )}
                     </div>
 
-                    {currentDestination.monthlyOrganization && (
+                    {!customDestination && activeFolderDisplay.monthlyOrganization && (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-purple-50 text-purple-700 border border-purple-200/70">
                         <i className="bi bi-calendar3 text-[10px]" />
                         Subfolder MM-YY Aktif
                       </span>
                     )}
 
-                    {currentDestination.accessible ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/70">
-                        <i className="bi bi-check-circle text-[10px]" /> Siap
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-red-50 text-red-700 border border-red-200/70 animate-pulse">
-                        <i className="bi bi-exclamation-triangle text-[10px]" /> Tidak Dapat Diakses
-                      </span>
-                    )}
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/70">
+                      <i className="bi bi-check-circle text-[10px]" /> Siap
+                    </span>
                   </div>
 
-                  {!currentDestination.accessible && (
+                  {customDestination && (
+                    <p className="text-[11px] text-slate-500 font-mono">
+                      Path tujuan: <span className="font-semibold text-slate-700">{customDestination.path}</span>
+                    </p>
+                  )}
+
+                  {!customDestination && activeFolderDisplay.accessible === false && (
                     <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 space-y-1.5">
                       <p className="font-semibold flex items-center gap-1.5">
                         <i className="bi bi-exclamation-octagon-fill text-red-600 text-sm" />
                         Folder tujuan di Google Drive tidak ditemukan atau dipindahkan
                       </p>
                       <p className="text-red-600 text-[11px] leading-relaxed">
-                        {currentDestination.warning || 'Folder Google Drive yang sebelumnya dipilih tidak lagi dapat diakses. File yang diunggah akan dialihkan ke folder default sistem jika folder tujuan belum diperbarui.'}
+                        {activeFolderDisplay.warning || 'Folder Google Drive yang sebelumnya dipilih tidak lagi dapat diakses. File yang diunggah akan dialihkan ke folder default sistem jika folder tujuan belum diperbarui.'}
                       </p>
-                      <div className="pt-0.5">
-                        <Link
-                          to="/profile"
-                          className="inline-flex items-center gap-1 font-semibold text-red-800 hover:text-red-950 underline"
-                        >
-                          Buka Pengaturan Profil & Google Drive &rarr;
-                        </Link>
-                      </div>
                     </div>
                   )}
                 </div>
@@ -516,6 +556,15 @@ export default function MailForm({ type, id, prepopulatedFile, onClearFile, onSa
             })()}
           </div>
         )}
+
+        {/* Change Storage Destination Floating Modal */}
+        <ChangeStorageDestinationModal
+          isOpen={changeDestinationModalOpen}
+          onClose={() => setChangeDestinationModalOpen(false)}
+          initialCategory={type}
+          currentFolderId={customDestination?.id}
+          onSelectDestination={(folder) => setCustomDestination(folder)}
+        />
 
         {/* Folder Selection */}
         <FolderSelector

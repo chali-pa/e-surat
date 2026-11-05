@@ -159,6 +159,7 @@ export const store = async (req: AuthRequest, res: Response) => {
     let webViewLink = '';
     let logicalPath = '';
     let customFolderDriveId: string | undefined;
+    let resolvedDbFolderId: number | undefined;
 
     // Verify folder ownership server-side if folder_id is provided
     if (folder_id) {
@@ -170,6 +171,7 @@ export const store = async (req: AuthRequest, res: Response) => {
         });
       }
       customFolderDriveId = validation.googleDriveFolderId;
+      resolvedDbFolderId = validation.dbFolderId;
     }
 
     // ── Mail upload size limit ────────────────────────────────────────
@@ -237,7 +239,7 @@ export const store = async (req: AuthRequest, res: Response) => {
       google_drive_id: googleDriveId,
       file_path: logicalPath || webViewLink,
       user_id: userId,
-      folder_id: folder_id ? parseInt(folder_id) : undefined,
+      folder_id: resolvedDbFolderId ?? (folder_id && !isNaN(parseInt(folder_id)) ? parseInt(folder_id) : undefined),
       drive_parent_folder_id: parentFolderId,
       original_file_name: originalFileName,
       file_mime_type: fileMimeType,

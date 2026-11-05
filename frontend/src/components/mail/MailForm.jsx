@@ -235,7 +235,11 @@ export default function MailForm({ type, id, prepopulatedFile, onClearFile, onSa
 
     const data = new FormData();
     Object.keys(formData).forEach((key) => {
-      if (formData[key] !== null) {
+      if (key === 'file_surat') {
+        if (formData.file_surat instanceof File) {
+          data.append('file_surat', formData.file_surat);
+        }
+      } else if (formData[key] !== null && formData[key] !== undefined) {
         data.append(key, formData[key]);
       }
     });

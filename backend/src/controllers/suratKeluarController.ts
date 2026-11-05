@@ -336,6 +336,7 @@ export const update = async (req: AuthRequest, res: Response) => {
     let webViewLink = oldSurat.file_path || '';
     let logicalPath = oldSurat.file_path || '';
     let customFolderDriveId: string | undefined;
+    let resolvedDbFolderId: number | undefined;
 
     if (folder_id) {
       const validation = await validateFolderOwnership(userId, folder_id, 'outgoing');
@@ -346,6 +347,7 @@ export const update = async (req: AuthRequest, res: Response) => {
         });
       }
       customFolderDriveId = validation.googleDriveFolderId;
+      resolvedDbFolderId = validation.dbFolderId;
     }
 
     // ── Mail upload size limit ───────────────────────────────────────────────
@@ -424,7 +426,7 @@ export const update = async (req: AuthRequest, res: Response) => {
           );
           logicalPath = moveResult.logicalPath;
         } catch (moveError: any) {
-          console.error(`[GoogleDrive] Move file failed:`, moveError);
+          console.error(`[GoogleDrive] Move file warning:`, moveError);
           if (isGoogleErrorInvalidGrant(moveError)) {
             return res.status(401).json({
               error_code: 'GOOGLE_RECONNECT_REQUIRED',
@@ -432,7 +434,7 @@ export const update = async (req: AuthRequest, res: Response) => {
               message: 'Your Google connection needs to be renewed. Please reconnect your Google account to continue.',
             });
           }
-          throw moveError;
+          // Non-fatal: if moving file in Drive encounters an issue, retain existing path
         }
       }
     }
@@ -447,7 +449,7 @@ export const update = async (req: AuthRequest, res: Response) => {
       google_drive_id: googleDriveId,
       file_path: logicalPath,
       google_sheet_row: oldSurat.google_sheet_row,
-      folder_id: folder_id ? parseInt(folder_id) : undefined,
+      folder_id: resolvedDbFolderId ?? (folder_id && !isNaN(parseInt(folder_id)) ? parseInt(folder_id) : undefined),
       drive_parent_folder_id: parentFolderId,
       original_file_name: originalFileName,
       file_mime_type: fileMimeType,
@@ -455,7 +457,18 @@ export const update = async (req: AuthRequest, res: Response) => {
       updated_at: new Date().toISOString(),
     };
 
-    await updateOutgoingLetterInSheet(userId, rowNumber, suratKeluar, oldSurat.google_sheet_row, oldSurat.google_drive_id);
+    try {
+      await updateOutgoingLetterInSheet(userId, rowNumber, suratKeluar, oldSurat.google_sheet_row, oldSurat.google_drive_id);
+    } catch (sheetError: any) {
+      console.warn(`[GoogleSheets] Warning: Failed to sync outgoing letter to sheet:`, sheetError);
+      if (isGoogleErrorInvalidGrant(sheetError)) {
+        return res.status(401).json({
+          error_code: 'GOOGLE_RECONNECT_REQUIRED',
+          error: 'Koneksi Google perlu diperbarui',
+          message: 'Your Google connection needs to be renewed. Please reconnect your Google account to continue.',
+        });
+      }
+    }
 
     try {
       await updateOutgoingLetterRecord(rowNumber, userId, suratKeluar);
@@ -473,7 +486,8 @@ export const update = async (req: AuthRequest, res: Response) => {
         message: 'Your Google connection needs to be renewed. Please reconnect your Google account to continue.',
       });
     }
-    res.status(500).json({ error: 'Failed to update surat keluar' });
+    const errMsg = error.message || 'Failed to update surat keluar';
+    res.status(500).json({ error: errMsg, message: errMsg });
   }
 };
 

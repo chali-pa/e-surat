@@ -52,7 +52,11 @@ export default function SuratEdit() {
 
     const data = new FormData()
     Object.keys(formData).forEach(key => {
-      if (formData[key] !== null) {
+      if (key === 'file_surat') {
+        if (formData.file_surat instanceof File) {
+          data.append('file_surat', formData.file_surat)
+        }
+      } else if (formData[key] !== null && formData[key] !== undefined) {
         data.append(key, formData[key])
       }
     })
@@ -81,8 +85,10 @@ export default function SuratEdit() {
         setErrors(error.response.data.errors)
       } else if (error.response?.data?.message) {
         setErrors({ general: error.response.data.message })
+      } else if (error.response?.data?.error) {
+        setErrors({ general: error.response.data.error })
       } else {
-        setErrors({ general: 'Failed to update surat. Please try again.' })
+        setErrors({ general: 'Gagal memperbarui surat. Silakan coba lagi.' })
       }
     } finally {
       setSubmitting(false)

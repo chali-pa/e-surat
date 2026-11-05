@@ -59,21 +59,7 @@ export default function Sidebar() {
       path: '/dashboard', 
       icon: 'bi-grid-1x2-fill', 
       label: 'Dashboard',
-      isActive: (pathname, search) => pathname === '/dashboard' && !search.includes('type=') && !search.includes('view=scan')
-    },
-    { 
-      path: '/dashboard?type=incoming', 
-      icon: 'bi-inbox-fill', 
-      label: 'Surat Masuk',
-      badge: 'esurat',
-      isActive: (pathname, search) => pathname === '/dashboard' && search.includes('type=incoming')
-    },
-    { 
-      path: '/dashboard?type=outgoing', 
-      icon: 'bi-send-fill', 
-      label: 'Surat Keluar',
-      badge: 'esurat-keluar',
-      isActive: (pathname, search) => pathname === '/dashboard' && search.includes('type=outgoing')
+      isActive: (pathname, search) => pathname === '/dashboard' && !search.includes('view=scan')
     },
     { 
       path: '/dashboard?view=scan', 

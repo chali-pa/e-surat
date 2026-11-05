@@ -1,97 +1,43 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../../api/axios';
 
-const ID_MONTHS = [
-  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
-];
-
-function formatMonthDisplay(monthYear) {
-  if (!monthYear) return 'Folder Arsip';
-  const match = monthYear.match(/^(\d{2})-(\d{2})$/);
-  if (match) {
-    const monthNum = parseInt(match[1], 10);
-    const yearYY = parseInt(match[2], 10);
-    const fullYear = 2000 + yearYY;
-    const monthName = ID_MONTHS[monthNum - 1] || match[1];
-    return `${monthName} ${fullYear}`;
-  }
-  return monthYear;
-}
-
 export default function ChangeStorageDestinationModal({
   isOpen,
   onClose,
   initialCategory = 'incoming', // 'incoming' | 'outgoing'
   currentFolderId = null,
-  onSelectDestination, // (folder: { id: string, name: string, category: string, path: string }) => void
+  onSelectDestination, // (folder: { id: string, name: string, category: string, path: string } | null) => void
 }) {
   const [activeCategory, setActiveCategory] = useState(initialCategory);
   const [folders, setFolders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [breadcrumbs, setBreadcrumbs] = useState([{ id: 'root', name: 'My Drive' }]);
   const [selectedFolder, setSelectedFolder] = useState(null);
   const modalRef = useRef(null);
 
-  // Sync initialCategory
-  useEffect(() => {
-    if (isOpen) {
-      setActiveCategory(initialCategory);
-      setSelectedFolder(null);
-      setError('');
-    }
-  }, [isOpen, initialCategory]);
+  const currentFolder = breadcrumbs[breadcrumbs.length - 1];
 
-  // Fetch folders for the active category
-  const fetchFolders = useCallback(async (cat) => {
+  // Fetch folders for the current parent directory via Google Drive API
+  const fetchFolders = useCallback(async (parentId) => {
     setLoading(true);
     setError('');
     try {
-      // 1. Fetch month folders
-      const res = await api.get(`/api/folders?letter_type=${cat}`);
-      const activeMonths = res.data.activeMonths || [];
-
-      // 2. Fetch subfolders for each active month
-      const items = [];
-      for (const m of activeMonths) {
-        try {
-          const detailRes = await api.get(`/api/folders?monthYear=${m}&letter_type=${cat}`);
-          const subfolders = detailRes.data.data || [];
-          items.push({
-            id: `month-${m}`,
-            monthYear: m,
-            name: `${formatMonthDisplay(m)} (${m})`,
-            category: cat,
-            path: `${cat === 'incoming' ? 'esurat' : 'esurat-keluar'}/${m}/`,
-            isMonthRoot: true,
-            subfolders: subfolders.map(sf => ({
-              id: sf.google_drive_folder_id || String(sf.id),
-              dbId: sf.id,
-              name: sf.name,
-              category: cat,
-              path: `${cat === 'incoming' ? 'esurat' : 'esurat-keluar'}/${m}/${sf.name}`,
-            }))
-          });
-        } catch {
-          items.push({
-            id: `month-${m}`,
-            monthYear: m,
-            name: `${formatMonthDisplay(m)} (${m})`,
-            category: cat,
-            path: `${cat === 'incoming' ? 'esurat' : 'esurat-keluar'}/${m}/`,
-            isMonthRoot: true,
-            subfolders: []
-          });
-        }
+      const parentParam = parentId && parentId !== 'root' ? `?parentId=${parentId}` : '';
+      const response = await api.get(`/api/google/folders${parentParam}`);
+      if (response.data.success) {
+        setFolders(response.data.folders || []);
+      } else {
+        setFolders([]);
       }
-      setFolders(items);
     } catch (err) {
-      console.error('Failed to load destination folders:', err);
+      console.error('Failed to fetch Drive folders for destination:', err);
       const isReconnect = err.response?.data?.error_code === 'GOOGLE_RECONNECT_REQUIRED';
       setError(
         isReconnect
-          ? 'Koneksi Google perlu diperbarui. Silakan hubungkan ulang Google di Profil.'
-          : 'Gagal memuat folder Google Drive.'
+          ? 'Koneksi Google perlu diperbarui. Silakan hubungkan ulang akun Google di menu Profil.'
+          : err.response?.data?.details || err.response?.data?.error || 'Gagal memuat folder Google Drive'
       );
       setFolders([]);
     } finally {
@@ -99,11 +45,86 @@ export default function ChangeStorageDestinationModal({
     }
   }, []);
 
+  // Initialize or reset when modal opens or category changes
   useEffect(() => {
     if (isOpen) {
-      fetchFolders(activeCategory);
+      setActiveCategory(initialCategory);
+      setBreadcrumbs([{ id: 'root', name: 'My Drive' }]);
+      setSelectedFolder(null);
+      setSearchQuery('');
+      setError('');
+      fetchFolders('root');
     }
-  }, [isOpen, activeCategory, fetchFolders]);
+  }, [isOpen, initialCategory, fetchFolders]);
+
+  // Navigate deeper into a subfolder
+  const handleNavigateInto = (folder, e) => {
+    if (e) e.stopPropagation();
+    setBreadcrumbs((prev) => [...prev, { id: folder.id, name: folder.name }]);
+    setSelectedFolder(null);
+    setSearchQuery('');
+    fetchFolders(folder.id);
+  };
+
+  // Jump to specific breadcrumb
+  const handleNavigateToBreadcrumb = (index) => {
+    const target = breadcrumbs[index];
+    const newBreadcrumbs = breadcrumbs.slice(0, index + 1);
+    setBreadcrumbs(newBreadcrumbs);
+    setSelectedFolder(null);
+    setSearchQuery('');
+    fetchFolders(target.id);
+  };
+
+  // Go up one level
+  const handleGoUp = () => {
+    if (breadcrumbs.length > 1) {
+      const newBreadcrumbs = breadcrumbs.slice(0, -1);
+      setBreadcrumbs(newBreadcrumbs);
+      setSelectedFolder(null);
+      setSearchQuery('');
+      fetchFolders(newBreadcrumbs[newBreadcrumbs.length - 1].id);
+    }
+  };
+
+  // Select folder in list
+  const handleSelectFolder = (folder) => {
+    const fullPath = [...breadcrumbs.map((b) => b.name), folder.name].join('/');
+    setSelectedFolder({
+      id: folder.id,
+      name: folder.name,
+      category: activeCategory,
+      path: fullPath,
+    });
+  };
+
+  // Choose the current parent directory as target
+  const handleChooseCurrentFolder = () => {
+    if (currentFolder.id === 'root') {
+      setError('Penyimpanan langsung pada root My Drive tidak disarankan. Silakan pilih atau buka sebuah subfolder.');
+      return;
+    }
+    const fullPath = breadcrumbs.map((b) => b.name).join('/');
+    setSelectedFolder({
+      id: currentFolder.id,
+      name: currentFolder.name,
+      category: activeCategory,
+      path: fullPath,
+    });
+  };
+
+  // Reset to system default folder
+  const handleChooseDefault = () => {
+    onSelectDestination(null);
+    onClose();
+  };
+
+  // Confirm selection
+  const handleConfirm = () => {
+    if (!selectedFolder) return;
+    onSelectDestination(selectedFolder);
+    onClose();
+  };
 
   // Escape key listener & click outside
   useEffect(() => {
@@ -122,15 +143,16 @@ export default function ChangeStorageDestinationModal({
 
   if (!isOpen) return null;
 
-  const handleConfirm = () => {
-    if (!selectedFolder) return;
-    onSelectDestination(selectedFolder);
-    onClose();
-  };
+  // Filter folders by search query
+  const filteredFolders = folders.filter((f) =>
+    f.name.toLowerCase().includes(searchQuery.trim().toLowerCase())
+  );
+
+  const defaultPathText = activeCategory === 'incoming' ? 'esurat/MM-YY/' : 'esurat-keluar/MM-YY/';
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-xs z-[95] flex items-center justify-center p-4 overflow-y-auto"
+      className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[95] flex items-center justify-center p-4 overflow-y-auto"
       onClick={onClose}
     >
       <div
@@ -139,38 +161,42 @@ export default function ChangeStorageDestinationModal({
         aria-label="Pilih Folder Tujuan Penyimpanan Google Drive"
         aria-modal="true"
         onClick={(e) => e.stopPropagation()}
-        className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-gray-100 flex flex-col my-auto max-h-[85vh] animate-fadeIn"
+        className="bg-white rounded-2xl shadow-2xl max-w-xl w-full overflow-hidden border border-slate-100 flex flex-col my-auto max-h-[88vh] animate-fadeIn"
       >
-        {/* Header */}
-        <div className="bg-[#4B164C] text-white p-4 sm:p-5 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
-              <i className="bi bi-folder-symlink text-xl"></i>
+        {/* Header - Clean light theme with brand accent icon */}
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-slate-50 via-white to-slate-50">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-purple-50 text-[#4B164C] border border-purple-100 flex items-center justify-center text-lg flex-shrink-0">
+              <i className="bi bi-folder-symlink" />
             </div>
             <div>
-              <h2 className="text-base font-bold">Pilih Folder Tujuan Drive</h2>
-              <p className="text-xs text-purple-200">
-                Pilih folder Google Drive tempat file surat ini akan disimpan
+              <h2 className="text-base font-bold text-slate-800">
+                Pilih Folder Tujuan Google Drive
+              </h2>
+              <p className="text-xs text-slate-500">
+                Pilih lokasi Google Drive tujuan penyimpanan file surat
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-white/70 hover:text-white p-2 rounded-xl hover:bg-white/10 transition"
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
             aria-label="Tutup"
           >
-            <i className="bi bi-x-lg text-base"></i>
+            <i className="bi bi-x-lg text-sm" />
           </button>
         </div>
 
-        {/* Category switcher: Surat Masuk vs Surat Keluar */}
-        <div className="p-3 bg-slate-50 border-b border-gray-200">
+        {/* Category Switcher: Surat Masuk vs Surat Keluar */}
+        <div className="p-3 bg-slate-50 border-b border-slate-200">
           <div className="grid grid-cols-2 gap-1.5 bg-slate-200/80 p-1 rounded-xl text-xs font-semibold">
             <button
               type="button"
               onClick={() => {
                 setActiveCategory('incoming');
-                setSelectedFolder(null);
+                if (selectedFolder) {
+                  setSelectedFolder((prev) => prev ? { ...prev, category: 'incoming' } : null);
+                }
               }}
               className={`flex items-center justify-center py-2 px-3 rounded-lg transition ${
                 activeCategory === 'incoming'
@@ -178,14 +204,16 @@ export default function ChangeStorageDestinationModal({
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <i className="bi bi-inbox-fill mr-1.5 text-sm"></i>
+              <i className="bi bi-inbox-fill mr-1.5 text-sm" />
               Surat Masuk (esurat/)
             </button>
             <button
               type="button"
               onClick={() => {
                 setActiveCategory('outgoing');
-                setSelectedFolder(null);
+                if (selectedFolder) {
+                  setSelectedFolder((prev) => prev ? { ...prev, category: 'outgoing' } : null);
+                }
               }}
               className={`flex items-center justify-center py-2 px-3 rounded-lg transition ${
                 activeCategory === 'outgoing'
@@ -193,141 +221,211 @@ export default function ChangeStorageDestinationModal({
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <i className="bi bi-send-fill mr-1.5 text-sm"></i>
+              <i className="bi bi-send-fill mr-1.5 text-sm" />
               Surat Keluar (esurat-keluar/)
             </button>
           </div>
 
           {activeCategory !== initialCategory && (
             <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 mt-2 flex items-center gap-1.5">
-              <i className="bi bi-info-circle-fill text-amber-500 shrink-0"></i>
-              <span>Anda memilih kategori yang berbeda dari form saat ini ({initialCategory === 'incoming' ? 'Surat Masuk' : 'Surat Keluar'}).</span>
+              <i className="bi bi-info-circle-fill text-amber-500 shrink-0" />
+              <span>
+                Kategori dialihkan dari form awal ({initialCategory === 'incoming' ? 'Surat Masuk' : 'Surat Keluar'}).
+              </span>
             </p>
           )}
         </div>
 
-        {/* Folder List Content */}
-        <div className="p-4 overflow-y-auto flex-1 max-h-[50vh] space-y-2">
-          {loading ? (
-            <div className="py-10 text-center text-slate-500">
-              <div className="animate-spin rounded-full h-7 w-7 border-2 border-[#4B164C] border-t-transparent mx-auto mb-2"></div>
-              <p className="text-xs font-medium">Memuat folder dari Google Drive...</p>
-            </div>
-          ) : error ? (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <i className="bi bi-exclamation-triangle-fill text-red-500"></i>
-                <span>{error}</span>
-              </div>
+        {/* Breadcrumb Bar & Toolbar */}
+        <div className="px-4 py-2.5 bg-slate-100/90 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs">
+          {/* Breadcrumb trail */}
+          <div className="flex items-center gap-1 overflow-x-auto max-w-full py-0.5 scrollbar-thin">
+            {breadcrumbs.length > 1 && (
               <button
                 type="button"
-                onClick={() => fetchFolders(activeCategory)}
-                className="text-xs font-bold underline"
+                onClick={handleGoUp}
+                className="px-2 py-1 bg-white hover:bg-slate-200 border border-slate-200 rounded-md font-semibold text-slate-700 flex items-center gap-1 shadow-2xs transition shrink-0 mr-1"
+                title="Naik ke folder induk"
               >
-                Coba Lagi
+                <i className="bi bi-arrow-up text-xs" />
+                <span>Level Atas</span>
               </button>
+            )}
+
+            <div className="flex items-center gap-1 whitespace-nowrap">
+              {breadcrumbs.map((crumb, idx) => {
+                const isLast = idx === breadcrumbs.length - 1;
+                return (
+                  <React.Fragment key={crumb.id || idx}>
+                    {idx > 0 && <span className="text-slate-400 font-bold">/</span>}
+                    <button
+                      type="button"
+                      onClick={() => handleNavigateToBreadcrumb(idx)}
+                      disabled={isLast || loading}
+                      className={`px-2 py-0.5 rounded-md transition text-xs ${
+                        isLast
+                          ? 'font-bold text-[#4B164C] bg-white border border-purple-200 shadow-2xs'
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-white/70'
+                      }`}
+                    >
+                      <i className={`bi ${idx === 0 ? 'bi-hdd-network' : 'bi-folder'} mr-1 text-xs`} />
+                      {crumb.name}
+                    </button>
+                  </React.Fragment>
+                );
+              })}
             </div>
-          ) : folders.length === 0 ? (
-            <div className="py-10 text-center px-4">
-              <div className="w-12 h-12 rounded-2xl bg-purple-50 text-[#4B164C] flex items-center justify-center mx-auto mb-2">
-                <i className="bi bi-folder-x text-2xl"></i>
+          </div>
+
+          {/* Action buttons on toolbar */}
+          <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+            {currentFolder.id !== 'root' && (
+              <button
+                type="button"
+                onClick={handleChooseCurrentFolder}
+                className="px-2 py-1 bg-white hover:bg-purple-50 text-slate-700 hover:text-[#4B164C] border border-slate-200 rounded-md font-medium text-[11px] shadow-2xs transition flex items-center gap-1"
+                title="Pilih folder saat ini sebagai tujuan"
+              >
+                <i className="bi bi-check2 text-xs" />
+                Pilih Folder Ini
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => fetchFolders(currentFolder.id)}
+              disabled={loading}
+              className="p-1 text-slate-500 hover:text-slate-800 bg-white hover:bg-slate-200 border border-slate-200 rounded-md transition"
+              title="Segarkan daftar folder"
+            >
+              <i className={`bi bi-arrow-clockwise text-xs ${loading ? 'animate-spin text-[#4B164C]' : ''}`} />
+            </button>
+          </div>
+        </div>
+
+        {/* Quick Search filter */}
+        <div className="px-4 pt-3 pb-2 bg-white">
+          <div className="relative">
+            <i className="bi bi-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs" />
+            <input
+              type="text"
+              placeholder="Cari folder di lokasi ini..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-8 pr-8 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-[#4B164C] focus:ring-1 focus:ring-[#4B164C]/20"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                <i className="bi bi-x-circle-fill text-xs" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Folder List Content */}
+        <div className="p-4 overflow-y-auto flex-1 max-h-[46vh] min-h-[220px]">
+          {loading ? (
+            <div className="py-12 text-center text-slate-500 flex flex-col items-center justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#4B164C] border-t-transparent mx-auto mb-3" />
+              <p className="text-xs font-medium text-slate-600">Memuat folder Google Drive...</p>
+              <p className="text-[11px] text-slate-400 mt-1">Mengambil data folder langsung dari akun Anda</p>
+            </div>
+          ) : error ? (
+            <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs flex flex-col gap-2">
+              <div className="flex items-start gap-2">
+                <i className="bi bi-exclamation-triangle-fill text-red-500 text-base mt-0.5" />
+                <span className="flex-1 font-medium">{error}</span>
               </div>
-              <p className="text-xs font-bold text-slate-700 mb-1">Belum Ada Folder Khusus</p>
-              <p className="text-[11px] text-slate-500">
-                Penyimpanan akan menggunakan folder default sistem: <span className="font-mono font-medium">{activeCategory === 'incoming' ? 'esurat/MM-YY/' : 'esurat-keluar/MM-YY/'}</span>
+              <div className="flex justify-end gap-2 mt-1">
+                <button
+                  type="button"
+                  onClick={() => fetchFolders(currentFolder.id)}
+                  className="px-3 py-1 bg-red-600 text-white rounded-lg text-xs font-semibold hover:bg-red-700 transition"
+                >
+                  Coba Lagi
+                </button>
+              </div>
+            </div>
+          ) : filteredFolders.length === 0 ? (
+            <div className="py-10 text-center px-4">
+              <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-2">
+                <i className="bi bi-folder-x text-2xl" />
+              </div>
+              <p className="text-xs font-bold text-slate-700 mb-1">
+                {searchQuery ? 'Tidak ada folder yang cocok' : 'Tidak ada subfolder di lokasi ini'}
               </p>
+              <p className="text-[11px] text-slate-500 mb-3">
+                {currentFolder.id !== 'root'
+                  ? `Anda dapat menggunakan "${currentFolder.name}" sebagai tujuan penyimpanan surat.`
+                  : 'Folder penyimpanan otomatis default akan digunakan jika tidak memilih folder khusus.'}
+              </p>
+              {currentFolder.id !== 'root' && (
+                <button
+                  type="button"
+                  onClick={handleChooseCurrentFolder}
+                  className="px-3 py-1.5 bg-purple-50 text-[#4B164C] border border-purple-200 rounded-lg text-xs font-bold hover:bg-purple-100 transition inline-flex items-center gap-1.5 shadow-2xs"
+                >
+                  <i className="bi bi-check-circle" />
+                  Gunakan "{currentFolder.name}"
+                </button>
+              )}
             </div>
           ) : (
-            <div className="space-y-2">
-              {folders.map((group) => {
-                const isGroupSelected = selectedFolder?.id === group.id;
+            <div className="space-y-1.5">
+              {filteredFolders.map((folder) => {
+                const isSelected = selectedFolder?.id === folder.id;
 
                 return (
                   <div
-                    key={group.id}
-                    className="border border-gray-200 rounded-xl overflow-hidden bg-white transition hover:border-purple-200"
+                    key={folder.id}
+                    onClick={() => handleSelectFolder(folder)}
+                    onDoubleClick={(e) => handleNavigateInto(folder, e)}
+                    className={`w-full text-left p-2.5 rounded-xl border transition flex items-center justify-between cursor-pointer select-none ${
+                      isSelected
+                        ? 'bg-purple-50/90 border-[#4B164C] shadow-2xs'
+                        : 'bg-white border-slate-200 hover:border-purple-200 hover:bg-slate-50/80'
+                    }`}
                   >
-                    {/* Month folder header button */}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setSelectedFolder({
-                          id: group.id,
-                          monthYear: group.monthYear,
-                          name: group.name,
-                          category: group.category,
-                          path: group.path,
-                          isMonthRoot: true,
-                        })
-                      }
-                      className={`w-full text-left p-3 flex items-center justify-between transition ${
-                        isGroupSelected
-                          ? 'bg-purple-100/70 text-[#4B164C] font-bold'
-                          : 'hover:bg-slate-50 text-slate-700'
-                      }`}
-                    >
-                      <div className="flex items-center min-w-0 mr-2">
-                        <div
-                          className={`w-8 h-8 rounded-lg flex items-center justify-center mr-2.5 flex-shrink-0 ${
-                            isGroupSelected ? 'bg-[#4B164C] text-white' : 'bg-purple-50 text-[#4B164C]'
-                          }`}
-                        >
-                          <i className="bi bi-folder-fill text-base"></i>
-                        </div>
-                        <div className="truncate">
-                          <p className="text-xs font-bold truncate leading-tight">{group.name}</p>
-                          <p className="text-[10px] text-slate-400 font-mono mt-0.5">{group.path}</p>
-                        </div>
+                    <div className="flex items-center min-w-0 mr-2 flex-1">
+                      <div
+                        className={`w-8 h-8 rounded-lg flex items-center justify-center mr-2.5 flex-shrink-0 transition ${
+                          isSelected
+                            ? 'bg-[#4B164C] text-white'
+                            : 'bg-amber-50 text-amber-500 border border-amber-100'
+                        }`}
+                      >
+                        <i className="bi bi-folder-fill text-base" />
                       </div>
+                      <div className="truncate min-w-0">
+                        <p className={`text-xs font-bold truncate ${isSelected ? 'text-[#4B164C]' : 'text-slate-800'}`}>
+                          {folder.name}
+                        </p>
+                        <p className="text-[10px] text-slate-400 font-mono truncate">
+                          {folder.id}
+                        </p>
+                      </div>
+                    </div>
 
-                      {isGroupSelected && (
-                        <span className="text-[10px] bg-[#4B164C] text-white px-2 py-0.5 rounded-full font-bold shrink-0">
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {isSelected && (
+                        <span className="text-[10px] bg-[#4B164C] text-white px-2 py-0.5 rounded-full font-bold">
                           Dipilih
                         </span>
                       )}
-                    </button>
 
-                    {/* Subfolders under this month */}
-                    {group.subfolders && group.subfolders.length > 0 && (
-                      <div className="bg-slate-50/70 border-t border-gray-100 p-2 pl-6 space-y-1">
-                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                          Subfolder di dalam {group.monthYear}:
-                        </p>
-                        {group.subfolders.map((sf) => {
-                          const isSfSelected = selectedFolder?.id === sf.id;
-
-                          return (
-                            <button
-                              key={sf.id}
-                              type="button"
-                              onClick={() =>
-                                setSelectedFolder({
-                                  id: sf.id,
-                                  dbId: sf.dbId,
-                                  name: sf.name,
-                                  category: sf.category,
-                                  path: sf.path,
-                                  isMonthRoot: false,
-                                })
-                              }
-                              className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between transition ${
-                                isSfSelected
-                                  ? 'bg-[#4B164C] text-white font-bold shadow-xs'
-                                  : 'text-slate-600 hover:bg-white hover:text-slate-900'
-                              }`}
-                            >
-                              <div className="flex items-center min-w-0 mr-2">
-                                <i className={`bi bi-folder2 mr-2 ${isSfSelected ? 'text-white' : 'text-slate-400'}`}></i>
-                                <span className="truncate">{sf.name}</span>
-                              </div>
-                              {isSfSelected && (
-                                <i className="bi bi-check-lg text-sm text-white shrink-0"></i>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
+                      <button
+                        type="button"
+                        onClick={(e) => handleNavigateInto(folder, e)}
+                        className="px-2 py-1 text-slate-500 hover:text-[#4B164C] hover:bg-purple-100/60 rounded-md text-xs font-semibold flex items-center gap-1 transition"
+                        title="Buka subfolder"
+                      >
+                        <span>Buka</span>
+                        <i className="bi bi-chevron-right text-[10px]" />
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -336,19 +434,33 @@ export default function ChangeStorageDestinationModal({
         </div>
 
         {/* Footer with selection summary & actions */}
-        <div className="p-4 bg-slate-50 border-t border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[11px] text-slate-400">Folder yang dipilih:</p>
-            <p className="text-xs font-bold text-slate-800 truncate font-mono">
-              {selectedFolder ? selectedFolder.path : 'Gunakan folder default sistem'}
+        <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] text-slate-400 font-medium">Lokasi tujuan penyimpanan:</p>
+            <p className="text-xs font-bold text-slate-800 truncate font-mono mt-0.5">
+              {selectedFolder ? (
+                <span className="text-[#4B164C]">{selectedFolder.path}</span>
+              ) : (
+                <span className="text-slate-500 font-sans">
+                  Default E-Surat (<span className="font-mono text-slate-700">{defaultPathText}</span>)
+                </span>
+              )}
             </p>
           </div>
 
-          <div className="flex items-center space-x-2 shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleChooseDefault}
+              className="py-2 px-3 bg-white border border-slate-300 text-slate-700 font-semibold rounded-xl text-xs hover:bg-slate-100 transition"
+              title="Gunakan folder arsip standar per bulan"
+            >
+              Gunakan Default
+            </button>
             <button
               type="button"
               onClick={onClose}
-              className="py-2 px-3 bg-white border border-gray-300 text-slate-700 font-semibold rounded-xl text-xs hover:bg-slate-100 transition"
+              className="py-2 px-3 bg-white border border-slate-300 text-slate-700 font-semibold rounded-xl text-xs hover:bg-slate-100 transition"
             >
               Batal
             </button>
@@ -358,7 +470,7 @@ export default function ChangeStorageDestinationModal({
               onClick={handleConfirm}
               className="py-2 px-4 bg-[#4B164C] text-white font-bold rounded-xl text-xs hover:bg-[#381139] disabled:opacity-40 transition flex items-center shadow-xs"
             >
-              <i className="bi bi-check2-circle mr-1.5"></i>
+              <i className="bi bi-check2-circle mr-1.5" />
               Pilih Folder Ini
             </button>
           </div>

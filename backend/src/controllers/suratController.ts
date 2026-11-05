@@ -368,19 +368,11 @@ export const update = async (req: AuthRequest, res: Response) => {
 
     if (req.file) {
       originalFileName = req.file.originalname || `${nomor_surat}_${Date.now()}`;
-      fileMimeType = req.file.mimetype || 'application/octet-stream';
+      const oldDriveIdToDelete = oldSurat.google_drive_id;
       const ext = path.extname(originalFileName) || '.pdf';
       const cleanFileName = `${nomor_surat.replace(/[\/\\?%*:|"<>]/g, '_')}_${nama_surat.replace(/[\/\\?%*:|"<>]/g, '_')}_${Date.now()}${ext}`;
 
       try {
-        if (oldSurat.google_drive_id) {
-          try {
-            await deleteUserFile(userId, oldSurat.google_drive_id);
-          } catch (deleteErr) {
-            console.warn(`[GoogleDrive] Failed to delete old file during update:`, deleteErr);
-          }
-        }
-
         const uploadResult = await uploadUserLetterFile(
           userId,
           req.file.buffer,
@@ -396,6 +388,16 @@ export const update = async (req: AuthRequest, res: Response) => {
         logicalPath = uploadResult.logicalPath;
         parentFolderId = uploadResult.parentFolderId;
         storageDestination = uploadResult.storageDestination;
+
+        // Safely remove the old file ONLY after new upload is confirmed
+        if (oldDriveIdToDelete && oldDriveIdToDelete !== googleDriveId) {
+          try {
+            await deleteUserFile(userId, oldDriveIdToDelete);
+            console.log(`[GoogleDrive] Cleaned up replaced old file: ${oldDriveIdToDelete}`);
+          } catch (deleteErr) {
+            console.warn(`[GoogleDrive] Non-fatal: Failed to delete old file after replacement:`, deleteErr);
+          }
+        }
       } catch (uploadError: any) {
         if (isGoogleErrorInvalidGrant(uploadError)) {
           return res.status(401).json({

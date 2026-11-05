@@ -333,7 +333,26 @@ export async function uploadToDriveResumable(
 ): Promise<{ id: string; webViewLink?: string; parents?: string[] }> {
   const fileSize = fileBuffer.length;
   const contentType = mimeType || 'application/octet-stream';
+  const drive = google.drive({ version: 'v3', auth });
 
+  // Approach 1: Official googleapis streaming upload (handles up to 50 MB binary streams)
+  try {
+    const res = await drive.files.create({
+      requestBody: fileMetadata,
+      media: {
+        mimeType: contentType,
+        body: Readable.from(fileBuffer),
+      },
+      fields: 'id, name, webViewLink, parents',
+    });
+    if (res.data?.id) {
+      return res.data as any;
+    }
+  } catch (streamErr: any) {
+    console.warn(`[GoogleDrive] Standard drive.files.create warning: ${streamErr.message}. Attempting explicit resumable upload...`);
+  }
+
+  // Approach 2: Explicit Google Drive Resumable Upload session with Content-Range
   // Step 1: Initiate resumable session with Google Drive
   const initRes = await auth.request({
     method: 'POST',
@@ -348,12 +367,12 @@ export async function uploadToDriveResumable(
     maxContentLength: Infinity,
   });
 
-  const sessionUri = initRes.headers.location;
+  const sessionUri = initRes.headers?.location || initRes.headers?.['location'];
   if (!sessionUri) {
     throw new Error('Google Drive API did not return a resumable session URI');
   }
 
-  // Step 2: Upload binary buffer to the session URI with retry handling
+  // Step 2: Upload binary buffer to the session URI with retry handling and Content-Range
   let attempts = 0;
   const maxAttempts = 3;
   let uploadRes: any;
@@ -367,6 +386,7 @@ export async function uploadToDriveResumable(
         headers: {
           'Content-Type': contentType,
           'Content-Length': fileSize.toString(),
+          'Content-Range': `bytes 0-${fileSize - 1}/${fileSize}`,
         },
         data: fileBuffer,
         maxBodyLength: Infinity,

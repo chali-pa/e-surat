@@ -86,22 +86,22 @@ export default function Dashboard() {
   const sseRef = useRef(null);
 
   const queryView = searchParams.get('view');
+  const queryId = searchParams.get('id');
 
   // Helper to handle views navigation with URL parameter sync
   const navigateToView = (newView, paramsUpdate = {}) => {
     setView(newView);
-    if (newView === 'list') {
-      setEditingId(null);
-    }
     const params = new URLSearchParams(searchParams);
     if (newView === 'list') {
+      setEditingId(null);
       params.delete('view');
+      params.delete('id');
     } else {
       params.set('view', newView);
     }
     // Apply optional param updates
     Object.entries(paramsUpdate).forEach(([key, val]) => {
-      if (val === null) params.delete(key);
+      if (val === null || val === undefined) params.delete(key);
       else params.set(key, val);
     });
     setSearchParams(params);
@@ -182,7 +182,7 @@ export default function Dashboard() {
     }
   }, [queryType]);
 
-  // Sync URL ?view= param → view state
+  // Sync URL ?view= and ?id= param → view state
   useEffect(() => {
     if (queryView === 'scan') {
       setView('scan');
@@ -192,11 +192,15 @@ export default function Dashboard() {
       setEditingId(null);
     } else if (queryView === 'edit') {
       setView('edit');
+      const parsedId = parseInt(queryId, 10);
+      if (!isNaN(parsedId)) {
+        setEditingId(parsedId);
+      }
     } else {
       setView('list');
       setEditingId(null);
     }
-  }, [queryView]);
+  }, [queryView, queryId]);
 
   // Fetch whenever tab or the active tab's month selection changes
   useEffect(() => {
@@ -614,7 +618,7 @@ export default function Dashboard() {
 
   const handleEdit = (surat) => {
     setEditingId(surat.id);
-    navigateToView('edit');
+    navigateToView('edit', { id: surat.id });
   };
   const handleDeleteClick = (surat) => setDeleteModal({ show: true, surat });
 

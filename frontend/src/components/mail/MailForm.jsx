@@ -336,8 +336,15 @@ export default function MailForm({ type, id, prepopulatedFile, onClearFile, onSa
       } else if (error.response?.data?.errors) {
         setErrors(error.response.data.errors);
       } else {
+        const errorDetail = error.response?.data?.message || error.response?.data?.error;
+        let fallbackMessage = isEditMode
+          ? 'Gagal memperbarui surat. Silakan coba lagi.'
+          : 'Gagal menyimpan surat. Silakan coba lagi.';
+        if (!error.response && error.message) {
+          fallbackMessage = `Gagal terhubung ke server (${error.message}). Pastikan server backend sedang berjalan.`;
+        }
         setErrors({
-          general: error.response?.data?.message || error.response?.data?.error || 'Gagal menyimpan surat. Silakan coba lagi.',
+          general: errorDetail || fallbackMessage,
         });
       }
     } finally {

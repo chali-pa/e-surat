@@ -336,15 +336,29 @@ export default function MailForm({ type, id, prepopulatedFile, onClearFile, onSa
       } else if (error.response?.data?.errors) {
         setErrors(error.response.data.errors);
       } else {
-        const errorDetail = error.response?.data?.message || error.response?.data?.error;
-        let fallbackMessage = isEditMode
-          ? 'Gagal memperbarui surat. Silakan coba lagi.'
-          : 'Gagal menyimpan surat. Silakan coba lagi.';
-        if (!error.response && error.message) {
-          fallbackMessage = `Gagal terhubung ke server (${error.message}). Pastikan server backend sedang berjalan.`;
+        const serverMsg = error.response?.data?.message;
+        const serverErr = error.response?.data?.error;
+        const serverDetails = error.response?.data?.details;
+
+        let displayMessage = '';
+        if (serverMsg && !serverMsg.startsWith('Gagal menyimpan surat. Silakan coba lagi')) {
+          displayMessage = serverMsg;
+        } else if (serverErr && typeof serverErr === 'string') {
+          displayMessage = serverErr;
+        } else {
+          displayMessage = isEditMode
+            ? 'Gagal memperbarui surat. Silakan coba lagi.'
+            : 'Gagal menyimpan surat. Silakan coba lagi.';
         }
+
+        if (serverDetails && typeof serverDetails === 'string' && !displayMessage.includes(serverDetails)) {
+          displayMessage += ` (${serverDetails})`;
+        } else if (!error.response && error.message) {
+          displayMessage = `Gagal terhubung ke server (${error.message}). Pastikan server backend sedang berjalan.`;
+        }
+
         setErrors({
-          general: errorDetail || fallbackMessage,
+          general: displayMessage,
         });
       }
     } finally {

@@ -323,10 +323,11 @@ export const store = async (req: AuthRequest, res: Response) => {
         message: 'Your Google connection needs to be renewed. Please reconnect your Google account to continue.',
       });
     }
+    const realMsg = error.message || 'Gagal menyimpan surat. Silakan coba lagi.';
     res.status(500).json({
-      error: error.message || 'Failed to create surat',
-      message: 'Gagal menyimpan surat. Silakan coba lagi.',
-      details: error.toString(),
+      error: realMsg,
+      message: realMsg.startsWith('Gagal') ? realMsg : `Gagal menyimpan surat: ${realMsg}`,
+      details: error.stack || error.toString(),
     });
   }
 };

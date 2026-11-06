@@ -333,26 +333,7 @@ export async function uploadToDriveResumable(
 ): Promise<{ id: string; webViewLink?: string; parents?: string[] }> {
   const fileSize = fileBuffer.length;
   const contentType = mimeType || 'application/octet-stream';
-  const drive = google.drive({ version: 'v3', auth });
 
-  // Approach 1: Official googleapis streaming upload (handles up to 50 MB binary streams)
-  try {
-    const res = await drive.files.create({
-      requestBody: fileMetadata,
-      media: {
-        mimeType: contentType,
-        body: Readable.from(fileBuffer),
-      },
-      fields: 'id, name, webViewLink, parents',
-    });
-    if (res.data?.id) {
-      return res.data as any;
-    }
-  } catch (streamErr: any) {
-    console.warn(`[GoogleDrive] Standard drive.files.create warning: ${streamErr.message}. Attempting explicit resumable upload...`);
-  }
-
-  // Approach 2: Explicit Google Drive Resumable Upload session with Content-Range
   // Step 1: Initiate resumable session with Google Drive
   const initRes = await auth.request({
     method: 'POST',
@@ -363,8 +344,6 @@ export async function uploadToDriveResumable(
       'X-Upload-Content-Length': fileSize.toString(),
     },
     data: fileMetadata,
-    maxBodyLength: Infinity,
-    maxContentLength: Infinity,
   });
 
   const sessionUri = initRes.headers?.location || initRes.headers?.['location'];
@@ -372,42 +351,276 @@ export async function uploadToDriveResumable(
     throw new Error('Google Drive API did not return a resumable session URI');
   }
 
-  // Step 2: Upload binary buffer to the session URI with retry handling and Content-Range
+  // Step 2: Upload binary buffer to the session URI via native fetch without Authorization header.
+  // Google Drive Resumable Upload protocol mandates NO Authorization header on subsequent PUT requests.
   let attempts = 0;
   const maxAttempts = 3;
-  let uploadRes: any;
+  let lastErr: any;
 
   while (attempts < maxAttempts) {
     try {
       attempts++;
-      uploadRes = await auth.request({
+      const putRes = await fetch(sessionUri, {
         method: 'PUT',
-        url: sessionUri,
         headers: {
           'Content-Type': contentType,
           'Content-Length': fileSize.toString(),
           'Content-Range': `bytes 0-${fileSize - 1}/${fileSize}`,
         },
-        data: fileBuffer,
-        maxBodyLength: Infinity,
-        maxContentLength: Infinity,
-        timeout: 300000, // 5 minutes timeout for up to 50 MB
+        body: fileBuffer,
       });
-      break;
-    } catch (uploadErr: any) {
-      if (attempts >= maxAttempts) {
-        throw uploadErr;
+
+      if (!putRes.ok && putRes.status !== 308) {
+        const errText = await putRes.text();
+        throw new Error(`Google Drive upload returned status ${putRes.status}: ${errText}`);
       }
-      console.warn(`[GoogleDrive] Resumable upload attempt ${attempts} failed: ${uploadErr.message}. Retrying...`);
-      await new Promise(r => setTimeout(r, 1000 * attempts));
+
+      const uploadData: any = await putRes.json();
+      if (!uploadData?.id) {
+        throw new Error('Google Drive upload response missing file ID');
+      }
+      return uploadData;
+    } catch (err: any) {
+      lastErr = err;
+      if (attempts >= maxAttempts) throw lastErr;
+      console.warn(`[GoogleDrive] Resumable upload attempt ${attempts} failed: ${err.message}. Retrying...`);
+      await new Promise((r) => setTimeout(r, 1000 * attempts));
     }
   }
 
-  if (!uploadRes?.data?.id) {
-    throw new Error('Google Drive upload did not return file ID');
+  throw lastErr || new Error('Failed to upload file to Google Drive');
+}
+
+/**
+ * Resolve target folder ID and logical path based on user configuration, letter type, and date.
+ */
+export async function resolveUserStorageDestination(
+  userId: number,
+  originalFileName: string,
+  letterType: 'incoming' | 'outgoing',
+  letterDateStr?: string,
+  mimeType?: string,
+  customFolderId?: string
+): Promise<{
+  targetFolderId: string;
+  storageDestination: string;
+  logicalPath: string;
+}> {
+  const auth = await getOAuth2ClientForUser(userId);
+  const drive = google.drive({ version: 'v3', auth });
+  const user = await findUserById(userId);
+  const rootName = letterType === 'incoming' ? 'esurat' : 'esurat-keluar';
+  const monthYear = formatMonthYear(letterDateStr);
+  const subfolder = getSubfolderType(originalFileName, mimeType);
+
+  let targetFolderId = '';
+  let storageDestination = '';
+  let logicalPath = '';
+
+  if (customFolderId) {
+    try {
+      const folderRes = await drive.files.get({
+        fileId: customFolderId,
+        fields: 'id, name, mimeType, trashed',
+      });
+      if (folderRes.data.trashed) {
+        throw new Error(`Folder Google Drive '${folderRes.data.name || customFolderId}' berada di kotak sampah.`);
+      }
+      if (folderRes.data.mimeType !== 'application/vnd.google-apps.folder') {
+        throw new Error(`ID '${customFolderId}' bukan sebuah folder Google Drive.`);
+      }
+      targetFolderId = customFolderId;
+      storageDestination = folderRes.data.name || 'Folder Pilihan';
+      logicalPath = `${storageDestination}/${originalFileName}`;
+    } catch (e: any) {
+      console.error(`[GoogleDrive] Custom folder ID ${customFolderId} not accessible:`, e);
+      throw new Error(e.message || `Folder Google Drive '${customFolderId}' tidak ditemukan atau tidak dapat diakses.`);
+    }
+  } else {
+    const configuredFolderId = letterType === 'incoming'
+      ? user?.incoming_storage_folder_id
+      : user?.outgoing_storage_folder_id;
+    const configuredFolderName = letterType === 'incoming'
+      ? (user?.incoming_storage_folder_name || 'esurat')
+      : (user?.outgoing_storage_folder_name || 'esurat-keluar');
+    const useMonthlyOrg = letterType === 'incoming'
+      ? !!user?.incoming_monthly_organization
+      : !!user?.outgoing_monthly_organization;
+
+    const defaultRootId = letterType === 'incoming' ? user?.drive_folder_id : user?.drive_keluar_folder_id;
+    const isDefault = !configuredFolderId || configuredFolderId === defaultRootId;
+
+    if (isDefault) {
+      let rootFolderId = defaultRootId;
+      const otherFolderId = letterType === 'incoming' ? user?.drive_keluar_folder_id : user?.drive_folder_id;
+
+      if (rootFolderId && otherFolderId && rootFolderId === otherFolderId) {
+        console.warn(`[GoogleDrive] Identical folder ID detected for incoming and outgoing. Resetting rootFolderId for ${letterType}.`);
+        rootFolderId = null;
+      }
+
+      if (!rootFolderId) {
+        rootFolderId = await findOrCreateFolder(drive, rootName, undefined, otherFolderId);
+        if (letterType === 'incoming') {
+          await updateUserGoogleResourceIds(userId, { drive_folder_id: rootFolderId });
+        } else {
+          await updateUserGoogleResourceIds(userId, { drive_keluar_folder_id: rootFolderId });
+        }
+      }
+
+      const monthFolderId = await findOrCreateFolder(drive, monthYear, rootFolderId);
+      targetFolderId = await findOrCreateFolder(drive, subfolder, monthFolderId);
+      storageDestination = rootName;
+      logicalPath = `${rootName}/${monthYear}/${subfolder}/${originalFileName}`;
+    } else {
+      try {
+        const folderRes = await drive.files.get({
+          fileId: configuredFolderId,
+          fields: 'id, name, mimeType, trashed',
+        });
+        if (folderRes.data.trashed) {
+          throw new Error(`Folder tujuan penyimpanan Google Drive '${configuredFolderName}' berada di kotak sampah.`);
+        }
+        if (folderRes.data.mimeType !== 'application/vnd.google-apps.folder') {
+          throw new Error(`Folder tujuan penyimpanan Google Drive '${configuredFolderName}' bukan sebuah folder.`);
+        }
+        const verifiedName = folderRes.data.name || configuredFolderName;
+        storageDestination = verifiedName;
+
+        if (useMonthlyOrg) {
+          const monthFolderId = await findOrCreateFolder(drive, monthYear, configuredFolderId);
+          targetFolderId = await findOrCreateFolder(drive, subfolder, monthFolderId);
+          logicalPath = `${verifiedName}/${monthYear}/${subfolder}/${originalFileName}`;
+        } else {
+          targetFolderId = configuredFolderId;
+          logicalPath = `${verifiedName}/${originalFileName}`;
+        }
+      } catch (folderErr: any) {
+        console.error(`[GoogleDrive] Configured storage folder inaccessible for user ${userId}:`, folderErr);
+        throw new Error(
+          `Folder tujuan penyimpanan Google Drive '${configuredFolderName}' tidak ditemukan atau telah dipindahkan/dihapus di Google Drive. Silakan buka Pengaturan Profil untuk memilih folder tujuan baru.`
+        );
+      }
+    }
   }
 
-  return uploadRes.data;
+  return { targetFolderId, storageDestination, logicalPath };
+}
+
+/**
+ * Create a server-authorized Google Drive Resumable Upload session.
+ * Allows the browser (client) to upload files up to 50 MB (including the 9.15 MB reproduction case)
+ * directly to Google Drive without hitting serverless / reverse-proxy body limits (e.g. Vercel 4.5 MB).
+ */
+export async function createResumableUploadSession(
+  userId: number,
+  originalFileName: string,
+  fileSize: number,
+  letterType: 'incoming' | 'outgoing',
+  letterDateStr?: string,
+  mimeType?: string,
+  customFolderId?: string
+): Promise<{
+  sessionUri: string;
+  cleanFileName: string;
+  logicalPath: string;
+  parentFolderId: string;
+  storageDestination: string;
+}> {
+  console.log(`[GoogleDrive] Creating resumable upload session for user ${userId}: ${originalFileName} (${letterType}) [size: ${(fileSize / (1024 * 1024)).toFixed(2)} MB]`);
+  try {
+    const auth = await getOAuth2ClientForUser(userId);
+    const { targetFolderId, storageDestination, logicalPath } = await resolveUserStorageDestination(
+      userId,
+      originalFileName,
+      letterType,
+      letterDateStr,
+      mimeType,
+      customFolderId
+    );
+
+    const contentType = mimeType || 'application/octet-stream';
+    const cleanFileName = path.basename(logicalPath);
+    const fileMetadata = {
+      name: cleanFileName,
+      parents: [targetFolderId],
+    };
+
+    const initRes = await auth.request({
+      method: 'POST',
+      url: 'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,webViewLink,parents',
+      headers: {
+        'Content-Type': 'application/json; charset=UTF-8',
+        'X-Upload-Content-Type': contentType,
+        'X-Upload-Content-Length': fileSize.toString(),
+      },
+      data: fileMetadata,
+    });
+
+    const sessionUri = initRes.headers?.location || initRes.headers?.['location'];
+    if (!sessionUri) {
+      throw new Error('Google Drive API did not return a resumable session URI');
+    }
+
+    return {
+      sessionUri,
+      cleanFileName,
+      logicalPath,
+      parentFolderId: targetFolderId,
+      storageDestination,
+    };
+  } catch (error: any) {
+    console.error(`[GoogleDrive] Failed to create resumable upload session:`, error);
+    if (isGoogleErrorInvalidGrant(error)) {
+      throw new GoogleReconnectRequiredError();
+    }
+    throw error;
+  }
+}
+
+/**
+ * Verify and finalize a file uploaded via direct resumable upload session.
+ * Confirms the file exists in Google Drive and sets reader permissions.
+ */
+export async function confirmUploadedDriveFile(
+  userId: number,
+  fileId: string
+): Promise<{
+  fileId: string;
+  name: string;
+  webViewLink: string;
+  mimeType?: string;
+  parentFolderId?: string;
+}> {
+  const auth = await getOAuth2ClientForUser(userId);
+  const drive = google.drive({ version: 'v3', auth });
+
+  const getRes = await drive.files.get({
+    fileId,
+    fields: 'id, name, mimeType, trashed, webViewLink, parents',
+  });
+
+  if (!getRes.data || getRes.data.trashed) {
+    throw new Error('File Google Drive tidak ditemukan atau berada di kotak sampah.');
+  }
+
+  // Make file viewable
+  try {
+    await drive.permissions.create({
+      fileId,
+      requestBody: { role: 'reader', type: 'anyone' },
+    });
+  } catch (permErr) {
+    console.warn(`[GoogleDrive] Could not set reader permission on file ${fileId}:`, permErr);
+  }
+
+  return {
+    fileId: getRes.data.id!,
+    name: getRes.data.name || '',
+    webViewLink: getRes.data.webViewLink || `https://drive.google.com/file/d/${fileId}/view`,
+    mimeType: getRes.data.mimeType || undefined,
+    parentFolderId: getRes.data.parents?.[0] || undefined,
+  };
 }
 
 /**
@@ -434,111 +647,16 @@ export async function uploadUserLetterFile(
     const auth = await getOAuth2ClientForUser(userId);
     const drive = google.drive({ version: 'v3', auth });
 
-    const user = await findUserById(userId);
-    const rootName = letterType === 'incoming' ? 'esurat' : 'esurat-keluar';
-    const monthYear = formatMonthYear(letterDateStr);
-    const subfolder = getSubfolderType(originalFileName, mimeType);
+    const { targetFolderId, storageDestination, logicalPath } = await resolveUserStorageDestination(
+      userId,
+      originalFileName,
+      letterType,
+      letterDateStr,
+      mimeType,
+      customFolderId
+    );
 
-    let targetFolderId = '';
-    let storageDestination = '';
-    let logicalPath = '';
-
-    // 1. Check if customFolderId is explicitly passed (e.g. from subfolder picker in form)
-    if (customFolderId) {
-      try {
-        const folderRes = await drive.files.get({
-          fileId: customFolderId,
-          fields: 'id, name, mimeType, trashed',
-        });
-        if (folderRes.data.trashed) {
-          throw new Error(`Folder Google Drive '${folderRes.data.name || customFolderId}' berada di kotak sampah.`);
-        }
-        if (folderRes.data.mimeType !== 'application/vnd.google-apps.folder') {
-          throw new Error(`ID '${customFolderId}' bukan sebuah folder Google Drive.`);
-        }
-        targetFolderId = customFolderId;
-        storageDestination = folderRes.data.name || 'Folder Pilihan';
-        logicalPath = `${storageDestination}/${originalFileName}`;
-      } catch (e: any) {
-        console.error(`[GoogleDrive] Custom folder ID ${customFolderId} not accessible:`, e);
-        throw new Error(e.message || `Folder Google Drive '${customFolderId}' tidak ditemukan atau tidak dapat diakses.`);
-      }
-    } else {
-      // 2. Resolve user's configured storage destination for this letter type
-      const configuredFolderId = letterType === 'incoming'
-        ? user?.incoming_storage_folder_id
-        : user?.outgoing_storage_folder_id;
-      const configuredFolderName = letterType === 'incoming'
-        ? (user?.incoming_storage_folder_name || 'esurat')
-        : (user?.outgoing_storage_folder_name || 'esurat-keluar');
-      const useMonthlyOrg = letterType === 'incoming'
-        ? !!user?.incoming_monthly_organization
-        : !!user?.outgoing_monthly_organization;
-
-      const defaultRootId = letterType === 'incoming' ? user?.drive_folder_id : user?.drive_keluar_folder_id;
-      const isDefault = !configuredFolderId || configuredFolderId === defaultRootId;
-
-      if (isDefault) {
-        // Default esurat / esurat-keluar structure:
-        // esurat/MM-YY/Excel, esurat/MM-YY/Photos, esurat/MM-YY/PDF
-        let rootFolderId = defaultRootId;
-        const otherFolderId = letterType === 'incoming' ? user?.drive_keluar_folder_id : user?.drive_folder_id;
-
-        if (rootFolderId && otherFolderId && rootFolderId === otherFolderId) {
-          console.warn(`[GoogleDrive] Identical folder ID detected for incoming and outgoing. Resetting rootFolderId for ${letterType}.`);
-          rootFolderId = null;
-        }
-
-        if (!rootFolderId) {
-          rootFolderId = await findOrCreateFolder(drive, rootName, undefined, otherFolderId);
-          if (letterType === 'incoming') {
-            await updateUserGoogleResourceIds(userId, { drive_folder_id: rootFolderId });
-          } else {
-            await updateUserGoogleResourceIds(userId, { drive_keluar_folder_id: rootFolderId });
-          }
-        }
-
-        const monthFolderId = await findOrCreateFolder(drive, monthYear, rootFolderId);
-        targetFolderId = await findOrCreateFolder(drive, subfolder, monthFolderId);
-        storageDestination = rootName;
-        logicalPath = `${rootName}/${monthYear}/${subfolder}/${originalFileName}`;
-      } else {
-        // User-selected existing folder: preserve all existing contents
-        try {
-          const folderRes = await drive.files.get({
-            fileId: configuredFolderId,
-            fields: 'id, name, mimeType, trashed',
-          });
-          if (folderRes.data.trashed) {
-            throw new Error(`Folder tujuan penyimpanan Google Drive '${configuredFolderName}' berada di kotak sampah.`);
-          }
-          if (folderRes.data.mimeType !== 'application/vnd.google-apps.folder') {
-            throw new Error(`Folder tujuan penyimpanan Google Drive '${configuredFolderName}' bukan sebuah folder.`);
-          }
-          const verifiedName = folderRes.data.name || configuredFolderName;
-          storageDestination = verifiedName;
-
-          if (useMonthlyOrg) {
-            // User explicitly chose monthly organization inside custom folder:
-            // <customFolder>/MM-YY/<subfolder>/<fileName>
-            const monthFolderId = await findOrCreateFolder(drive, monthYear, configuredFolderId);
-            targetFolderId = await findOrCreateFolder(drive, subfolder, monthFolderId);
-            logicalPath = `${verifiedName}/${monthYear}/${subfolder}/${originalFileName}`;
-          } else {
-            // Default for user-selected folders: direct upload into the selected folder
-            targetFolderId = configuredFolderId;
-            logicalPath = `${verifiedName}/${originalFileName}`;
-          }
-        } catch (folderErr: any) {
-          console.error(`[GoogleDrive] Configured storage folder inaccessible for user ${userId}:`, folderErr);
-          throw new Error(
-            `Folder tujuan penyimpanan Google Drive '${configuredFolderName}' tidak ditemukan atau telah dipindahkan/dihapus di Google Drive. Silakan buka Pengaturan Profil untuk memilih folder tujuan baru.`
-          );
-        }
-      }
-    }
-
-    // 3. Upload file using Resumable Upload protocol (streaming binary, handles up to 50MB reliably)
+    // Upload file using Resumable Upload protocol (streaming binary, handles up to 50MB reliably)
     const fileMetadata = {
       name: originalFileName,
       parents: [targetFolderId],

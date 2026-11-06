@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { google } from 'googleapis';
 import { isGoogleErrorInvalidGrant, GoogleReconnectRequiredError, getOAuth2ClientForUser } from '../services/userGoogleAuthService';
-import { uploadUserLetterFile, deleteUserFile, moveDriveFileToCorrectFolder, formatMonthFolderName, getMonthName, validateFolderOwnership } from '../services/userGoogleDriveService';
+import { uploadUserLetterFile, deleteUserFile, moveDriveFileToCorrectFolder, formatMonthFolderName, getMonthName, validateFolderOwnership, createResumableUploadSession, confirmUploadedDriveFile } from '../services/userGoogleDriveService';
 import { MAX_MAIL_UPLOAD_SIZE_BYTES, MAX_MAIL_UPLOAD_SIZE_MB } from '../config/upload';
 import { findFolderById, findFoldersByUser } from '../models/Folder';
 import {
@@ -189,7 +189,27 @@ export const store = async (req: AuthRequest, res: Response) => {
     let originalFileName = '';
     let fileMimeType = '';
 
-    if (req.file) {
+    if (req.body.uploaded_drive_file_id) {
+      try {
+        const confirmed = await confirmUploadedDriveFile(userId, req.body.uploaded_drive_file_id);
+        googleDriveId = confirmed.fileId;
+        webViewLink = confirmed.webViewLink;
+        logicalPath = req.body.logical_path || confirmed.name;
+        parentFolderId = req.body.parent_folder_id || '';
+        storageDestination = req.body.storage_destination || '';
+        originalFileName = req.body.original_file_name || confirmed.name;
+        fileMimeType = req.body.file_mime_type || '';
+      } catch (confirmErr: any) {
+        if (isGoogleErrorInvalidGrant(confirmErr)) {
+          return res.status(401).json({
+            error_code: 'GOOGLE_RECONNECT_REQUIRED',
+            error: 'Koneksi Google perlu diperbarui',
+            message: 'Your Google connection needs to be renewed. Please reconnect your Google account to continue.',
+          });
+        }
+        return res.status(500).json({ error: confirmErr.message || 'Gagal memverifikasi file Google Drive' });
+      }
+    } else if (req.file) {
       originalFileName = req.file.originalname || `${nomor_surat}_${Date.now()}`;
       fileMimeType = req.file.mimetype || 'application/octet-stream';
       const ext = path.extname(originalFileName) || '.pdf';
@@ -366,8 +386,40 @@ export const update = async (req: AuthRequest, res: Response) => {
     let originalFileName = oldSurat.original_file_name || '';
     let fileMimeType = oldSurat.file_mime_type || '';
 
-    if (req.file) {
+    if (req.body.uploaded_drive_file_id) {
+      const oldDriveIdToDelete = oldSurat.google_drive_id;
+      try {
+        const confirmed = await confirmUploadedDriveFile(userId, req.body.uploaded_drive_file_id);
+        googleDriveId = confirmed.fileId;
+        webViewLink = confirmed.webViewLink;
+        logicalPath = req.body.logical_path || confirmed.name;
+        parentFolderId = req.body.parent_folder_id || oldSurat.drive_parent_folder_id || '';
+        storageDestination = req.body.storage_destination || oldSurat.storage_destination || '';
+        originalFileName = req.body.original_file_name || confirmed.name;
+        fileMimeType = req.body.file_mime_type || oldSurat.file_mime_type || '';
+
+        // Safely remove the old file ONLY after new upload is confirmed
+        if (oldDriveIdToDelete && oldDriveIdToDelete !== googleDriveId) {
+          try {
+            await deleteUserFile(userId, oldDriveIdToDelete);
+            console.log(`[GoogleDrive] Cleaned up replaced old file: ${oldDriveIdToDelete}`);
+          } catch (deleteErr) {
+            console.warn(`[GoogleDrive] Non-fatal: Failed to delete old file after replacement:`, deleteErr);
+          }
+        }
+      } catch (confirmErr: any) {
+        if (isGoogleErrorInvalidGrant(confirmErr)) {
+          return res.status(401).json({
+            error_code: 'GOOGLE_RECONNECT_REQUIRED',
+            error: 'Koneksi Google perlu diperbarui',
+            message: 'Your Google connection needs to be renewed. Please reconnect your Google account to continue.',
+          });
+        }
+        return res.status(500).json({ error: confirmErr.message || 'Gagal memverifikasi file Google Drive' });
+      }
+    } else if (req.file) {
       originalFileName = req.file.originalname || `${nomor_surat}_${Date.now()}`;
+      fileMimeType = req.file.mimetype || 'application/octet-stream';
       const oldDriveIdToDelete = oldSurat.google_drive_id;
       const ext = path.extname(originalFileName) || '.pdf';
       const cleanFileName = `${nomor_surat.replace(/[\/\\?%*:|"<>]/g, '_')}_${nama_surat.replace(/[\/\\?%*:|"<>]/g, '_')}_${Date.now()}${ext}`;
@@ -459,6 +511,7 @@ export const update = async (req: AuthRequest, res: Response) => {
       updated_at: new Date().toISOString(),
     };
 
+    let sheetSyncWarning: string | undefined;
     try {
       await updateIncomingLetterInSheet(userId, rowNumber, surat, oldSurat.google_sheet_row, oldSurat.google_drive_id);
     } catch (sheetError: any) {
@@ -470,15 +523,33 @@ export const update = async (req: AuthRequest, res: Response) => {
           message: 'Your Google connection needs to be renewed. Please reconnect your Google account to continue.',
         });
       }
+      sheetSyncWarning = sheetError.message || 'Gagal menyinkronkan data ke Google Sheet';
     }
 
     try {
       await updateIncomingLetterRecord(rowNumber, userId, surat);
-    } catch (dbErr) {
-      console.warn('DB record update sync warning:', dbErr);
+    } catch (dbErr: any) {
+      console.error('DB record update sync warning:', dbErr);
+      return res.status(500).json({
+        error: 'DATABASE_UPDATE_FAILED',
+        message: 'Gagal memperbarui data surat di database',
+        details: dbErr.message,
+        drive_file_id: googleDriveId,
+      });
     }
 
-    res.json({ success: true, message: 'Surat updated successfully', surat, data: surat });
+    if (sheetSyncWarning) {
+      return res.json({
+        success: true,
+        sheets_synced: false,
+        warning: `Data berhasil diperbarui di database dan Google Drive, namun sinkronisasi Google Sheet tertunda: ${sheetSyncWarning}`,
+        message: `Surat berhasil diperbarui di Google Drive. Sinkronisasi Google Sheets tertunda: ${sheetSyncWarning}`,
+        surat,
+        data: surat,
+      });
+    }
+
+    res.json({ success: true, message: 'Surat updated successfully', surat, data: surat, sheets_synced: true });
   } catch (error: any) {
     console.error('Update surat error:', error);
     if (isGoogleErrorInvalidGrant(error)) {
@@ -849,6 +920,86 @@ export const serveFile = async (req: AuthRequest, res: Response) => {
         error_code: 'SERVER_ERROR'
       });
     }
+  }
+};
+
+/**
+ * Create a direct resumable upload session with Google Drive.
+ * This allows uploading files up to 50 MB (including the 9.15 MB reproduction case)
+ * directly from the browser to Google Drive, completely bypassing serverless / proxy body limits.
+ */
+export const createUploadSession = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { original_file_name, file_size, mime_type, tanggal_masuk, folder_id, nomor_surat, nama_surat } = req.body;
+
+    if (!original_file_name) {
+      return res.status(400).json({ error: 'Nama file asli wajib diisi' });
+    }
+
+    const size = parseInt(file_size);
+    if (isNaN(size) || size <= 0) {
+      return res.status(400).json({ error: 'Ukuran file tidak valid' });
+    }
+
+    if (size > MAX_MAIL_UPLOAD_SIZE_BYTES) {
+      const fileMB = (size / (1024 * 1024)).toFixed(1);
+      return res.status(413).json({
+        error: 'FILE_TOO_LARGE',
+        message: `Ukuran file maksimum adalah ${MAX_MAIL_UPLOAD_SIZE_MB} MB. File Anda ${fileMB} MB — silakan kurangi ukurannya dan coba lagi.`,
+      });
+    }
+
+    let customFolderDriveId: string | undefined;
+    if (folder_id) {
+      const validation = await validateFolderOwnership(userId, folder_id, 'incoming');
+      if (!validation.valid) {
+        return res.status(403).json({
+          error: 'Forbidden',
+          message: 'Folder yang dipilih tidak valid atau tidak dimiliki oleh akun Anda.',
+        });
+      }
+      customFolderDriveId = validation.googleDriveFolderId;
+    }
+
+    const ext = path.extname(original_file_name) || '.pdf';
+    const uploadFileName = (nomor_surat && nama_surat)
+      ? `${nomor_surat.replace(/[\/\\?%*:|"<>]/g, '_')}_${nama_surat.replace(/[\/\\?%*:|"<>]/g, '_')}_${Date.now()}${ext}`
+      : original_file_name;
+
+    const session = await createResumableUploadSession(
+      userId,
+      uploadFileName,
+      size,
+      'incoming',
+      tanggal_masuk,
+      mime_type,
+      customFolderDriveId
+    );
+
+    res.json({
+      success: true,
+      sessionUri: session.sessionUri,
+      cleanFileName: session.cleanFileName,
+      logicalPath: session.logicalPath,
+      parentFolderId: session.parentFolderId,
+      storageDestination: session.storageDestination,
+    });
+  } catch (error: any) {
+    console.error('Create upload session error:', error);
+    if (isGoogleErrorInvalidGrant(error)) {
+      return res.status(401).json({
+        error_code: 'GOOGLE_RECONNECT_REQUIRED',
+        error: 'Koneksi Google perlu diperbarui',
+        message: 'Your Google connection needs to be renewed. Please reconnect your Google account to continue.',
+      });
+    }
+    const errMsg = error.message || 'Gagal membuat sesi upload Google Drive';
+    res.status(500).json({ error: errMsg, message: errMsg });
   }
 };
 

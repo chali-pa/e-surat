@@ -5,6 +5,7 @@ import FolderSelector from '../drive/FolderSelector';
 import ChangeStorageDestinationModal from '../drive/ChangeStorageDestinationModal';
 import DocumentPreviewModal from '../DocumentPreviewModal';
 import { MAX_MAIL_UPLOAD_SIZE_MB } from '../../config/constants';
+import { uploadLetterFileResumable } from '../../utils/resumableUpload';
 
 /**
  * Supported file types for mail form uploads.
@@ -233,10 +234,55 @@ export default function MailForm({ type, id, prepopulatedFile, onClearFile, onSa
     setLoading(true);
     setUploadProgress(0);
 
+    let uploadedDriveMeta = null;
+
+    // Use direct Google Drive Resumable Upload for files to bypass proxy/serverless body limits
+    if (formData.file_surat instanceof File) {
+      try {
+        const letterDate = type === 'incoming' ? formData.tanggal_masuk : formData.tanggal_keluar;
+        const targetFolderId = selectedFolder?.google_drive_folder_id || selectedFolder?.id || customDestination?.id;
+
+        uploadedDriveMeta = await uploadLetterFileResumable({
+          file: formData.file_surat,
+          letterType: type,
+          letterDate,
+          folderId: targetFolderId,
+          nomorSurat: formData.nomor_surat,
+          namaSurat: formData.nama_surat,
+          onProgress: (pct) => setUploadProgress(pct),
+        });
+      } catch (uploadErr) {
+        console.warn('[MailForm] Direct resumable upload failed, attempting fallback to multipart upload:', uploadErr);
+        if (uploadErr.response?.data?.error_code === 'GOOGLE_RECONNECT_REQUIRED') {
+          setLoading(false);
+          setUploadProgress(0);
+          setErrors({
+            googleReconnect: true,
+            general: 'Your Google connection needs to be renewed. Please reconnect your Google account to continue.',
+          });
+          return;
+        }
+        if (uploadErr.message && uploadErr.message.includes('50 MB')) {
+          setLoading(false);
+          setUploadProgress(0);
+          setErrors({ file_surat: uploadErr.message });
+          return;
+        }
+        // If direct upload failed due to network, will fall back to multipart FormData upload below
+      }
+    }
+
     const data = new FormData();
     Object.keys(formData).forEach((key) => {
       if (key === 'file_surat') {
-        if (formData.file_surat instanceof File) {
+        if (uploadedDriveMeta) {
+          data.append('uploaded_drive_file_id', uploadedDriveMeta.uploaded_drive_file_id);
+          data.append('original_file_name', uploadedDriveMeta.original_file_name);
+          data.append('file_mime_type', uploadedDriveMeta.file_mime_type);
+          if (uploadedDriveMeta.logical_path) data.append('logical_path', uploadedDriveMeta.logical_path);
+          if (uploadedDriveMeta.parent_folder_id) data.append('parent_folder_id', uploadedDriveMeta.parent_folder_id);
+          if (uploadedDriveMeta.storage_destination) data.append('storage_destination', uploadedDriveMeta.storage_destination);
+        } else if (formData.file_surat instanceof File) {
           data.append('file_surat', formData.file_surat);
         }
       } else if (formData[key] !== null && formData[key] !== undefined) {
@@ -257,8 +303,10 @@ export default function MailForm({ type, id, prepopulatedFile, onClearFile, onSa
         response = await api.post(endpoint, data, {
           headers: { 'Content-Type': 'multipart/form-data' },
           onUploadProgress: (progressEvent) => {
-            const pct = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-            setUploadProgress(pct);
+            if (!uploadedDriveMeta) {
+              const pct = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+              setUploadProgress(pct);
+            }
           },
         });
       } else {
@@ -266,14 +314,16 @@ export default function MailForm({ type, id, prepopulatedFile, onClearFile, onSa
         response = await api.post(endpoint, data, {
           headers: { 'Content-Type': 'multipart/form-data' },
           onUploadProgress: (progressEvent) => {
-            const pct = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-            setUploadProgress(pct);
+            if (!uploadedDriveMeta) {
+              const pct = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+              setUploadProgress(pct);
+            }
           },
         });
       }
 
       if (response.data.success) {
-        onSaved(type, isEditMode ? 'updated' : 'created');
+        onSaved(type, isEditMode ? 'updated' : 'created', response.data.warning);
       }
     } catch (error) {
       console.error(`Error saving ${type} mail:`, error);

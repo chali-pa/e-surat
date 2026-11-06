@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { index, show, store, update, destroy, preview, serveFile } from '../controllers/suratController';
+import { index, show, store, update, destroy, preview, serveFile, createUploadSession } from '../controllers/suratController';
 import { incomingMonthlyPdf, incomingExport } from '../controllers/reportController';
 import { authenticate } from '../middleware/auth';
 import upload from '../config/upload';
@@ -13,6 +13,7 @@ router.get('/', index);
 // Static sub-resource routes must come BEFORE /:id to avoid ambiguity
 router.get('/monthly-pdf', incomingMonthlyPdf as any);
 router.get('/export',      incomingExport as any);
+router.post('/upload-session', createUploadSession);
 router.get('/:id/file', serveFile);
 router.get('/:id/preview/:filename?', preview);
 router.get('/:id', show);

@@ -50,6 +50,7 @@ const upload = multer({
   fileFilter: (_req, file, cb) => {
     const allowedTypes = [
       'application/pdf',
+      'application/x-pdf',
       'application/msword',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'application/vnd.ms-excel',
@@ -57,7 +58,10 @@ const upload = multer({
       'image/jpeg',
       'image/png',
     ];
-    if (allowedTypes.includes(file.mimetype)) {
+    const allowedExtensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.jpg', '.jpeg', '.png'];
+    const ext = (file.originalname ? file.originalname.slice(file.originalname.lastIndexOf('.')).toLowerCase() : '');
+
+    if (allowedTypes.includes(file.mimetype) || allowedExtensions.includes(ext)) {
       cb(null, true);
     } else {
       cb(new Error('Invalid file type. Only PDF, DOC, DOCX, XLS, XLSX, JPG, PNG are allowed.'));

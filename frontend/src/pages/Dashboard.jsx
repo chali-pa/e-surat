@@ -665,14 +665,23 @@ export default function Dashboard() {
     return () => document.removeEventListener('mousedown', handler);
   }, [scanHelpOpen, printHelpOpen]);
 
-  const handleSaved = (type, action) => {
+  const handleSaved = (type, action, warningMessage) => {
     navigateToView('list');
     setEditingId(null);
     setScannedFile(null);
-    setToast({
-      show: true, type: 'success',
-      message: `Surat ${type === 'incoming' ? 'masuk' : 'keluar'} berhasil ${action === 'created' ? 'ditambahkan' : 'diperbarui'}.`,
-    });
+    if (warningMessage) {
+      setToast({
+        show: true,
+        type: 'warning',
+        message: warningMessage,
+      });
+    } else {
+      setToast({
+        show: true,
+        type: 'success',
+        message: `Surat ${type === 'incoming' ? 'masuk' : 'keluar'} berhasil ${action === 'created' ? 'ditambahkan' : 'diperbarui'}.`,
+      });
+    }
     fetchData();
   };
 

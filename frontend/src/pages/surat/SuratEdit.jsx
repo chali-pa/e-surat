@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import api from '../../api/axios'
 import FolderSelector from '../../components/drive/FolderSelector'
+import { uploadLetterFileResumable } from '../../utils/resumableUpload'
 
 export default function SuratEdit() {
   const { id } = useParams()
@@ -50,10 +51,45 @@ export default function SuratEdit() {
     setErrors({})
     setSubmitting(true)
 
+    let uploadedDriveMeta = null
+
+    if (formData.file_surat instanceof File) {
+      try {
+        const targetFolderId = selectedFolder?.google_drive_folder_id || selectedFolder?.id
+        uploadedDriveMeta = await uploadLetterFileResumable({
+          file: formData.file_surat,
+          letterType: 'incoming',
+          letterDate: formData.tanggal_masuk,
+          folderId: targetFolderId,
+          nomorSurat: formData.nomor_surat,
+          namaSurat: formData.nama_surat,
+        })
+      } catch (uploadErr) {
+        console.warn('[SuratEdit] Direct resumable upload error:', uploadErr)
+        if (uploadErr.response?.data?.error_code === 'GOOGLE_RECONNECT_REQUIRED') {
+          setSubmitting(false)
+          setReconnectNeeded(true)
+          return
+        }
+        if (uploadErr.message && uploadErr.message.includes('50 MB')) {
+          setSubmitting(false)
+          setErrors({ file_surat: uploadErr.message })
+          return
+        }
+      }
+    }
+
     const data = new FormData()
     Object.keys(formData).forEach(key => {
       if (key === 'file_surat') {
-        if (formData.file_surat instanceof File) {
+        if (uploadedDriveMeta) {
+          data.append('uploaded_drive_file_id', uploadedDriveMeta.uploaded_drive_file_id)
+          data.append('original_file_name', uploadedDriveMeta.original_file_name)
+          data.append('file_mime_type', uploadedDriveMeta.file_mime_type)
+          if (uploadedDriveMeta.logical_path) data.append('logical_path', uploadedDriveMeta.logical_path)
+          if (uploadedDriveMeta.parent_folder_id) data.append('parent_folder_id', uploadedDriveMeta.parent_folder_id)
+          if (uploadedDriveMeta.storage_destination) data.append('storage_destination', uploadedDriveMeta.storage_destination)
+        } else if (formData.file_surat instanceof File) {
           data.append('file_surat', formData.file_surat)
         }
       } else if (formData[key] !== null && formData[key] !== undefined) {

@@ -32,18 +32,16 @@
 import multer from 'multer';
 
 /**
- * Maximum file size for multipart buffer upload directly through the backend.
- * Files larger than 50 MB automatically switch to direct Google Drive resumable upload.
+ * Maximum permitted file size for mail uploads (50 MB).
+ * Enforced across all upload paths (multipart and resumable sessions).
  */
+export const MAX_MAIL_UPLOAD_SIZE_MB = 50;
+export const MAX_MAIL_UPLOAD_SIZE_BYTES = MAX_MAIL_UPLOAD_SIZE_MB * 1024 * 1024;
+
 export const MAX_MULTIPART_UPLOAD_SIZE_MB = 50;
 export const MAX_MULTIPART_UPLOAD_SIZE_BYTES = MAX_MULTIPART_UPLOAD_SIZE_MB * 1024 * 1024;
 
-/**
- * Maximum overall allowed file size for Google Drive resumable uploads (5 GB).
- * Ensures files larger than 50 MB are not rejected.
- */
-export const MAX_MAIL_UPLOAD_SIZE_MB = 5120;
-export const MAX_MAIL_UPLOAD_SIZE_BYTES = MAX_MAIL_UPLOAD_SIZE_MB * 1024 * 1024;
+
 
 const storage = multer.memoryStorage();
 
@@ -61,14 +59,15 @@ const upload = multer({
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'image/jpeg',
       'image/png',
+      'image/webp',
     ];
-    const allowedExtensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.jpg', '.jpeg', '.png'];
+    const allowedExtensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.jpg', '.jpeg', '.png', '.webp'];
     const ext = (file.originalname ? file.originalname.slice(file.originalname.lastIndexOf('.')).toLowerCase() : '');
 
     if (allowedTypes.includes(file.mimetype) || allowedExtensions.includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error('Invalid file type. Only PDF, DOC, DOCX, XLS, XLSX, JPG, PNG are allowed.'));
+      cb(new Error('Invalid file type. Only PDF, DOC, DOCX, XLS, XLSX, JPG, PNG, WEBP are allowed.'));
     }
   },
 });

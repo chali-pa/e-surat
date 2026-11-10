@@ -372,13 +372,12 @@ export const update = async (req: AuthRequest, res: Response) => {
     }
 
     // ── Mail upload size limit ───────────────────────────────────────────────
-    // For multipart uploads directly through the backend, limit is MAX_MULTIPART_UPLOAD_SIZE_BYTES (50 MB).
-    // Files > 50 MB use direct-to-Drive resumable upload sessions.
-    if (req.file && req.file.size > MAX_MULTIPART_UPLOAD_SIZE_BYTES) {
+    // Applied to all file uploads (50 MB maximum).
+    if (req.file && req.file.size > MAX_MAIL_UPLOAD_SIZE_BYTES) {
       const fileMB = (req.file.size / (1024 * 1024)).toFixed(1);
       return res.status(413).json({
         error: 'FILE_TOO_LARGE',
-        message: `File berukuran ${fileMB} MB. Untuk file di atas ${MAX_MULTIPART_UPLOAD_SIZE_MB} MB, silakan gunakan metode upload langsung (resumable) yang didukung otomatis oleh sistem.`,
+        message: `Ukuran file maksimum adalah ${MAX_MAIL_UPLOAD_SIZE_MB} MB. File Anda ${fileMB} MB — silakan kurangi ukurannya dan coba lagi.`,
       });
     }
 
@@ -482,13 +481,12 @@ export const update = async (req: AuthRequest, res: Response) => {
       const newMonth = getMonthName(tanggal_keluar);
       const folderChanged = String(oldSurat.folder_id || '') !== String(folder_id || '');
 
-      // Identify whether the file belongs to the default E-Surat folder structure or external/custom folder
-      const isDefaultEsurat = (oldSurat.file_path && oldSurat.file_path.startsWith('esurat-keluar/')) ||
-                              (oldSurat.storage_destination === 'esurat-keluar');
+      // Identify whether the file belongs to the default E-Surat folder structure
+      const isDefaultEsurat = Boolean(oldSurat.file_path && oldSurat.file_path.startsWith('esurat-keluar/'));
 
       // CRITICAL: Documents outside esurat-keluar must remain in their current location.
       // Do NOT create esurat-keluar/MM-YY/PDF folders when updating metadata outside esurat!
-      if (folderChanged || (isDefaultEsurat && oldMonth !== newMonth)) {
+      if ((customFolderDriveId && folderChanged) || (isDefaultEsurat && (folderChanged || oldMonth !== newMonth))) {
         console.log(`[GoogleDrive] Moving file in Google Drive...`);
         try {
           const fileName = oldSurat.file_path ? path.basename(oldSurat.file_path) : `${nomor_surat}_file.pdf`;
@@ -972,7 +970,7 @@ export const createUploadSession = async (req: AuthRequest, res: Response) => {
       const fileMB = (size / (1024 * 1024)).toFixed(1);
       return res.status(413).json({
         error: 'FILE_TOO_LARGE',
-        message: `Ukuran file (${fileMB} MB) melebihi batas sistem Google Drive.`,
+        message: `Ukuran file maksimum adalah ${MAX_MAIL_UPLOAD_SIZE_MB} MB. File Anda ${fileMB} MB — silakan kurangi ukurannya dan coba lagi.`,
       });
     }
 

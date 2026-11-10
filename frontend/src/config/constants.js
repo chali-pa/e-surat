@@ -1,11 +1,5 @@
 /**
- * 50 MB threshold: files above this threshold automatically use direct Google Drive resumable upload.
- * Files up to 50 MB can use either direct resumable upload or standard upload.
+ * Maximum permitted file size for mail documents and photos (50 MB).
+ * Files up to 50 MB are allowed; files exceeding 50 MB are rejected.
  */
-export const LARGE_FILE_THRESHOLD_MB = 50;
-
-/**
- * Upper safety limit for mail documents and photos (Google Drive API supports up to 5 TB).
- * Set to 5 GB (5120 MB) so that large files (> 50 MB) are never arbitrarily rejected.
- */
-export const MAX_MAIL_UPLOAD_SIZE_MB = 5120;
+export const MAX_MAIL_UPLOAD_SIZE_MB = 50;

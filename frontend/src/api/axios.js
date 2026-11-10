@@ -1,10 +1,7 @@
 import axios from 'axios';
 
-let rawBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').trim();
-if (rawBaseUrl.endsWith('/')) {
-  rawBaseUrl = rawBaseUrl.slice(0, -1);
-}
-const API_BASE_URL = rawBaseUrl || (typeof window !== 'undefined' && window.location.port === '5173' ? '' : 'http://localhost:3000');
+let rawBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/+$/, '');
+const API_BASE_URL = (rawBaseUrl || (typeof window !== 'undefined' && window.location.port === '5173' ? '' : 'http://localhost:3000')).replace(/\/+$/, '');
 
 const api = axios.create({
   baseURL: API_BASE_URL,

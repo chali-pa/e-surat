@@ -5,8 +5,8 @@ import fs from 'fs';
 import path from 'path';
 import { google } from 'googleapis';
 import { isGoogleErrorInvalidGrant, GoogleReconnectRequiredError, getOAuth2ClientForUser } from '../services/userGoogleAuthService';
-import { uploadUserLetterFile, deleteUserFile, moveDriveFileToCorrectFolder, formatMonthFolderName, getMonthName, validateFolderOwnership, createResumableUploadSession, confirmUploadedDriveFile } from '../services/userGoogleDriveService';
-import { MAX_MAIL_UPLOAD_SIZE_BYTES, MAX_MAIL_UPLOAD_SIZE_MB } from '../config/upload';
+import { uploadUserLetterFile, deleteUserFile, moveDriveFileToCorrectFolder, formatMonthFolderName, getMonthName, validateFolderOwnership, createResumableUploadSession, confirmUploadedDriveFile, createResumableUpdateSession, updateExistingDriveFile } from '../services/userGoogleDriveService';
+import { MAX_MAIL_UPLOAD_SIZE_BYTES, MAX_MAIL_UPLOAD_SIZE_MB, MAX_MULTIPART_UPLOAD_SIZE_BYTES, MAX_MULTIPART_UPLOAD_SIZE_MB } from '../config/upload';
 import { findFolderById, findFoldersByUser } from '../models/Folder';
 import {
   getIncomingLetterByRow,
@@ -372,13 +372,14 @@ export const update = async (req: AuthRequest, res: Response) => {
     }
 
     // ── Mail upload size limit ──────────────────────────────────────────────
-    // Applies to all file replacements, regardless of folder assignment.
-    // See backend/src/config/upload.ts for the single-source constant.
-    if (req.file && req.file.size > MAX_MAIL_UPLOAD_SIZE_BYTES) {
+    // ── Mail upload size limit ──────────────────────────────────────────────
+    // For multipart uploads directly through the backend, limit is MAX_MULTIPART_UPLOAD_SIZE_BYTES (50 MB).
+    // Files > 50 MB use direct-to-Drive resumable upload sessions.
+    if (req.file && req.file.size > MAX_MULTIPART_UPLOAD_SIZE_BYTES) {
       const fileMB = (req.file.size / (1024 * 1024)).toFixed(1);
       return res.status(413).json({
         error: 'FILE_TOO_LARGE',
-        message: `Ukuran file maksimum adalah ${MAX_MAIL_UPLOAD_SIZE_MB} MB. File Anda ${fileMB} MB — silakan kurangi ukurannya dan coba lagi.`,
+        message: `File berukuran ${fileMB} MB. Untuk file di atas ${MAX_MULTIPART_UPLOAD_SIZE_MB} MB, silakan gunakan metode upload langsung (resumable) yang didukung otomatis oleh sistem.`,
       });
     }
 
@@ -399,7 +400,7 @@ export const update = async (req: AuthRequest, res: Response) => {
         originalFileName = req.body.original_file_name || confirmed.name;
         fileMimeType = req.body.file_mime_type || oldSurat.file_mime_type || '';
 
-        // Safely remove the old file ONLY after new upload is confirmed
+        // Safely remove the old file ONLY if a completely new file was created and upload is confirmed
         if (oldDriveIdToDelete && oldDriveIdToDelete !== googleDriveId) {
           try {
             await deleteUserFile(userId, oldDriveIdToDelete);
@@ -426,29 +427,45 @@ export const update = async (req: AuthRequest, res: Response) => {
       const cleanFileName = `${nomor_surat.replace(/[\/\\?%*:|"<>]/g, '_')}_${nama_surat.replace(/[\/\\?%*:|"<>]/g, '_')}_${Date.now()}${ext}`;
 
       try {
-        const uploadResult = await uploadUserLetterFile(
-          userId,
-          req.file.buffer,
-          cleanFileName,
-          'incoming',
-          tanggal_masuk,
-          req.file.mimetype,
-          customFolderDriveId
-        );
+        // If updating an existing Drive file and no explicit different folder was requested, update in-place!
+        if (oldSurat.google_drive_id && !customFolderDriveId) {
+          const updateResult = await updateExistingDriveFile(
+            userId,
+            oldSurat.google_drive_id,
+            req.file.buffer,
+            cleanFileName,
+            req.file.mimetype
+          );
+          googleDriveId = updateResult.fileId;
+          webViewLink = updateResult.webViewLink;
+          logicalPath = updateResult.logicalPath;
+          parentFolderId = updateResult.parentFolderId;
+          storageDestination = updateResult.storageDestination;
+        } else {
+          const uploadResult = await uploadUserLetterFile(
+            userId,
+            req.file.buffer,
+            cleanFileName,
+            'incoming',
+            tanggal_masuk,
+            req.file.mimetype,
+            customFolderDriveId
+          );
 
-        googleDriveId = uploadResult.fileId;
-        webViewLink = uploadResult.webViewLink;
-        logicalPath = uploadResult.logicalPath;
-        parentFolderId = uploadResult.parentFolderId;
-        storageDestination = uploadResult.storageDestination;
+          googleDriveId = uploadResult.fileId;
+          webViewLink = uploadResult.webViewLink;
+          logicalPath = uploadResult.logicalPath;
+          parentFolderId = uploadResult.parentFolderId;
+          storageDestination = uploadResult.storageDestination;
 
-        // Safely remove the old file ONLY after new upload is confirmed
-        if (oldDriveIdToDelete && oldDriveIdToDelete !== googleDriveId) {
-          try {
-            await deleteUserFile(userId, oldDriveIdToDelete);
-            console.log(`[GoogleDrive] Cleaned up replaced old file: ${oldDriveIdToDelete}`);
-          } catch (deleteErr) {
-            console.warn(`[GoogleDrive] Non-fatal: Failed to delete old file after replacement:`, deleteErr);
+          // Safely remove the old file ONLY after new upload is confirmed
+          if (oldDriveIdToDelete && oldDriveIdToDelete !== googleDriveId) {
+            try {
+              await deleteUserFile(userId, oldDriveIdToDelete);
+              console.log(`[GoogleDrive] Cleaned up replaced old file: ${oldDriveIdToDelete}`);
+            } catch (deleteErr) {
+              console.warn(`[GoogleDrive] Non-fatal: Failed to delete old file after replacement:`, deleteErr);
+            }
           }
         }
       } catch (uploadError: any) {
@@ -466,8 +483,14 @@ export const update = async (req: AuthRequest, res: Response) => {
       const newMonth = getMonthName(tanggal_masuk);
       const folderChanged = String(oldSurat.folder_id || '') !== String(folder_id || '');
 
-      if (oldMonth !== newMonth || folderChanged) {
-        console.log(`[GoogleDrive] Date or folder changed. Moving file in Google Drive...`);
+      // Identify whether the file belongs to the default E-Surat folder structure or external/custom folder
+      const isDefaultEsurat = (oldSurat.file_path && oldSurat.file_path.startsWith('esurat/')) ||
+                              (oldSurat.storage_destination === 'esurat');
+
+      // CRITICAL: Documents outside esurat must remain in their current location.
+      // Do NOT create esurat/MM-YY/PDF folders when updating metadata outside esurat!
+      if (folderChanged || (isDefaultEsurat && oldMonth !== newMonth)) {
+        console.log(`[GoogleDrive] Moving file in Google Drive...`);
         try {
           const fileName = oldSurat.file_path ? path.basename(oldSurat.file_path) : `${nomor_surat}_file.pdf`;
           const moveResult = await moveDriveFileToCorrectFolder(
@@ -489,7 +512,7 @@ export const update = async (req: AuthRequest, res: Response) => {
               message: 'Your Google connection needs to be renewed. Please reconnect your Google account to continue.',
             });
           }
-          // Non-fatal: if moving file in Drive encounters an issue (e.g. file removed directly in Drive), keep existing path
+          // Non-fatal: if moving file in Drive encounters an issue, keep existing path
         }
       }
     }
@@ -936,7 +959,7 @@ export const createUploadSession = async (req: AuthRequest, res: Response) => {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const { original_file_name, file_size, mime_type, tanggal_masuk, folder_id, nomor_surat, nama_surat } = req.body;
+    const { original_file_name, file_size, mime_type, tanggal_masuk, folder_id, nomor_surat, nama_surat, existing_drive_file_id } = req.body;
 
     if (!original_file_name) {
       return res.status(400).json({ error: 'Nama file asli wajib diisi' });
@@ -951,8 +974,41 @@ export const createUploadSession = async (req: AuthRequest, res: Response) => {
       const fileMB = (size / (1024 * 1024)).toFixed(1);
       return res.status(413).json({
         error: 'FILE_TOO_LARGE',
-        message: `Ukuran file maksimum adalah ${MAX_MAIL_UPLOAD_SIZE_MB} MB. File Anda ${fileMB} MB — silakan kurangi ukurannya dan coba lagi.`,
+        message: `Ukuran file (${fileMB} MB) melebihi batas sistem Google Drive.`,
       });
+    }
+
+    const ext = path.extname(original_file_name) || '.pdf';
+    const uploadFileName = (nomor_surat && nama_surat)
+      ? `${nomor_surat.replace(/[\/\\?%*:|"<>]/g, '_')}_${nama_surat.replace(/[\/\\?%*:|"<>]/g, '_')}_${Date.now()}${ext}`
+      : original_file_name;
+
+    // CRITICAL: When updating an existing document and no explicit new folder was specified,
+    // update the file IN-PLACE directly on existing_drive_file_id.
+    // This strictly avoids creating esurat/esurat-keluar/MM-YY/PDF folders for files outside esurat.
+    if (existing_drive_file_id && !folder_id) {
+      try {
+        const session = await createResumableUpdateSession(
+          userId,
+          existing_drive_file_id,
+          uploadFileName,
+          size,
+          mime_type
+        );
+
+        return res.json({
+          success: true,
+          sessionUri: session.sessionUri,
+          cleanFileName: session.cleanFileName,
+          logicalPath: session.logicalPath,
+          parentFolderId: session.parentFolderId,
+          storageDestination: session.storageDestination,
+          is_update: true,
+        });
+      } catch (err: any) {
+        console.warn(`[GoogleDrive] Direct in-place update session failed, falling back to standard session:`, err);
+        // Fall back to standard session if existing file is inaccessible in Drive
+      }
     }
 
     let customFolderDriveId: string | undefined;
@@ -966,11 +1022,6 @@ export const createUploadSession = async (req: AuthRequest, res: Response) => {
       }
       customFolderDriveId = validation.googleDriveFolderId;
     }
-
-    const ext = path.extname(original_file_name) || '.pdf';
-    const uploadFileName = (nomor_surat && nama_surat)
-      ? `${nomor_surat.replace(/[\/\\?%*:|"<>]/g, '_')}_${nama_surat.replace(/[\/\\?%*:|"<>]/g, '_')}_${Date.now()}${ext}`
-      : original_file_name;
 
     const session = await createResumableUploadSession(
       userId,

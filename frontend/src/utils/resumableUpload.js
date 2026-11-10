@@ -13,6 +13,7 @@ import { MAX_MAIL_UPLOAD_SIZE_MB } from '../config/constants';
  * @param {string|number} [options.folderId] - Selected folder ID
  * @param {string} [options.nomorSurat] - Letter number
  * @param {string} [options.namaSurat] - Letter subject/title
+ * @param {string} [options.existingDriveFileId] - Existing Google Drive file ID to update in-place
  * @param {function} [options.onProgress] - Progress callback (percentage 0 - 100)
  * @returns {Promise<{
  *   uploaded_drive_file_id: string,
@@ -30,6 +31,7 @@ export async function uploadLetterFileResumable({
   folderId,
   nomorSurat,
   namaSurat,
+  existingDriveFileId,
   onProgress,
 }) {
   if (!file) {
@@ -53,6 +55,7 @@ export async function uploadLetterFileResumable({
     folder_id: folderId || undefined,
     nomor_surat: nomorSurat || undefined,
     nama_surat: namaSurat || undefined,
+    existing_drive_file_id: existingDriveFileId || undefined,
   });
 
   if (!sessionRes.data?.sessionUri) {

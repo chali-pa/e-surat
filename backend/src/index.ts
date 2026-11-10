@@ -46,6 +46,8 @@ const allowedOrigins = [
   FRONTEND_URL,
   'http://localhost:5173',
   'http://localhost:3000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:3000',
 ];
 
 app.use(cors({
@@ -56,19 +58,26 @@ app.use(cors({
     if (allowedOrigins.includes(origin)) return callback(null, true);
     // Allow *.vercel.app subdomains dynamically
     if (/\.vercel\.app$/.test(origin)) return callback(null, true);
-    callback(new Error(`CORS: Origin '${origin}' not allowed`));
+    // Allow any local development origin (localhost or 127.0.0.1 on any port)
+    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+      return callback(null, true);
+    }
+    // Safely reject unallowed origins without throwing an unhandled Error (which breaks preflight)
+    callback(null, false);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
   exposedHeaders: ['Content-Disposition', 'X-Original-Size', 'X-Compressed-Size', 'X-Was-Compressed', 'X-File-Name'],
 }));
 
-// Rate limiting
+// Rate limiting (generous limit to prevent SPAs with polling and tab-switching from dropping)
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again later.',
+  max: 3000, // Generous ceiling for active SPAs
+  message: { error: 'Too many requests from this IP, please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 app.use('/api/', limiter);
 

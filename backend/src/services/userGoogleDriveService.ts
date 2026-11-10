@@ -579,6 +579,175 @@ export async function createResumableUploadSession(
 }
 
 /**
+ * Create a server-authorized Google Drive Resumable Update session on an existing Drive file.
+ * Updates the existing file IN-PLACE without creating new folders (such as esurat/esurat-keluar/MM-YY/PDF).
+ * Works for files of any size, including documents and photos larger than 50 MB.
+ */
+export async function createResumableUpdateSession(
+  userId: number,
+  existingDriveFileId: string,
+  uploadFileName: string,
+  fileSize: number,
+  mimeType?: string
+): Promise<{
+  sessionUri: string;
+  cleanFileName: string;
+  logicalPath: string;
+  parentFolderId: string;
+  storageDestination: string;
+}> {
+  console.log(`[GoogleDrive] Creating in-place resumable update session for user ${userId}, fileId ${existingDriveFileId}: ${uploadFileName} [size: ${(fileSize / (1024 * 1024)).toFixed(2)} MB]`);
+  try {
+    const auth = await getOAuth2ClientForUser(userId);
+    const drive = google.drive({ version: 'v3', auth });
+
+    // Verify existing file access and retrieve its current parent folder
+    const fileRes = await drive.files.get({
+      fileId: existingDriveFileId,
+      fields: 'id, name, parents, trashed, mimeType',
+    });
+
+    if (fileRes.data.trashed) {
+      throw new Error(`File Google Drive yang akan diperbarui berada di kotak sampah.`);
+    }
+
+    const currentParentId = fileRes.data.parents?.[0] || '';
+    let storageDestination = 'Current Location';
+    if (currentParentId) {
+      try {
+        const parentRes = await drive.files.get({
+          fileId: currentParentId,
+          fields: 'name',
+        });
+        if (parentRes.data.name) storageDestination = parentRes.data.name;
+      } catch (_) {
+        // Fallback to Current Location if parent cannot be inspected
+      }
+    }
+
+    const contentType = mimeType || fileRes.data.mimeType || 'application/octet-stream';
+    const cleanFileName = path.basename(uploadFileName);
+    const fileMetadata = {
+      name: cleanFileName,
+    };
+
+    // Resumable upload for updating an existing file: PATCH on fileId with uploadType=resumable
+    const initRes = await auth.request({
+      method: 'PATCH',
+      url: `https://www.googleapis.com/upload/drive/v3/files/${encodeURIComponent(existingDriveFileId)}?uploadType=resumable&fields=id,name,webViewLink,parents`,
+      headers: {
+        'Content-Type': 'application/json; charset=UTF-8',
+        'X-Upload-Content-Type': contentType,
+        'X-Upload-Content-Length': fileSize.toString(),
+      },
+      data: fileMetadata,
+    });
+
+    const sessionUri = initRes.headers?.location || initRes.headers?.['location'];
+    if (!sessionUri) {
+      throw new Error('Google Drive API did not return a resumable session URI for existing file update');
+    }
+
+    const logicalPath = `${storageDestination}/${cleanFileName}`;
+
+    return {
+      sessionUri,
+      cleanFileName,
+      logicalPath,
+      parentFolderId: currentParentId,
+      storageDestination,
+    };
+  } catch (error: any) {
+    console.error(`[GoogleDrive] Failed to create resumable update session for existing file ${existingDriveFileId}:`, error);
+    if (isGoogleErrorInvalidGrant(error)) {
+      throw new GoogleReconnectRequiredError();
+    }
+    throw error;
+  }
+}
+
+/**
+ * Update media content of an existing Google Drive file in-place (buffer / stream).
+ * Keeps the existing file ID and parent folder without creating new folders.
+ */
+export async function updateExistingDriveFile(
+  userId: number,
+  existingDriveFileId: string,
+  fileBuffer: Buffer,
+  cleanFileName: string,
+  mimeType?: string
+): Promise<{
+  fileId: string;
+  webViewLink: string;
+  logicalPath: string;
+  parentFolderId: string;
+  storageDestination: string;
+}> {
+  console.log(`[GoogleDrive] Updating existing file in-place for user ${userId}: ${existingDriveFileId} (${cleanFileName})`);
+  try {
+    const auth = await getOAuth2ClientForUser(userId);
+    const drive = google.drive({ version: 'v3', auth });
+
+    // Verify existing file access
+    const fileRes = await drive.files.get({
+      fileId: existingDriveFileId,
+      fields: 'id, name, parents, trashed',
+    });
+
+    if (fileRes.data.trashed) {
+      throw new Error(`File Google Drive yang akan diperbarui berada di kotak sampah.`);
+    }
+
+    const currentParentId = fileRes.data.parents?.[0] || '';
+    let storageDestination = 'Current Location';
+    if (currentParentId) {
+      try {
+        const parentRes = await drive.files.get({
+          fileId: currentParentId,
+          fields: 'name',
+        });
+        if (parentRes.data.name) storageDestination = parentRes.data.name;
+      } catch (_) {}
+    }
+
+    const contentType = mimeType || 'application/octet-stream';
+    const stream = new Readable();
+    stream.push(fileBuffer);
+    stream.push(null);
+
+    const updateRes = await drive.files.update({
+      fileId: existingDriveFileId,
+      requestBody: {
+        name: cleanFileName,
+      },
+      media: {
+        mimeType: contentType,
+        body: stream,
+      },
+      fields: 'id, name, webViewLink, parents',
+    });
+
+    const fileId = updateRes.data.id || existingDriveFileId;
+    const webViewLink = updateRes.data.webViewLink || `https://drive.google.com/file/d/${fileId}/view`;
+    const logicalPath = `${storageDestination}/${cleanFileName}`;
+
+    return {
+      fileId,
+      webViewLink,
+      logicalPath,
+      parentFolderId: currentParentId,
+      storageDestination,
+    };
+  } catch (error: any) {
+    console.error(`[GoogleDrive] Failed to update existing file ${existingDriveFileId}:`, error);
+    if (isGoogleErrorInvalidGrant(error)) {
+      throw new GoogleReconnectRequiredError();
+    }
+    throw error;
+  }
+}
+
+/**
  * Verify and finalize a file uploaded via direct resumable upload session.
  * Confirms the file exists in Google Drive and sets reader permissions.
  */

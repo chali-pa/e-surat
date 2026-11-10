@@ -1,13 +1,17 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+let rawBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').trim();
+if (rawBaseUrl.endsWith('/')) {
+  rawBaseUrl = rawBaseUrl.slice(0, -1);
+}
+const API_BASE_URL = rawBaseUrl || (typeof window !== 'undefined' && window.location.port === '5173' ? '' : 'http://localhost:3000');
 
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Accept': 'application/json',
   },
-  timeout: 300000, // 5 minutes for 50 MB uploads
+  timeout: 300000, // 5 minutes for large uploads
   withCredentials: true,
 });
 

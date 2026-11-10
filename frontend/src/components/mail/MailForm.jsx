@@ -19,8 +19,9 @@ const ALLOWED_TYPES = [
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'image/jpeg',
   'image/png',
+  'image/webp',
 ];
-const ALLOWED_EXT = ['PDF', 'DOC', 'DOCX', 'XLS', 'XLSX', 'JPG', 'PNG'];
+const ALLOWED_EXT = ['PDF', 'DOC', 'DOCX', 'XLS', 'XLSX', 'JPG', 'PNG', 'WEBP'];
 
 function formatBytes(bytes) {
   if (bytes === 0) return '0 B';
@@ -56,6 +57,7 @@ export default function MailForm({ type, id, prepopulatedFile, onClearFile, onSa
   const [loadingStorageSettings, setLoadingStorageSettings] = useState(false);
   const [changeDestinationModalOpen, setChangeDestinationModalOpen] = useState(false);
   const [customDestination, setCustomDestination] = useState(null);
+  const [existingDriveFileId, setExistingDriveFileId] = useState(null);
   
   const [objectUrl, setObjectUrl] = useState('');
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -122,6 +124,10 @@ export default function MailForm({ type, id, prepopulatedFile, onClearFile, onSa
             file_surat: null,
           });
 
+          if (surat.google_drive_id) {
+            setExistingDriveFileId(surat.google_drive_id);
+          }
+
           if (surat.folder_id) {
             setSelectedFolder({ id: surat.folder_id });
           }
@@ -148,14 +154,14 @@ export default function MailForm({ type, id, prepopulatedFile, onClearFile, onSa
     if (!file) return;
 
     // ── Mail upload size limit (client-side) ────────────────────────────
-    // Applies universally: all file types, create and update, folder or not.
-    // Mirrors the server-side check in suratController / suratKeluarController.
+    // Upper safety limit (5 GB / Google Drive quota). Files > 50 MB are supported
+    // and automatically uploaded via direct Google Drive resumable session.
     const limitBytes = MAX_MAIL_UPLOAD_SIZE_MB * 1024 * 1024;
     if (file.size > limitBytes) {
       const fileMB = (file.size / (1024 * 1024)).toFixed(1);
       setErrors((prev) => ({
         ...prev,
-        file_surat: `Ukuran file maksimum adalah ${MAX_MAIL_UPLOAD_SIZE_MB} MB. File Anda ${fileMB} MB — silakan kurangi ukurannya dan coba lagi.`,
+        file_surat: `Ukuran file (${fileMB} MB) melebihi batas sistem Google Drive (${MAX_MAIL_UPLOAD_SIZE_MB} MB).`,
       }));
       setFormData((prev) => ({ ...prev, file_surat: null }));
       return;
@@ -215,14 +221,11 @@ export default function MailForm({ type, id, prepopulatedFile, onClearFile, onSa
     if (!formData.nama_surat.trim()) newErrors.nama_surat = 'Perihal surat wajib diisi';
     if (!isEditMode && !formData.file_surat) newErrors.file_surat = 'File surat wajib diunggah';
 
-    // ── Mail upload size limit (submit-time guard) ────────────────────────
-    // Safety net in case the file was set before the size check could run
-    // (e.g. file dragged in before validateFile ran with current state).
     if (formData.file_surat) {
       const limitBytes = MAX_MAIL_UPLOAD_SIZE_MB * 1024 * 1024;
       if (formData.file_surat.size > limitBytes) {
         const fileMB = (formData.file_surat.size / (1024 * 1024)).toFixed(1);
-        newErrors.file_surat = `Ukuran file maksimum adalah ${MAX_MAIL_UPLOAD_SIZE_MB} MB. File Anda ${fileMB} MB — silakan kurangi ukurannya dan coba lagi.`;
+        newErrors.file_surat = `Ukuran file (${fileMB} MB) melebihi batas sistem Google Drive.`;
       }
     }
 
@@ -236,7 +239,11 @@ export default function MailForm({ type, id, prepopulatedFile, onClearFile, onSa
 
     let uploadedDriveMeta = null;
 
-    // Use direct Google Drive Resumable Upload for files to bypass proxy/serverless body limits
+    // Determine upload strategy based on 50 MB threshold:
+    // Files > 50 MB automatically use direct Google Drive Resumable Upload
+    // and must not fall back to multipart buffering on the backend.
+    const isLargeFile = formData.file_surat instanceof File && formData.file_surat.size > 50 * 1024 * 1024;
+
     if (formData.file_surat instanceof File) {
       try {
         const letterDate = type === 'incoming' ? formData.tanggal_masuk : formData.tanggal_keluar;
@@ -249,10 +256,11 @@ export default function MailForm({ type, id, prepopulatedFile, onClearFile, onSa
           folderId: targetFolderId,
           nomorSurat: formData.nomor_surat,
           namaSurat: formData.nama_surat,
+          existingDriveFileId: isEditMode ? existingDriveFileId : undefined,
           onProgress: (pct) => setUploadProgress(pct),
         });
       } catch (uploadErr) {
-        console.warn('[MailForm] Direct resumable upload failed, attempting fallback to multipart upload:', uploadErr);
+        console.warn('[MailForm] Direct resumable upload failed:', uploadErr);
         if (uploadErr.response?.data?.error_code === 'GOOGLE_RECONNECT_REQUIRED') {
           setLoading(false);
           setUploadProgress(0);
@@ -262,13 +270,17 @@ export default function MailForm({ type, id, prepopulatedFile, onClearFile, onSa
           });
           return;
         }
-        if (uploadErr.message && uploadErr.message.includes('50 MB')) {
+
+        // For files > 50 MB, do not fall back to multipart (which would exceed backend payload limits)
+        if (isLargeFile) {
           setLoading(false);
           setUploadProgress(0);
-          setErrors({ file_surat: uploadErr.message });
+          setErrors({
+            file_surat: `Upload file besar (> 50 MB) ke Google Drive gagal: ${uploadErr.message || 'Koneksi terputus'}. Silakan periksa koneksi dan coba lagi.`,
+          });
           return;
         }
-        // If direct upload failed due to network, will fall back to multipart FormData upload below
+        // For files <= 50 MB, will fall back to multipart FormData upload below if direct session failed
       }
     }
 

@@ -6,9 +6,7 @@ const ID_MONTHS = [
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
 ];
 
-/**
- * Format MM-YY to Indonesian readable month, e.g. "04-26" -> "April 2026"
- */
+
 function formatMonthDisplay(monthYear) {
   if (!monthYear) return 'Folder Arsip';
   const match = monthYear.match(/^(\d{2})-(\d{2})$/);

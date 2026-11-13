@@ -64,7 +64,7 @@ export default function FolderSelector({
         if (selectedFolder) {
           const stillExists = folderList.some(
             f => String(f.id) === String(selectedFolder.id) ||
-                 (f.google_drive_folder_id && f.google_drive_folder_id === selectedFolder.google_drive_folder_id)
+                (f.google_drive_folder_id && f.google_drive_folder_id === selectedFolder.google_drive_folder_id)
           );
           if (!stillExists) {
             onFolderChange(null);
@@ -107,7 +107,7 @@ export default function FolderSelector({
     onFolderChange(selected || null);
   };
 
-  // ── CREATE FOLDER ─────────────────────────────────────────────────────────
+  // ── CREATE FOLDER 
   const handleCreateSubmit = async (e) => {
     e.preventDefault();
     if (!newFolderName.trim()) return;
@@ -147,7 +147,7 @@ export default function FolderSelector({
     }
   };
 
-  // ── RENAME FOLDER ─────────────────────────────────────────────────────────
+  // ── RENAME FOLDER 
   const handleOpenRename = () => {
     if (!selectedFolder) return;
     setRenameFolderName(selectedFolder.name || '');
@@ -185,7 +185,7 @@ export default function FolderSelector({
     }
   };
 
-  // ── DELETE FOLDER ─────────────────────────────────────────────────────────
+  // ── DELETE FOLDER 
   const handleOpenDelete = () => {
     if (!selectedFolder) return;
     setDeleteWarning(null);

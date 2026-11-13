@@ -32,14 +32,20 @@
 import multer from 'multer';
 
 /**
- * Maximum permitted file size for mail uploads (50 MB).
- * Enforced across all upload paths (multipart and resumable sessions).
+/**
+ * Maximum file size for multipart buffer upload directly through the backend.
+ * Files larger than 50 MB automatically switch to direct Google Drive resumable upload.
  */
-export const MAX_MAIL_UPLOAD_SIZE_MB = 50;
-export const MAX_MAIL_UPLOAD_SIZE_BYTES = MAX_MAIL_UPLOAD_SIZE_MB * 1024 * 1024;
-
 export const MAX_MULTIPART_UPLOAD_SIZE_MB = 50;
 export const MAX_MULTIPART_UPLOAD_SIZE_BYTES = MAX_MULTIPART_UPLOAD_SIZE_MB * 1024 * 1024;
+
+/**
+ * Maximum overall allowed file size for Google Drive resumable uploads (5 GB).
+ * Ensures files >= 50 MB can be uploaded and updated successfully.
+ */
+export const MAX_MAIL_UPLOAD_SIZE_MB = 5120;
+export const MAX_MAIL_UPLOAD_SIZE_BYTES = MAX_MAIL_UPLOAD_SIZE_MB * 1024 * 1024;
+
 
 
 

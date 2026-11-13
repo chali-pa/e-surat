@@ -372,12 +372,13 @@ export const update = async (req: AuthRequest, res: Response) => {
     }
 
     // ── Mail upload size limit ───────────────────────────────────────────────
-    // Applied to all file uploads (50 MB maximum).
-    if (req.file && req.file.size > MAX_MAIL_UPLOAD_SIZE_BYTES) {
+    // For multipart uploads directly through the backend, limit is MAX_MULTIPART_UPLOAD_SIZE_BYTES (50 MB).
+    // Files >= 50 MB use direct Google Drive resumable upload sessions.
+    if (req.file && req.file.size > MAX_MULTIPART_UPLOAD_SIZE_BYTES) {
       const fileMB = (req.file.size / (1024 * 1024)).toFixed(1);
       return res.status(413).json({
         error: 'FILE_TOO_LARGE',
-        message: `Ukuran file maksimum adalah ${MAX_MAIL_UPLOAD_SIZE_MB} MB. File Anda ${fileMB} MB — silakan kurangi ukurannya dan coba lagi.`,
+        message: `File berukuran ${fileMB} MB. Untuk file di atas ${MAX_MULTIPART_UPLOAD_SIZE_MB} MB, silakan gunakan metode upload langsung (resumable) yang didukung otomatis oleh sistem.`,
       });
     }
 
@@ -979,10 +980,10 @@ export const createUploadSession = async (req: AuthRequest, res: Response) => {
       ? `${nomor_surat.replace(/[\/\\?%*:|"<>]/g, '_')}_${nama_surat.replace(/[\/\\?%*:|"<>]/g, '_')}_${Date.now()}${ext}`
       : original_file_name;
 
-    // CRITICAL: When updating an existing document and no explicit new folder was specified,
+    // CRITICAL: When updating an existing document,
     // update the file IN-PLACE directly on existing_drive_file_id.
     // This strictly avoids creating esurat/esurat-keluar/MM-YY/PDF folders for files outside esurat-keluar.
-    if (existing_drive_file_id && !folder_id) {
+    if (existing_drive_file_id) {
       try {
         const session = await createResumableUpdateSession(
           userId,

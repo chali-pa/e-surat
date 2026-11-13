@@ -1,25 +1,3 @@
-/**
- * LogoutConfirmDialog.jsx
- *
- * A simple yes/no confirmation dialog for logout.
- *
- * Structurally similar to DeleteConfirmDialog (same card shape, centered
- * icon at top, two-button footer) but completely independent — it shares
- * NO logic, state, or handlers with the account-deletion flow.
- *
- * Deliberate design differences from the delete-account modal:
- *   • No typed-keyword requirement — logout is reversible, low-friction is correct.
- *   • Confirm button uses the app's primary purple gradient, not danger red —
- *     logging out is a routine action, not a destructive one.
- *   • Wording contains nothing about permanence or data loss.
- *
- * Props:
- *   isOpen    {boolean}   Whether the dialog is visible
- *   onClose   {function}  Called when the user cancels (no side effects)
- *   onConfirm {function}  Called when the user confirms logout
- *   loading   {boolean}   Disables both buttons while the logout call is in flight
- */
-
 import React from 'react';
 
 export default function LogoutConfirmDialog({ isOpen, onClose, onConfirm, loading }) {

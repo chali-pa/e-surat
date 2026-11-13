@@ -207,6 +207,24 @@ export async function moveDriveFileToCorrectFolder(
     const auth = await getOAuth2ClientForUser(userId);
     const drive = google.drive({ version: 'v3', auth });
 
+    if (customFolderDriveId) {
+      // User specified an explicit target folder (outside default esurat)
+      // DO NOT create esurat or esurat-keluar root folders or MM-YY folders!
+      let folderName = 'Folder Pilihan';
+      try {
+        const folderRes = await drive.files.get({
+          fileId: customFolderDriveId,
+          fields: 'id, name',
+        });
+        if (folderRes.data.name) {
+          folderName = folderRes.data.name;
+        }
+      } catch (_) {}
+
+      await moveUserFile(userId, fileId, customFolderDriveId);
+      return { logicalPath: `${folderName}/${originalFileName}` };
+    }
+
     const rootName = letterType === 'incoming' ? 'esurat' : 'esurat-keluar';
     const user = await findUserById(userId);
     let rootFolderId = letterType === 'incoming' ? user?.drive_folder_id : user?.drive_keluar_folder_id;
@@ -232,14 +250,9 @@ export async function moveDriveFileToCorrectFolder(
     const monthYear = formatMonthYear(letterDateStr);
     const subfolder = getSubfolderType(originalFileName, mimeType);
 
-    if (customFolderDriveId) {
-      targetFolderId = customFolderDriveId;
-      logicalPath = `${rootName}/${monthYear}/${originalFileName}`;
-    } else {
-      const monthFolderId = await findOrCreateFolder(drive, monthYear, rootFolderId);
-      targetFolderId = await findOrCreateFolder(drive, subfolder, monthFolderId);
-      logicalPath = `${rootName}/${monthYear}/${subfolder}/${originalFileName}`;
-    }
+    const monthFolderId = await findOrCreateFolder(drive, monthYear, rootFolderId);
+    targetFolderId = await findOrCreateFolder(drive, subfolder, monthFolderId);
+    logicalPath = `${rootName}/${monthYear}/${subfolder}/${originalFileName}`;
 
     await moveUserFile(userId, fileId, targetFolderId);
 

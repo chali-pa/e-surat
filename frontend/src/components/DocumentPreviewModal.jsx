@@ -7,7 +7,6 @@ import { getDriveFileUrl, getSuratDriveUrl } from '../utils/getDriveFileUrl'
 import { getImageDimensions, generateSinglePagePrintHtml } from '../utils/printDimensionUtils'
 
 // Configure the pdf.js worker. Vite serves the worker file as a static asset.
-// Using ?url suffix tells Vite to resolve the file URL without bundling it.
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 

@@ -154,13 +154,14 @@ export default function MailForm({ type, id, prepopulatedFile, onClearFile, onSa
     if (!file) return;
 
     // ── Mail upload size limit (client-side) ────────────────────────────
-    // Reject any file exceeding MAX_MAIL_UPLOAD_SIZE_MB (50 MB)
+    // Upper safety limit (5 GB / Google Drive quota). Files >= 50 MB are supported
+    // and automatically uploaded via direct Google Drive resumable session.
     const limitBytes = MAX_MAIL_UPLOAD_SIZE_MB * 1024 * 1024;
     if (file.size > limitBytes) {
       const fileMB = (file.size / (1024 * 1024)).toFixed(1);
       setErrors((prev) => ({
         ...prev,
-        file_surat: `Ukuran file (${fileMB} MB) melebihi batas maksimum ${MAX_MAIL_UPLOAD_SIZE_MB} MB.`,
+        file_surat: `Ukuran file (${fileMB} MB) melebihi batas sistem Google Drive (${MAX_MAIL_UPLOAD_SIZE_MB} MB).`,
       }));
       setFormData((prev) => ({ ...prev, file_surat: null }));
       return;
@@ -224,7 +225,7 @@ export default function MailForm({ type, id, prepopulatedFile, onClearFile, onSa
       const limitBytes = MAX_MAIL_UPLOAD_SIZE_MB * 1024 * 1024;
       if (formData.file_surat.size > limitBytes) {
         const fileMB = (formData.file_surat.size / (1024 * 1024)).toFixed(1);
-        newErrors.file_surat = `Ukuran file (${fileMB} MB) melebihi batas maksimum ${MAX_MAIL_UPLOAD_SIZE_MB} MB.`;
+        newErrors.file_surat = `Ukuran file (${fileMB} MB) melebihi batas sistem Google Drive (${MAX_MAIL_UPLOAD_SIZE_MB} MB).`;
       }
     }
 
@@ -237,6 +238,11 @@ export default function MailForm({ type, id, prepopulatedFile, onClearFile, onSa
     setUploadProgress(0);
 
     let uploadedDriveMeta = null;
+
+    // Determine upload strategy based on 50 MB threshold:
+    // Files >= 50 MB automatically use direct Google Drive Resumable Upload
+    // and must not fall back to multipart buffering on the backend.
+    const isLargeFile = formData.file_surat instanceof File && formData.file_surat.size >= 50 * 1024 * 1024;
 
     if (formData.file_surat instanceof File) {
       try {
@@ -265,7 +271,16 @@ export default function MailForm({ type, id, prepopulatedFile, onClearFile, onSa
           return;
         }
 
-        // Surface direct upload error to the user
+        // For files >= 50 MB, do not fall back to multipart (which would exceed backend payload limits)
+        if (isLargeFile) {
+          setLoading(false);
+          setUploadProgress(0);
+          setErrors({
+            file_surat: `Upload file besar ke Google Drive gagal: ${uploadErr.message || 'Koneksi terputus'}. Silakan periksa koneksi dan coba lagi.`,
+          });
+          return;
+        }
+        // For files < 50 MB, surface direct upload error or fall back to backend multipart
         setLoading(false);
         setUploadProgress(0);
         setErrors({
